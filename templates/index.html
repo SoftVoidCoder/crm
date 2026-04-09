@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Korda CRM | Enterprise</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsdiff/5.1.0/diff.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/ru.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+</head>
+<body>
+    <div id="appLayout" class="app-layout" style="display: none;">
+        
+        {% include 'components/sidebar.html' %}
+
+        <div class="main-wrapper">
+            
+            {% include 'components/topbar.html' %}
+
+            <main class="main-content">
+                {% include 'views/approvals.html' %}
+                {% include 'views/kpi.html' %}
+                {% include 'views/tasks.html' %}
+                {% include 'views/knowledge.html' %}
+                {% include 'views/documents.html' %}
+                {% include 'views/messenger.html' %}
+                {% include 'views/emails.html' %}
+                {% include 'views/meetings.html' %}
+                {% include 'views/dashboard.html' %}
+                {% include 'views/clients.html' %}
+                {% include 'views/analytics.html' %}
+                {% include 'views/admin.html' %}
+                {% include 'views/profile.html' %}
+                {% include 'views/project.html' %}
+                {% include 'views/nomenclature.html' %}
+                {% include 'views/contacts.html' %}
+            </main>
+        </div>
+    </div>
+
+    {% include 'components/modals.html' %}
+    
+    <div id="toastContainer" class="toast-container"></div>
+    
+    <script src="/static/core.js"></script>
+    <script src="/static/users.js"></script>
+    <script src="/static/project.js"></script>
+    <script src="/static/project_roles.js"></script>
+    <script src="/static/checklist.js"></script>
+    <script src="/static/generator.js"></script>
+    <script src="/static/dashboard_navigation.js"></script>
+    <script src="/static/dashboard_projects.js"></script>
+    <script src="/static/dashboard_documents.js"></script>
+    <script src="/static/dashboard_approvals.js"></script>
+    <script src="/static/dashboard_messenger.js"></script>
+    <script src="/static/dashboard_meetings_emails.js"></script>
+    <script src="/static/dashboard_tasks.js"></script>
+    <script src="/static/dashboard_knowledge.js"></script>
+    <script src="/static/nsi.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="/static/qr_scanner.js"></script>
+</body>
+</html>

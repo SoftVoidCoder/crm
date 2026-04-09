@@ -1,0 +1,149 @@
+<div id="projectView" style="display: none;">
+    
+    <div style="display: flex; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 15px; align-items: center;" class="no-print">
+        <button class="btn-secondary" onclick="navigateTo('dashboard')" style="padding: 8px 14px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            Назад
+        </button>
+        
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; background: var(--card-bg); padding: 8px; border-radius: 12px; border: 1px solid var(--border); align-items: center;">
+            <button class="btn-secondary" id="btnToggleChat" onclick="toggleChat()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg> Чат
+            </button>
+            <button class="btn-secondary" id="btnLogs" style="display: none;" onclick="openLogsModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line></svg> Логи
+            </button>
+            <button class="btn-success" id="btnRestore" style="display: none;" onclick="restoreProject()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"></polyline><polyline points="23 20 23 14 17 14"></polyline><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path></svg> Восстановить
+            </button>
+            <button class="btn-danger" id="btnCancel" onclick="cancelProject()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Отменить
+            </button>
+            <button class="btn-primary" onclick="saveProjectInfo()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> Сохранить
+            </button>
+            <button class="btn-secondary" onclick="downloadPDF()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg> PDF Отчет
+            </button>
+        </div>
+    </div>
+
+    <div class="header-info">
+        <div><label>Наименование</label><input type="text" id="projName"></div>
+        <div><label>Договор №</label><input type="text" id="projContract"></div>
+        <div><label>Заказчик</label><input type="text" id="projClient"></div>
+        <div><label>Менеджер</label><input type="text" id="projManager"></div>
+        
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="color:var(--primary);">РАБОЧАЯ ГРУППА (ДОСТУП)</label>
+            <div id="projTeam" style="padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); max-height: 80px; overflow-y: auto; font-size: 13px;"></div>
+        </div>
+        
+        <div id="editProjRoles"></div>
+
+        <div style="grid-column: 1 / -1; margin-top: 15px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 15px; background: var(--bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 20px;">
+                
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-weight: 600; color: var(--secondary); font-size: 11px; text-transform: uppercase;">Сумма договора (₽)</label>
+                    <input type="number" id="projBudget" class="auth-input" onchange="calcMargin()" onkeyup="calcMargin()" style="margin:0; font-weight: bold; font-size: 16px; border-color: var(--success); background: #fff;">
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-weight: 600; color: var(--secondary); font-size: 11px; text-transform: uppercase;">Себестоимость (₽)</label>
+                    <input type="number" id="projCosts" class="auth-input" readonly style="margin:0; font-weight: bold; font-size: 16px; background: var(--card-bg); color: var(--danger); border-color: transparent;" title="Считается автоматически">
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 8px; border-left: 1px solid var(--border); padding-left: 15px;">
+                    <label style="font-weight: 600; color: var(--secondary); font-size: 11px; text-transform: uppercase;">Трудозатраты</label>
+                    <div id="projLaborCosts" style="font-size: 16px; font-weight: 700; color: var(--text); padding-top: 4px;">0 ₽</div>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-weight: 600; color: var(--secondary); font-size: 11px; text-transform: uppercase;">Смета материалов</label>
+                    <div id="projMaterialCosts" style="font-size: 16px; font-weight: 700; color: var(--text); padding-top: 4px;">0 ₽</div>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 8px; border-left: 1px solid var(--border); padding-left: 15px;">
+                    <label style="font-weight: 600; color: var(--secondary); font-size: 11px; text-transform: uppercase;">Чистая маржа</label>
+                    <div id="projMargin" style="font-size: 18px; font-weight: 800; color: var(--success); padding-top: 4px;">0 ₽ (0%)</div>
+                </div>
+
+            </div>
+
+            <div id="projNomenclatureBlock" style="background: var(--card-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div>
+                        <h3 style="margin: 0; font-size: 14px; color: var(--text);">Спецификация проекта</h3>
+                        <p style="margin: 4px 0 0 0; font-size: 12px; color: var(--secondary);">Материалы и оборудование из базы НСИ</p>
+                    </div>
+                    <button class="btn-primary no-print" style="padding: 8px 14px; font-size: 12px;" onclick="openAddNomToProjectModal()">+ Добавить позицию</button>
+                </div>
+                <div id="projNomenclatureTable"></div>
+            </div>
+        </div>
+        
+        <div style="grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 16px; margin-top: 8px;" class="no-print">
+            <label style="color:var(--secondary); font-size:12px; font-weight:600;">ФАЙЛЫ ПРОЕКТА</label>
+            <div id="projectFilesList" style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; margin-bottom: 15px;"></div>
+            
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <input type="file" id="fileUploadInput" style="display:none" onchange="uploadFile(event)">
+                <button class="btn-secondary" onclick="document.getElementById('fileUploadInput').click()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> 
+                    Загрузить файл
+                </button>
+                <button class="btn-primary" onclick="generateContractDoc()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15l2 2 4-4"></path></svg> 
+                    Сгенерировать договор
+                </button>
+                <button class="btn-secondary" onclick="request1CInvoice()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    Выставить счет (1С)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="progress-container no-print"><div class="progress-bar" id="progressBar"></div></div>
+
+    <div class="project-grid-layout" id="projectGrid">
+        <div>
+            <div id="ganttContainer" class="no-print" style="margin-bottom: 20px;"></div>
+
+            <div id="checklist"></div>
+            
+            <div class="final-block" id="finalBlock">
+                <div class="final-message">СДЕЛКА УСПЕШНО ЗАКРЫТА</div>
+                <div style="margin-top: 15px; background: rgba(0,0,0,0.03); padding: 15px; border-radius: 12px; text-align: left;">
+                    <label style="font-size: 12px; font-weight: bold; color: var(--secondary);">ДАННЫЕ ФИЗИЧЕСКОГО АРХИВА:</label>
+                    <div style="display: flex; gap: 10px; margin-top: 8px;">
+                        <input type="text" id="arcFolder" class="auth-input" style="margin:0;" placeholder="№ Папки">
+                        <input type="text" id="arcRack" class="auth-input" style="margin:0;" placeholder="Стеллаж">
+                        <input type="text" id="arcDate" class="date-picker auth-input" style="margin:0;" placeholder="Дата">
+                    </div>
+                </div>
+                <button class="btn-primary no-print" id="btnArchiveFinal" style="margin-top: 20px; width: 100%; justify-content: center; padding: 16px;" onclick="archiveCurrentProject()">Передать в Архив</button>
+            </div>
+        </div>
+        
+        <div class="chat-container no-print">
+            <div class="chat-header" style="background: var(--primary); color: white;">Единая лента (Чат и Документы)</div>
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="chat-input-area">
+                <input type="text" id="chatInput" style="margin:0; border-radius: 20px; padding: 10px; border: 1px solid var(--border); flex:1;" placeholder="Сообщение..." onkeypress="if(event.key === 'Enter') sendChatMessage()">
+                <button class="btn-icon-send" onclick="sendChatMessage()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="fileHistoryModal" class="modal-overlay" style="display: none; z-index: 10000;">
+    <div class="modal-card" style="max-width: 500px; padding: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 style="margin: 0; font-size: 18px; color: var(--primary);">История версий файла</h2>
+            <button class="btn-danger" style="padding: 6px 10px; font-size: 12px; border-radius: 6px;" onclick="document.getElementById('fileHistoryModal').style.display='none'">✕</button>
+        </div>
+        <div id="fileHistoryList" style="display: flex; flex-direction: column; max-height: 400px; overflow-y: auto; padding-right: 5px;"></div>
+    </div>
+</div>

@@ -1,0 +1,33 @@
+<div id="nomenclatureView" style="display: none;">
+    <div style="background: var(--card-bg); border-radius: 20px; border: 1px solid var(--border); padding: 32px;">
+        <h2 style="margin-bottom: 24px;">НСИ: Склад и Номенклатура</h2>
+        <div class="client-form" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
+            <div style="flex: 2; min-width: 200px;"><label>Наименование продукции *</label><input type="text" id="addNomName" class="auth-input" style="margin:0;"></div>
+            <div style="flex: 1; min-width: 120px;"><label>Артикул</label><input type="text" id="addNomArticle" class="auth-input" style="margin:0;"></div>
+            <div style="flex: 1; min-width: 80px;"><label>Ед. изм.</label><input type="text" id="addNomUnit" class="auth-input" style="margin:0;" value="шт"></div>
+            <div style="flex: 1; min-width: 120px;"><label>Базовая цена</label><input type="number" id="addNomPrice" class="auth-input" style="margin:0;" value="0"></div>
+            <div style="flex: 1; min-width: 90px;">
+                <label>Валюта</label>
+                <select id="addNomCurrency" class="auth-input" style="margin:0; cursor: pointer;">
+                    <option value="RUB">₽ (RUB)</option>
+                    <option value="USD">$ (USD)</option>
+                    <option value="EUR">€ (EUR)</option>
+                    <option value="CNY">¥ (CNY)</option>
+                </select>
+            </div>
+            <button class="btn-primary" style="height: 46px; margin-top: 22px;" onclick="addNomenclature()">+ Добавить</button>
+        </div>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Наименование</th>
+                    <th>Артикул</th>
+                    <th>Цена</th>
+                    <th>На складе</th>
+                    <th style="text-align: right; width: 220px;">Движение (Приход/Расход)</th>
+                </tr>
+            </thead>
+            <tbody id="nomenclatureListTable"></tbody>
+        </table>
+    </div>
+</div>

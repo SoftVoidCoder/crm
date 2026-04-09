@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Korda CRM | Вход</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="authView" class="auth-wrapper">
+        <div class="auth-card" id="loginFormCard">
+            <h2 style="text-align: center; margin-bottom: 30px; color: var(--primary);">KORDA CRM</h2>
+            <div id="loginError" style="color: var(--danger); font-size: 13px; margin-bottom: 10px; text-align: center;"></div>
+            <input type="email" id="loginEmail" placeholder="Email" class="auth-input">
+            <input type="password" id="loginPassword" placeholder="Пароль" class="auth-input">
+            <button class="btn-primary" style="width: 100%; justify-content: center; padding: 14px;" onclick="login()">Войти</button>
+            <div style="text-align: center; margin-top: 20px; font-size: 13px; color: var(--secondary);">
+                <a href="register.html" style="color: var(--secondary); text-decoration: none;">Запросить доступ</a> | 
+                <span style="cursor:pointer;" onclick="document.getElementById('loginFormCard').style.display='none'; document.getElementById('recoverFormCard').style.display='block';">Забыли пароль?</span>
+            </div>
+        </div>
+
+        <div class="auth-card" id="recoverFormCard" style="display: none;">
+            <h2 style="text-align: center; margin-bottom: 20px;">Сброс пароля</h2>
+            <input type="email" id="recEmail" placeholder="Ваш Email" class="auth-input">
+            <button class="btn-primary" style="width: 100%; justify-content: center; padding: 14px;" onclick="recoverPassword()">Сбросить</button>
+            <div style="text-align: center; margin-top: 20px; font-size: 13px; cursor: pointer;" onclick="document.getElementById('recoverFormCard').style.display='none'; document.getElementById('loginFormCard').style.display='block';">Назад</div>
+        </div>
+
+        <div class="auth-card" id="pendingCard" style="display: none; text-align: center;">
+            <h2>Ожидание доступа</h2>
+            <p style="color: var(--secondary); font-size: 14px; margin-bottom: 24px;">Ваша запись ждет одобрения Директором.</p>
+            <button class="btn-secondary" style="width: 100%; justify-content: center;" onclick="logout()">Сменить аккаунт</button>
+        </div>
+    </div>
+    
+    <div id="toastContainer" class="toast-container"></div>
+    
+    <script src="core.js"></script>
+    <script src="dashboard.js"></script>
+    <script src="project.js"></script>
+    <script src="checklist.js"></script>
+    <script src="users.js"></script>
+    <script src="generator.js"></script>
+</body>
+</html>

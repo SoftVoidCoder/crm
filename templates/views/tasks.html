@@ -1,0 +1,11 @@
+<div id="tasksView" style="display: none;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <h1 style="margin:0; font-size: 22px;">Мои поручения</h1>
+        <button class="btn-primary" onclick="openCreateTaskModal()">+ Дать поручение</button>
+    </div>
+    <div class="tabs" style="margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
+        <button class="tab active" id="tabTaskActive" onclick="switchTaskTab('active')">В работе</button>
+        <button class="tab" id="tabTaskCompleted" onclick="switchTaskTab('completed')">Выполненные</button>
+    </div>
+    <div id="tasksListContainer" style="display: flex; flex-direction: column; gap: 12px;"></div>
+</div>

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Korda CRM | Регистрация</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="authView" class="auth-wrapper">
+        <div class="auth-card" id="registerFormCard">
+            <h2 style="text-align: center; margin-bottom: 30px;">Регистрация</h2>
+            <div id="regError" style="color: var(--danger); font-size: 13px; margin-bottom: 10px; text-align: center;"></div>
+            <input type="text" id="regName" placeholder="ФИО" class="auth-input">
+            <input type="email" id="regEmail" placeholder="Email" class="auth-input">
+            <input type="password" id="regPassword" placeholder="Пароль" class="auth-input">
+            <button class="btn-primary" style="width: 100%; justify-content: center; padding: 14px;" onclick="register()">Отправить заявку</button>
+            <div style="text-align: center; margin-top: 20px; font-size: 13px;">
+                <a href="login.html" style="color: var(--secondary); text-decoration: none;">Назад ко входу</a>
+            </div>
+        </div>
+    </div>
+    
+    <div id="toastContainer" class="toast-container"></div>
+    
+    <script src="core.js"></script>
+    <script src="dashboard.js"></script>
+    <script src="project.js"></script>
+    <script src="checklist.js"></script>
+    <script src="users.js"></script>
+    <script src="generator.js"></script>
+</body>
+</html>

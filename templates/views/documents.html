@@ -1,0 +1,17 @@
+<div id="documentsView" style="display: none;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <h1 style="margin:0; font-size: 22px;">Канцелярия (Реестр документов)</h1>
+        <button class="btn-primary" onclick="document.getElementById('createDocModal').style.display='flex'">+ Зарегистрировать документ</button>
+    </div>
+    <div class="tabs" style="margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
+        <button class="tab active" id="tabDocIncoming" onclick="switchDocTab('incoming')">Входящие</button>
+        <button class="tab" id="tabDocOutgoing" onclick="switchDocTab('outgoing')">Исходящие</button>
+        <button class="tab" id="tabDocInternal" onclick="switchDocTab('internal')">Внутренние (Приказы)</button>
+    </div>
+    <div style="background: var(--card-bg); border-radius: 20px; border: 1px solid var(--border); overflow: hidden; padding: 24px;">
+        <table class="admin-table">
+            <thead><tr><th>№</th><th>Дата</th><th>Контрагент/Отдел</th><th>Тема (Кратко)</th><th>Статус</th><th>Скан</th></tr></thead>
+            <tbody id="documentsListTable"></tbody>
+        </table>
+    </div>
+</div>

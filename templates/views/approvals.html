@@ -1,0 +1,11 @@
+<div id="approvalsView" style="display: none;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <h1 style="margin:0; font-size: 22px;">Маршруты согласования</h1>
+        <button class="btn-primary" onclick="openCreateApprovalModal()">+ Запустить процесс</button>
+    </div>
+    <div class="tabs" style="margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
+        <button class="tab active" id="tabApprPending" onclick="switchApprTab('pending')">На согласовании</button>
+        <button class="tab" id="tabApprCompleted" onclick="switchApprTab('completed')">Завершенные</button>
+    </div>
+    <div id="approvalsListContainer" style="display: flex; flex-direction: column; gap: 16px;"></div>
+</div>

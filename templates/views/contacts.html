@@ -1,0 +1,31 @@
+<div id="contactsView" style="display: none;">
+    <div style="background: var(--card-bg); border-radius: 20px; border: 1px solid var(--border); padding: 32px;">
+        <h2 style="margin-bottom: 24px;">НСИ: Справочник Контактов (Физлица)</h2>
+        <div class="client-form" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
+            <div style="flex: 2; min-width: 200px;"><label>ФИО контакта *</label><input type="text" id="addContactName" class="auth-input" style="margin:0;"></div>
+            <div style="flex: 2; min-width: 200px;"><label>Привязка к контрагенту *</label><select id="addContactClient" class="auth-input" style="margin:0; appearance: auto;"></select></div>
+            <div style="flex: 1; min-width: 150px;"><label>Телефон</label><input type="text" id="addContactPhone" class="auth-input" style="margin:0;"></div>
+            <div style="flex: 1; min-width: 150px;"><label>Email</label><input type="text" id="addContactEmail" class="auth-input" style="margin:0;"></div>
+            
+            <div style="flex: 1; min-width: 150px;">
+                <label>Должность</label>
+                <input type="text" id="addContactPosition" list="posList" class="auth-input" style="margin:0;" placeholder="Выбрать / Ввести">
+                <datalist id="posList">
+                    <option value="Генеральный директор"></option>
+                    <option value="Коммерческий директор"></option>
+                    <option value="Менеджер по закупкам"></option>
+                    <option value="Главный инженер"></option>
+                    <option value="Бухгалтер"></option>
+                    <option value="Юрист"></option>
+                    <option value="Руководитель проекта"></option>
+                </datalist>
+            </div>
+            
+            <button class="btn-primary" style="height: 46px; margin-top: 22px;" onclick="addContact()">+ Добавить</button>
+        </div>
+        <table class="admin-table">
+            <thead><tr><th>ФИО</th><th>Контрагент</th><th>Должность</th><th>Телефон</th><th>Email</th></tr></thead>
+            <tbody id="contactsListTable"></tbody>
+        </table>
+    </div>
+</div>
