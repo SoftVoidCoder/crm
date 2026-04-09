@@ -1,4 +1,4 @@
-let activeTimers = {};
+let activeTimers = {}; 
 
 function initSignaturePad() {
     canvas = document.getElementById('sigCanvas'); if(!canvas) return; ctx = canvas.getContext('2d'); ctx.lineWidth = 2; ctx.strokeStyle = document.documentElement.dataset.theme === 'dark' ? '#fff' : '#0f172a'; ctx.lineCap = 'round';
@@ -30,73 +30,87 @@ function renderChecklist(forceRedraw = false) {
         p.checklist.forEach((sec, sIdx) => {
             const deleteSecBtn = isDirector ? `<button class="icon-btn no-print" style="margin-left:auto; color:var(--danger);" onclick="deleteSection(${sIdx})" title="Удалить этап"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>` : '';
             
-            secHtmlAll += `<div class="section fade-in" data-index="${sIdx}">
-                <div class="section-header" style="display:flex; align-items:center; background: #f8fafc; padding: 16px 20px; border-bottom: 1px solid var(--border);">
-                    <span onclick="this.parentElement.nextElementSibling.classList.toggle('active')" style="cursor:pointer; flex:1; font-weight: 600; font-size: 14px; color: var(--text); display: flex; align-items: center; gap: 10px;">
+            secHtmlAll += `<div class="section fade-in" data-index="${sIdx}" style="background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border); margin-bottom: 24px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.02);">
+                <div class="section-header" style="display:flex; align-items:center; background: #f8fafc; padding: 14px 20px; border-bottom: 1px solid var(--border);">
+                    <span onclick="this.parentElement.nextElementSibling.classList.toggle('active')" style="cursor:pointer; flex:1; font-weight: 600; font-size: 14px; color: var(--text); display: flex; align-items: center; gap: 12px;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
                         ${sec.title} 
-                        <input type="text" id="date_${sIdx}" placeholder="Дедлайн" class="no-print date-picker" style="padding:4px 10px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); width: 90px; text-align: center; font-size: 12px; font-weight: 500; cursor: pointer; outline: none;">
+                        <input type="text" id="date_${sIdx}" placeholder="Дедлайн" class="no-print date-picker" style="padding:6px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text); width: 95px; text-align: center; font-size: 12px; font-weight: 500; cursor: pointer; outline: none; margin-left: 10px;">
                     </span>
-                    <span class="status" style="margin-right:15px; font-size: 13px; color: var(--secondary); font-weight: 600;"></span>
+                    <span class="status" style="margin-right:15px; font-size: 13px; color: var(--secondary); font-weight: 600; background: var(--bg); padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border);"></span>
                     ${deleteSecBtn}
                 </div>
-                <div class="section-content ${sIdx === 0 ? 'active' : ''}">`;
+                <div class="section-content ${sIdx === 0 ? 'active' : ''}" style="display: flex; flex-direction: column;">`;
                 
             sec.tasks.forEach((tText, tIdx) => {
                 const tId = `task_${sIdx}_${tIdx}`;
-                const deleteBtn = isDirector ? `<button class="icon-btn no-print" onclick="deleteTaskFromSection(${sIdx}, ${tIdx})" title="Удалить задачу"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : '';
+                const deleteBtn = isDirector ? `<button class="icon-btn no-print" onclick="deleteTaskFromSection(${sIdx}, ${tIdx})" title="Удалить задачу" style="color: var(--secondary);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : '';
                 
-                secHtmlAll += `<div class="task" style="display: flex; gap: 16px; padding: 16px 20px; border-bottom: 1px solid var(--border); align-items: flex-start; background: var(--card-bg);">
-                    <input type="checkbox" id="${tId}" onchange="handleCheck(this, '${tId}')" style="margin-top: 2px;">
-                    <div class="task-content-wrapper" style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0;">
+                secHtmlAll += `
+                <div class="task" style="padding: 16px 20px; border-bottom: 1px solid var(--border); background: transparent; transition: background 0.2s;">
+                    <div style="display: flex; align-items: flex-start; gap: 14px;">
+                        <input type="checkbox" id="${tId}" onchange="handleCheck(this, '${tId}')" style="margin-top: 3px; width: 20px; height: 20px; cursor: pointer;">
                         
-                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap: 15px;">
-                            <label class="task-text" for="${tId}" style="font-weight: 500; font-size: 14px; color: var(--text); cursor: pointer; line-height: 1.4; flex: 1;">${tText}</label>
-                            
-                            <div class="task-actions no-print" style="display: flex; gap: 4px; align-items: center;">
-                                <input type="file" id="finput_${tId}" style="display:none" onchange="uploadTaskFile(event, '${tId}')">
-                                <button class="icon-btn" onclick="document.getElementById('finput_${tId}').click()" title="Прикрепить файл">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-                                </button>
-                                <button class="icon-btn" onclick="addSubtask('${tId}')" title="Добавить подзадачу">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                                </button>
-                                ${deleteBtn}
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px;">
+                                <label class="task-text" for="${tId}" style="font-weight: 500; font-size: 14px; color: var(--text); cursor: pointer; line-height: 1.5; flex: 1;">${tText}</label>
+                                
+                                <div class="task-actions no-print" style="display: flex; gap: 4px; align-items: center; flex-shrink: 0;">
+                                    <button class="icon-btn" onclick="document.getElementById('cinput_row_${tId}').style.display='flex'; document.getElementById('input_${tId}').focus();" title="Написать комментарий">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                                    </button>
+                                    <input type="file" id="finput_${tId}" style="display:none" onchange="uploadTaskFile(event, '${tId}')">
+                                    <button class="icon-btn" onclick="document.getElementById('finput_${tId}').click()" title="Прикрепить файл">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                                    </button>
+                                    <button class="icon-btn" onclick="addSubtask('${tId}')" title="Добавить подзадачу">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    </button>
+                                    ${deleteBtn}
+                                </div>
+                            </div>
+
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 12px; color: var(--secondary);">
+                                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                                    <span style="background: rgba(15,23,42,0.04); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border);">Отв: <span style="color: var(--text); font-weight: 500;">${sec.responsibles}</span></span>
+                                    <span id="time_${tId}" style="display: flex; align-items: center; gap: 6px;"></span>
+                                </div>
+                                <div id="timer_block_${tId}" style="display:flex; align-items:center; gap:8px;"></div>
                             </div>
                         </div>
+                    </div>
 
-                        <div style="display:flex; justify-content:space-between; align-items:center; width:100%; font-size: 12px; color: var(--secondary);">
-                            <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
-                                <span>Отв: <span style="color: var(--text); font-weight: 500;">${sec.responsibles}</span></span>
-                                <span id="time_${tId}" style="display: flex; align-items: center; gap: 6px;"></span>
-                            </div>
-                            <div id="timer_block_${tId}" style="display:flex; align-items:center; gap:8px;"></div>
-                        </div>
-
+                    <div style="margin-left: 34px; margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
                         <div id="hard_lock_${tId}"></div>
-                        <div id="subs_${tId}"></div>
-                        <div id="file_${tId}" style="display:none; font-size:12px; padding: 8px 12px; background: rgba(30, 58, 138, 0.04); border-radius: 8px; border: 1px solid var(--border); margin-top: 4px;"></div>
-                        <div class="comment-text" id="text_${tId}" style="display:none; margin-top: 4px;"></div>
-                        <div id="sig_${tId}" style="margin-top: 4px;"></div>
+                        <div id="subs_${tId}" style="display: flex; flex-direction: column; gap: 6px;"></div>
+                        <div id="file_${tId}" style="display:none; font-size:12px; padding: 10px 14px; background: rgba(30, 58, 138, 0.03); border-radius: 8px; border: 1px dashed rgba(30, 58, 138, 0.2);"></div>
+                        <div class="comment-text" id="text_${tId}" style="display:none;"></div>
+                        <div id="sig_${tId}"></div>
                         
-                        <div style="margin-top: 6px; display: flex; align-items: center;" id="action_row_${tId}">
-                            <input type="text" class="comment-input" id="input_${tId}" placeholder="Написать комментарий (Enter)..." style="padding: 8px 12px; font-size: 12px;" onkeypress="if(event.key === 'Enter') { saveMultipleComment('${tId}', this.value); this.value=''; }">
+                        <div style="display: none; align-items: center; gap: 8px; margin-top: 4px;" id="cinput_row_${tId}">
+                            <input type="text" class="comment-input" id="input_${tId}" placeholder="Написать комментарий и нажать Enter..." style="padding: 10px 14px; font-size: 13px; flex: 1; border-radius: 8px; background: var(--bg); border: 1px solid var(--border);" onkeypress="if(event.key === 'Enter') { saveMultipleComment('${tId}', this.value); this.value=''; this.parentElement.style.display='none'; }">
+                            <button class="icon-btn" onclick="document.getElementById('cinput_row_${tId}').style.display='none'" title="Отмена"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--secondary)" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
                         </div>
                     </div>
                 </div>`;
             });
             
             if (isDirector || sec.responsibles.includes(currentUser.role)) {
-                secHtmlAll += `<div style="padding: 12px 20px; background: var(--card-bg); border-bottom: 1px solid var(--border);"><button class="btn-secondary no-print" style="width:100%; border: 1px dashed var(--border); background: transparent; color: var(--secondary); font-size: 13px; padding: 10px;" onclick="addTaskToSection(${sIdx})">+ Добавить задачу в этот этап</button></div>`;
+                secHtmlAll += `<div style="padding: 16px 20px; background: #fdfdfd;"><button class="btn-secondary no-print" style="width:100%; border: 1px dashed var(--border); background: transparent; color: var(--secondary); font-size: 13px; padding: 12px; border-radius: 8px; transition: 0.2s;" onmouseover="this.style.borderColor='var(--primary)'; this.style.color='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'; this.style.color='var(--secondary)'" onclick="addTaskToSection(${sIdx})">+ Добавить задачу в этот этап</button></div>`;
             }
             secHtmlAll += `</div></div>`;
         });
         if (isDirector) {
-            secHtmlAll += `<div class="no-print" style="margin-top: 24px;"><button class="btn-secondary" style="width: 100%; padding: 16px; background: transparent; border: 2px dashed var(--primary); color: var(--primary); font-weight: 600; font-size: 14px;" onclick="addSectionToChecklist()">+ СОЗДАТЬ НОВЫЙ ЭТАП (КОЛОНКУ)</button></div>`;
+            secHtmlAll += `<div class="no-print" style="margin-top: 24px;"><button class="btn-secondary" style="width: 100%; padding: 16px; background: transparent; border: 2px dashed var(--primary); color: var(--primary); font-weight: 600; font-size: 14px; border-radius: 12px;" onclick="addSectionToChecklist()">+ СОЗДАТЬ НОВЫЙ ЭТАП (КОЛОНКУ)</button></div>`;
         }
     } else {
-        secHtmlAll = `<div style="text-align:center; padding:40px; color:var(--secondary); background: var(--card-bg); border-radius: 16px; border: 1px solid var(--border);">Чек-лист пуст. Создайте первый этап, чтобы начать работу.</div>`;
+        secHtmlAll = `<div style="text-align:center; padding:60px 20px; color:var(--secondary); background: var(--card-bg); border-radius: 16px; border: 1px dashed var(--border);">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="1.5" style="margin-bottom: 16px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            <div style="font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 8px;">Чек-лист не настроен</div>
+            <div style="font-size: 13px;">Создайте первый этап, чтобы начать работу над проектом.</div>
+        </div>`;
         if (currentUser.role === 'Директор') {
-            secHtmlAll += `<div class="no-print" style="margin-top: 24px;"><button class="btn-secondary" style="width: 100%; padding: 16px; background: transparent; border: 2px dashed var(--primary); color: var(--primary); font-weight: 600; font-size: 14px;" onclick="addSectionToChecklist()">+ СОЗДАТЬ НОВЫЙ ЭТАП (КОЛОНКУ)</button></div>`;
+            secHtmlAll += `<div class="no-print" style="margin-top: 24px;"><button class="btn-secondary" style="width: 100%; padding: 16px; background: transparent; border: 2px dashed var(--primary); color: var(--primary); font-weight: 600; font-size: 14px; border-radius: 12px;" onclick="addSectionToChecklist()">+ СОЗДАТЬ НОВЫЙ ЭТАП</button></div>`;
         }
     }
     
@@ -157,7 +171,7 @@ function updateChecklistUI() {
             if(p.time_logs) { p.time_logs.filter(l => l.tId === tId).forEach(l => accSecs += l.seconds); }
             
             let timerHtml = '';
-            if (accSecs > 0) timerHtml += `<span style="color:var(--secondary); font-size:11px; margin-right:8px; font-weight: 500;">Затрачено: ${formatTime(accSecs)}</span>`;
+            if (accSecs > 0) timerHtml += `<span style="color:var(--secondary); font-size:11px; margin-right:8px; font-weight: 600; background: var(--bg); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border);">⏱ ${formatTime(accSecs)}</span>`;
             
             if (!isChecked && canEditRole) {
                 const isActive = !!activeTimers[tId];
@@ -175,7 +189,7 @@ function updateChecklistUI() {
             if (p.subtasks && p.subtasks[tId] && p.subtasks[tId].length > 0) {
                 p.subtasks[tId].forEach(sub => {
                     if(!sub.checked) allSubsChecked = false;
-                    subtasksHtml += `<div style="display:flex; align-items:center; gap:10px; margin-top:8px; background: rgba(15, 23, 42, 0.02); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);"><input type="checkbox" style="margin:0; width:16px; height:16px;" ${sub.checked ? 'checked' : ''} onchange="toggleSubtask('${tId}', '${sub.id}', this.checked)" ${subsDisabled ? 'disabled' : ''}><span style="font-size:13px; font-weight: 500; ${sub.checked ? 'text-decoration:line-through; color:var(--secondary)' : 'color:var(--text)'}">${sub.text}</span>${!subsDisabled ? `<button onclick="deleteSubtask('${tId}', '${sub.id}')" style="background:none; border:none; color:var(--secondary); padding:0; margin-left:auto; cursor:pointer; font-size:14px;" title="Удалить" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--secondary)'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}</div>`;
+                    subtasksHtml += `<div style="display:flex; align-items:center; gap:10px; background: rgba(15, 23, 42, 0.02); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);"><input type="checkbox" style="margin:0; width:16px; height:16px; cursor: pointer;" ${sub.checked ? 'checked' : ''} onchange="toggleSubtask('${tId}', '${sub.id}', this.checked)" ${subsDisabled ? 'disabled' : ''}><span style="font-size:13px; font-weight: 500; flex: 1; ${sub.checked ? 'text-decoration:line-through; color:var(--secondary)' : 'color:var(--text)'}">${sub.text}</span>${!subsDisabled ? `<button onclick="deleteSubtask('${tId}', '${sub.id}')" class="icon-btn" style="padding: 4px; color: var(--secondary);" title="Удалить подзадачу"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}</div>`;
                 });
             }
             const subsDiv = document.getElementById(`subs_${tId}`); if(subsDiv) subsDiv.innerHTML = subtasksHtml;
@@ -183,13 +197,26 @@ function updateChecklistUI() {
             let finalIsDisabled = isDisabled || (!isChecked && !allSubsChecked);
             const lockDiv = document.getElementById(`hard_lock_${tId}`);
             if(lockDiv) {
-                if (!isDirector && !previousSectionCompleted) { lockDiv.innerHTML = `<div class="status-badge status-canceled" style="margin-top:8px; background: rgba(239,68,68,0.05);">Ожидает завершения этапа "${p.checklist[sIdx-1]?.title || ''}"</div>`; } 
-                else if (!isChecked && !allSubsChecked) { lockDiv.innerHTML = `<div class="status-badge status-canceled" style="margin-top:8px; background:rgba(245, 158, 11, 0.1); color:#f59e0b;">Сначала завершите подзадачи</div>`; } 
+                if (!isDirector && !previousSectionCompleted) { lockDiv.innerHTML = `<div style="font-size:11px; color:var(--danger); font-weight:600; display: inline-flex; align-items: center; gap: 6px; background: rgba(239,68,68,0.06); padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(239,68,68,0.2);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> Ожидает: "${p.checklist[sIdx-1]?.title || ''}"</div>`; } 
+                else if (!isChecked && !allSubsChecked) { lockDiv.innerHTML = `<div style="font-size:11px; color:#f59e0b; font-weight:600; display: inline-flex; align-items: center; gap: 6px; background: rgba(245,158,11,0.06); padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(245,158,11,0.2);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> Сначала завершите подзадачи</div>`; } 
                 else { lockDiv.innerHTML = ''; }
             }
             
             const cb = document.getElementById(tId); 
-            if(cb) { cb.checked = isChecked; cb.disabled = finalIsDisabled; if (isPending) cb.classList.add('cb-pending'); else cb.classList.remove('cb-pending'); }
+            if(cb) { 
+                cb.checked = isChecked; 
+                cb.disabled = finalIsDisabled; 
+                if (isPending) cb.classList.add('cb-pending'); else cb.classList.remove('cb-pending'); 
+                
+                const taskRow = cb.closest('.task');
+                if (taskRow) {
+                    if (isChecked) {
+                        taskRow.style.background = 'rgba(16, 185, 129, 0.02)';
+                    } else {
+                        taskRow.style.background = 'transparent';
+                    }
+                }
+            }
             
             const timeEl = document.getElementById(`time_${tId}`); 
             const sigEl = document.getElementById(`sig_${tId}`);
@@ -209,7 +236,7 @@ function updateChecklistUI() {
                         timeEl.innerHTML = `<span style="color: var(--success); display: inline-flex; align-items: center; gap: 4px; font-weight: 600; background: rgba(16,185,129,0.1); padding: 4px 8px; border-radius: 6px;">${statusIcon} Утверждено: ${cleanStateStr}</span> ${returnBtnHtml}`;
                     } else { 
                         statusIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`; 
-                        timeEl.innerHTML = `<span style="color: var(--primary); display: inline-flex; align-items: center; gap: 4px; font-weight: 600; background: rgba(30,58,138,0.1); padding: 4px 8px; border-radius: 6px;">${statusIcon} Выполнено: ${cleanStateStr}</span>`;
+                        timeEl.innerHTML = `<span style="color: var(--primary); display: inline-flex; align-items: center; gap: 4px; font-weight: 600; background: rgba(30,58,138,0.1); padding: 4px 8px; border-radius: 6px;">${statusIcon} Ожидает проверки: ${cleanStateStr}</span>`;
                     } 
                 } else {
                     timeEl.innerHTML = "";
@@ -226,26 +253,26 @@ function updateChecklistUI() {
             
             const fDiv = document.getElementById(`file_${tId}`);
             if (fDiv) {
-                if (p.taskFiles && p.taskFiles[tId]) { fDiv.style.display = 'block'; fDiv.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px; font-weight: 500;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg> Документ:</span> <a href="${p.taskFiles[tId].url}" target="_blank" style="color:var(--primary); text-decoration:none; font-weight:600; margin-left: 4px;">${p.taskFiles[tId].name}</a>`; } 
+                if (p.taskFiles && p.taskFiles[tId]) { 
+                    fDiv.style.display = 'block'; 
+                    fDiv.innerHTML = `<div style="display:flex; align-items:center; gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg> <span style="font-weight:500; color:var(--secondary);">Документ:</span> <a href="${p.taskFiles[tId].url}" target="_blank" style="color:var(--primary); text-decoration:none; font-weight:600;">${p.taskFiles[tId].name}</a></div>`; 
+                } 
                 else { fDiv.style.display = 'none'; fDiv.innerHTML = ''; }
             }
-            
-            const aRow = document.getElementById(`action_row_${tId}`);
-            if(aRow) { aRow.style.display = (!isChecked && !subsDisabled) ? 'flex' : 'none'; }
             
             const cTxt = document.getElementById(`text_${tId}`); 
             if(cTxt) { 
                 let taskComments = p.comments ? p.comments[tId] : null;
                 if (typeof taskComments === 'string') { taskComments = [{ text: taskComments, author: 'Пользователь', time: '' }]; p.comments[tId] = taskComments; }
                 if(Array.isArray(taskComments) && taskComments.length > 0) { 
-                    cTxt.style.display = 'flex'; cTxt.style.flexDirection = 'column'; cTxt.style.gap = '8px'; cTxt.style.marginTop = '8px';
+                    cTxt.style.display = 'flex'; cTxt.style.flexDirection = 'column'; cTxt.style.gap = '8px';
                     let cHtml = '';
                     taskComments.forEach((cmt, cIdx) => {
                         let isReturn = cmt.text && cmt.text.startsWith('ВОЗВРАТ');
-                        let bgCol = isReturn ? 'rgba(239, 68, 68, 0.05)' : 'var(--bg)';
+                        let bgCol = isReturn ? 'rgba(239, 68, 68, 0.04)' : 'var(--bg)';
                         let brCol = isReturn ? 'var(--danger)' : 'var(--border)';
                         let tCol = isReturn ? 'var(--danger)' : 'var(--text)';
-                        cHtml += `<div style="background: ${bgCol}; border: 1px solid ${brCol}; padding: 10px 14px; border-radius: 10px; display: flex; justify-content: space-between; align-items: flex-start;"><div style="flex: 1; word-break: break-word;"><div style="font-size: 11px; color: var(--secondary); margin-bottom: 4px; font-weight: 500;">${cmt.author || 'Пользователь'} ${cmt.time ? `<span style="opacity: 0.6; margin-left: 6px; font-weight: 400;">${cmt.time}</span>` : ''}</div><div style="font-size: 13px; color: ${tCol}; line-height: 1.4;">${cmt.text}</div></div><button class="icon-btn no-print" onclick="deleteMultipleComment('${tId}', ${cIdx})" style="padding: 4px; margin-left: 10px;" title="Удалить"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></div>`;
+                        cHtml += `<div style="background: ${bgCol}; border: 1px solid ${brCol}; padding: 12px 16px; border-radius: 12px; display: flex; justify-content: space-between; align-items: flex-start;"><div style="flex: 1; word-break: break-word;"><div style="font-size: 11px; color: var(--secondary); margin-bottom: 6px; font-weight: 600; display:flex; align-items:center; gap:6px;">${cmt.author || 'Пользователь'} ${cmt.time ? `<span style="font-weight: 400; opacity: 0.7;">• ${cmt.time}</span>` : ''}</div><div style="font-size: 13px; color: ${tCol}; line-height: 1.5;">${cmt.text}</div></div><button class="icon-btn no-print" onclick="deleteMultipleComment('${tId}', ${cIdx})" style="padding: 6px; margin-left: 12px; color: var(--secondary);" title="Удалить комментарий"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></div>`;
                     });
                     cTxt.innerHTML = cHtml;
                 } else { cTxt.style.display = 'none'; cTxt.innerHTML = ''; } 

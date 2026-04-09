@@ -1,20 +1,20 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
-    --primary: #1e3a8a; --primary-hover: #1e40af;
+    --primary: #4f46e5; --primary-hover: #4338ca; /* Благородный Индиго */
     --success: #10b981; --success-hover: #059669;
     --danger: #ef4444; --danger-hover: #dc2626;
     --secondary: #64748b; --secondary-hover: #475569;
-    --bg: #f8fafc; --sidebar-bg: #ffffff; --card-bg: #ffffff;
-    --text: #0f172a; --border: #e2e8f0;
+    --bg: #f3f4f6; --sidebar-bg: #ffffff; --card-bg: #ffffff;
+    --text: #0f172a; --border: #e5e7eb;
 }
 
 [data-theme="dark"] {
-    --primary: #3b82f6; --primary-hover: #60a5fa;
+    --primary: #6366f1; --primary-hover: #818cf8;
     --success: #10b981; --success-hover: #34d399;
     --danger: #ef4444; --danger-hover: #f87171;
     --secondary: #94a3b8; --secondary-hover: #cbd5e1;
-    --bg: #0f172a; --sidebar-bg: #1e293b; --card-bg: #1e293b;
+    --bg: #0f172a; --sidebar-bg: #1e293b; --card-bg: #1e293b; /* Темная тема */
     --text: #f8fafc; --border: #334155;
 }
 
@@ -104,45 +104,49 @@ button {
     align-items: center; 
     justify-content: center; 
     gap: 6px;
-    min-height: 38px;
+    height: 36px; /* Строгая высота */
     text-align: center;
     line-height: 1.2;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); /* Легкая тень */
+    white-space: nowrap;
 }
+button:active { transform: scale(0.98); }
+button svg { flex-shrink: 0; width: 16px; height: 16px; }
+
 /* Перебиваем инлайн-стили цветов для строгости */
-button.btn-primary { background: var(--primary) !important; color: white !important; border: 1px solid var(--primary) !important; }
+button.btn-primary { background: var(--primary) !important; color: white !important; border: 1px solid transparent !important; }
 button.btn-primary:hover { background: var(--primary-hover) !important; transform: translateY(-1px);}
-button.btn-secondary { background: var(--card-bg) !important; border: 1px solid var(--border) !important; color: var(--text) !important; }
+button.btn-secondary { background: var(--card-bg) !important; border: 1px solid var(--border) !important; color: var(--text) !important; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
 button.btn-secondary:hover { background: var(--bg) !important; border-color: #cbd5e1 !important; }
-button.btn-success { background: var(--success) !important; color: white !important; border: 1px solid var(--success) !important;}
-button.btn-danger { background: var(--danger) !important; color: white !important; border: 1px solid var(--danger) !important;}
+button.btn-success { background: var(--success) !important; color: white !important; border: 1px solid transparent !important;}
+button.btn-danger { background: var(--danger) !important; color: white !important; border: 1px solid transparent !important;}
 
 /* Иконки-кнопки (для чек-листов и компактных меню) */
-.icon-btn { background: transparent !important; border: 1px solid transparent !important; color: var(--secondary) !important; border-radius: 8px; padding: 6px; width: 32px; height: 32px; min-height: unset; }
+.icon-btn { background: transparent !important; border: 1px solid transparent !important; color: var(--secondary) !important; border-radius: 8px; padding: 6px; width: 32px; height: 32px; box-shadow: none;}
 .icon-btn:hover { background: var(--border) !important; color: var(--primary) !important; }
 
 .projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
 .project-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 20px; padding: 24px; cursor: pointer; transition: all 0.3s; display: flex; flex-direction: column; position: relative; overflow: hidden;}
-.project-card:hover { transform: translateY(-4px); box-shadow: 0 10px 30px rgba(0,0,0,0.04); border-color: var(--primary); }
+.project-card:hover { transform: translateY(-4px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border-color: var(--primary); }
 .card-progress { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; margin-top: auto;}
 .card-progress-fill { height: 100%; background: var(--success); transition: width 0.8s ease-out; }
-.status-badge { display: inline-block; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; height: 24px; line-height: 16px;}
+.status-badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; height: 24px;}
 .status-active { background: rgba(30, 58, 138, 0.1); color: var(--primary); }
 .status-archived { background: var(--bg); color: var(--secondary); border: 1px solid var(--border);}
 .status-canceled { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
 .status-completed { background: rgba(16, 185, 129, 0.15); color: var(--success-hover); border: 1px solid var(--success); }
 
 .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
-.tab { background: transparent; color: var(--secondary); padding: 8px 16px; font-weight: 600; border-radius: 10px; height: 36px; border: none;}
+.tab { background: transparent; color: var(--secondary); padding: 8px 16px; font-weight: 600; border-radius: 8px; height: 36px; border: none; box-shadow: none;}
 .tab:hover { background: rgba(15, 23, 42, 0.03); color: var(--text); }
-.tab.active { background: var(--card-bg); color: var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.04); border: 1px solid var(--border); }
+.tab.active { background: var(--card-bg); color: var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid var(--border); }
 
 /* ИСПРАВЛЕНО: Контейнер для кнопок проекта (чтобы не наезжали) */
 .project-header-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 24px; }
 
-.header-info { background: var(--card-bg); padding: 24px; border-radius: 20px; border: 1px solid var(--border); margin-bottom: 32px; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
+.header-info { background: var(--card-bg); padding: 24px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 32px; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);}
 .header-info div { display: flex; flex-direction: column; gap: 6px; }
 .header-info label { font-size: 12px; font-weight: 600; color: var(--secondary); text-transform: uppercase;}
-.header-info input { padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; background: var(--bg); color: var(--text); outline: none; }
 
 .progress-container { width: 100%; background-color: var(--border); border-radius: 12px; margin-bottom: 32px; height: 8px; overflow: hidden;}
 .progress-bar { height: 100%; width: 0%; background-color: var(--success); transition: width 0.8s ease; }
@@ -194,11 +198,14 @@ button.btn-danger { background: var(--danger) !important; color: white !importan
 .client-form div { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 6px;}
 
 .auth-wrapper { display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; background: var(--bg); position: fixed; top:0; left:0; z-index: 100;}
-.auth-card { background: var(--card-bg); padding: 40px; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.05); width: 100%; max-width: 360px; border: 1px solid var(--border); }
-.auth-input { width: 100%; padding: 12px 16px; margin-bottom: 16px; border: 1px solid var(--border); border-radius: 10px; font-size: 13px; background: var(--bg); color: var(--text); outline: none;}
+.auth-card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1); width: 100%; max-width: 380px; border: 1px solid var(--border); }
+
+/* ГЛОБАЛЬНЫЙ СТИЛЬ ИНПУТОВ И СЕЛЕКТОВ */
+.auth-input, select.auth-input, textarea.auth-input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: var(--bg); color: var(--text); outline: none; transition: border 0.2s, box-shadow 0.2s; font-family: inherit; box-sizing: border-box; }
+.auth-input:focus, select.auth-input:focus, textarea.auth-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); background: var(--card-bg); }
 
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; backdrop-filter: blur(2px); }
-.modal-card { width: 90%; max-width: 500px; background: var(--card-bg); border-radius: 20px; padding: 30px; box-shadow: 0 20px 50px rgba(0,0,0,0.1); border: 1px solid var(--border); max-height: 90vh; overflow-y: auto;}
+.modal-card { width: 90%; max-width: 500px; background: var(--card-bg); border-radius: 12px; padding: 30px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border: 1px solid var(--border); max-height: 90vh; overflow-y: auto;}
 
 /* КАНБАН ДОСКА */
 .kanban-board { display: flex; gap: 20px; overflow-x: auto; padding-bottom: 20px; min-height: 60vh; }
