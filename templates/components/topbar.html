@@ -13,7 +13,7 @@
             Поручение
         </button>
         
-        <div id="topbarTaskControl" style="display: none; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 0 12px; border-radius: 8px; cursor: pointer; background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); height: 36px;" onclick="if(typeof navigateTo === 'function') navigateTo('tasks')">
+        <div id="topbarTaskControl" class="topbar-task-control" style="display: none;" onclick="if(typeof navigateTo === 'function') navigateTo('tasks')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
             Активный таймер
         </div>
@@ -23,7 +23,7 @@
             Сканер QR
         </button>
         
-        <div style="width: 1px; height: 24px; background: var(--border); margin: 0 4px;"></div>
+        <div class="topbar-divider"></div>
         
         <button class="icon-btn" onclick="if(typeof toggleTheme === 'function') toggleTheme()">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
@@ -51,7 +51,7 @@
                 <span id="topbarUserName" style="font-size: 13px; font-weight: 600; color: var(--text);">Загрузка...</span>
                 <span style="font-size: 11px; color: var(--secondary);">Личный кабинет</span>
             </div>
-            <div id="topbarUserInitials" style="width: 36px; height: 36px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); display: flex; justify-content: center; align-items: center; font-weight: 600; color: var(--primary); font-size: 14px;">?</div>
+            <div id="topbarUserInitials" class="topbar-user-avatar">?</div>
         </div>
     </div>
 </header>

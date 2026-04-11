@@ -116,7 +116,8 @@ function navigateTo(view, triggerRender = true) {
         clearDepartmentFilter(false); 
         const nav = document.getElementById('navAnalytics'); 
         if(nav) nav.classList.add('active'); 
-        drawCharts(); 
+        requestAnimationFrame(() => drawCharts());
+        setTimeout(() => drawCharts(), 120);
     } 
     else if (view === 'clients') { 
         clearDepartmentFilter(false); 

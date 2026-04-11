@@ -24,6 +24,12 @@ function drawCharts() {
     const a = projectsDB.filter(p => p.status === 'active').length;
     const ar = projectsDB.filter(p => p.status === 'archive').length;
     const c = projectsDB.filter(p => p.status === 'canceled').length;
+    const sharedOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        resizeDelay: 0
+    };
     
     const dlConf = { 
         color: '#fff', 
@@ -49,6 +55,7 @@ function drawCharts() {
                 }] 
             }, 
             options: { 
+                ...sharedOptions,
                 plugins: { 
                     datalabels: dlConf, 
                     title: { display: true, text: 'Статусы проектов', color: tCol }, 
@@ -80,6 +87,7 @@ function drawCharts() {
                 }] 
             }, 
             options: { 
+                ...sharedOptions,
                 plugins: { 
                     datalabels: dlConf, 
                     title: { display: true, text: 'Прогресс активных', color: tCol }, 
@@ -88,6 +96,12 @@ function drawCharts() {
             } 
         }); 
     }
+
+    // Дополнительный пересчет после показа view, чтобы canvas не рендерился в нулевой ширине.
+    requestAnimationFrame(() => {
+        if (statusChartObj) statusChartObj.resize();
+        if (progressChartObj) progressChartObj.resize();
+    });
 }
 
 function checkOverdue(p) {
