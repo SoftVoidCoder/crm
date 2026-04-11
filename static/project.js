@@ -173,18 +173,18 @@ function openProject(id) {
     document.querySelectorAll('.finance-block').forEach(el => el.style.display = ['Директор', 'Бухгалтерия', 'Менеджер'].includes(currentUser.role) ? 'flex' : 'none');
     
     // ИНЖЕКЦИЯ КНОПОК СТАТУСОВ ДОГОВОРА
-    const btnContainer = document.getElementById('projectToolbarStatusActions');
+    const btnContainer = document.getElementById('btnCancel')?.parentElement;
     if (btnContainer && !document.getElementById('btnProlong')) {
-        btnContainer.innerHTML = `
-            <button id="btnProlong" class="btn-secondary btn-prolong" onclick="prolongProject()">
+        btnContainer.insertAdjacentHTML('beforeend', `
+            <button id="btnProlong" class="btn-secondary" style="width:100%; margin-bottom:12px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="prolongProject()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 Перевести на пролонгацию
             </button>
-            <button id="btnTerminate" class="btn-danger btn-terminate" onclick="terminateProject()">
+            <button id="btnTerminate" class="btn-danger" style="width:100%; margin-bottom:15px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="terminateProject()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
                 Расторгнуть договор
             </button>
-        `;
+        `);
     }
     
     const bCancel = document.getElementById('btnCancel'); if(bCancel) bCancel.style.display = p.status === 'active' ? 'block' : 'none';

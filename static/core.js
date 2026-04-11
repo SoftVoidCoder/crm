@@ -278,57 +278,12 @@ function toggleTheme() {
 // ==========================================
 // МОДУЛЬ: ПРЕТЕНЗИОННАЯ РАБОТА (ЮРИСwwТЫ)
 // ==========================================
-function getLegalScaleIcon() {
-    return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v2a4 4 0 0 1-4 4 4 4 0 0 1-4-4v-2"></path><path d="M12 4v12"></path><path d="M3 7h18"></path><path d="m7 7-3 5a3 3 0 0 0 6 0L7 7Z"></path><path d="m17 7-3 5a3 3 0 0 0 6 0l-3-5Z"></path></svg>`;
-}
-
-function getLegalCreateIcon() {
-    return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>`;
-}
-
-function getLegalExportIcon() {
-    return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>`;
-}
-
-function getLegalDocIcon() {
-    return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v5h5"></path><path d="M9 13h6"></path><path d="M9 17h6"></path></svg>`;
-}
-
-function getLegalSectionTitle(title, subtitle = '') {
-    return `
-        <div class="legal-title-row">
-            <div class="legal-icon legal-icon--hero">${getLegalScaleIcon()}</div>
-            <div>
-                <h2 class="legal-page-title">${title}</h2>
-                ${subtitle ? `<p class="legal-page-subtitle">${subtitle}</p>` : ''}
-            </div>
-        </div>
-    `;
-}
-
-function getLegalCreateButtonLabel(tab) {
-    const text = tab === 'claims' ? 'Создать претензию' : 'Добавить дело';
-    return `${getLegalCreateIcon()}<span>${text}</span>`;
-}
-
-function renderLegalToolbarButton(kind) {
-    const isClaims = kind === 'claims';
-    const fileName = isClaims ? 'Реестр_Претензий' : 'Реестр_Судебных_Дел';
-    const source = isClaims ? 'claimsDB' : 'courtCasesDB';
-    return `
-        <button class="btn-secondary legal-export-btn no-print" onclick="exportDataToExcel(${source}, '${fileName}')">
-            ${getLegalExportIcon()}
-            <span>Экспорт в Excel</span>
-        </button>
-    `;
-}
-
 function initClaimsUI() {
     const sidebar = document.querySelector('.sidebar');
     if (sidebar && !document.getElementById('navClaims')) {
         const btn = document.createElement('a');
         btn.href = "#"; btn.id = "navClaims"; btn.className = "nav-item";
-        btn.innerHTML = `${getLegalScaleIcon()}<span>Претензии и Суды</span>`;
+        btn.innerHTML = "⚖️ Претензии и Суды";
         btn.onclick = (e) => { 
             e.preventDefault();
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
@@ -342,9 +297,8 @@ function initClaimsUI() {
     const mainContent = document.querySelector('.main-content');
     if (mainContent && !document.getElementById('claimsView')) {
         const claimsView = document.createElement('div');
-        claimsView.id = "claimsView"; claimsView.className = "fade-in legal-shell"; claimsView.style.display = "none";
+        claimsView.id = "claimsView"; claimsView.className = "section fade-in"; claimsView.style.display = "none";
         claimsView.innerHTML = `
-<<<<<<< Updated upstream
             <div class="header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                 <h2 style="margin:0; color:var(--primary);">⚖️ Претензии и Суды</h2>
                 <button id="btnCreateLegal" class="btn-primary" onclick="openCreateLegalModal()">+ Создать претензию</button>
@@ -352,27 +306,14 @@ function initClaimsUI() {
             <div style="display:flex; gap:10px; margin-bottom:20px;">
                 <button id="tabLegalClaims" class="btn-secondary active" style="padding:6px 16px; font-size:13px;" onclick="switchLegalTab('claims')">Досудебные претензии</button>
                 <button id="tabLegalCourts" class="btn-secondary" style="padding:6px 16px; font-size:13px;" onclick="switchLegalTab('courts')">Судебные дела</button>
-=======
-            <div class="legal-hero">
-                ${getLegalSectionTitle('Претензии и Суды', 'Единый реестр досудебной и судебной работы')}
-                <button id="btnCreateLegal" class="btn-primary legal-create-btn" onclick="openCreateLegalModal()">${getLegalCreateButtonLabel('claims')}</button>
             </div>
-            <div class="legal-toolbar">
-                <div class="legal-tabs">
-                <button id="tabLegalClaims" class="btn-secondary active btn-sm" onclick="switchLegalTab('claims')">Досудебные претензии</button>
-                <button id="tabLegalCourts" class="btn-secondary btn-sm" onclick="switchLegalTab('courts')">Судебные дела</button>
-                </div>
-                <div id="legalToolbarActions" class="legal-toolbar-actions"></div>
->>>>>>> Stashed changes
-            </div>
-            <div class="legal-board"><div id="legalListContainer"></div></div>
+            <div class="card"><div id="legalListContainer"></div></div>
         `;
         mainContent.appendChild(claimsView);
     }
 
     if (!document.getElementById('createCourtModal')) {
         document.body.insertAdjacentHTML('beforeend', `
-<<<<<<< Updated upstream
         <div id="createCourtModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:9999;">
             <div class="modal-content fade-in" style="background:var(--bg); padding:25px; border-radius:12px; width:700px; max-width:95%; box-shadow:0 10px 25px rgba(0,0,0,0.2);">
                 <h3 style="margin-top:0; color:var(--primary); margin-bottom:15px;">⚖️ Новое судебное дело</h3>
@@ -385,20 +326,6 @@ function initClaimsUI() {
                     <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Привязка к договору</label><select id="courtProj" class="auth-input" style="margin:0; width:100%;"></select></div>
                     <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Инстанция</label>
                         <select id="courtInst" class="auth-input" style="margin:0; width:100%;">
-=======
-        <div id="createCourtModal" class="modal modal-overlay-custom">
-            <div class="modal-content fade-in modal-content-custom">
-                <h3 class="legal-title legal-modal-title">${getLegalScaleIcon()}<span>Новое судебное дело</span></h3>
-                <div class="form-grid">
-                    <div><label class="form-label-custom">Номер дела</label><input type="text" id="courtNum" class="auth-input form-input-custom" placeholder="Например, А56-123/2024"></div>
-                    <div><label class="form-label-custom">Суд</label><input type="text" id="courtName" class="auth-input form-input-custom" placeholder="АС г. Санкт-Петербурга"></div>
-                    <div><label class="form-label-custom">Истец</label><input type="text" id="courtPlain" class="auth-input form-input-custom" value="ООО «КОРДА»"></div>
-                    <div><label class="form-label-custom">Ответчик</label><input type="text" id="courtDef" class="auth-input form-input-custom"></div>
-                    <div><label class="form-label-custom">Сумма иска (₽)</label><input type="number" id="courtAmount" class="auth-input form-input-custom"></div>
-                    <div><label class="form-label-custom">Привязка к договору</label><select id="courtProj" class="auth-input form-input-custom"></select></div>
-                    <div><label class="form-label-custom">Инстанция</label>
-                        <select id="courtInst" class="auth-input form-input-custom">
->>>>>>> Stashed changes
                             <option value="Первая">Первая инстанция</option>
                             <option value="Апелляция">Апелляционная инстанция</option>
                             <option value="Кассация">Кассационная инстанция</option>
@@ -416,7 +343,6 @@ function initClaimsUI() {
 
     if (!document.getElementById('createClaimModal')) {
         document.body.insertAdjacentHTML('beforeend', `
-<<<<<<< Updated upstream
         <div id="createClaimModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:9999;">
             <div class="modal-content fade-in" style="background:var(--bg); padding:25px; border-radius:12px; width:600px; max-width:95%; box-shadow:0 10px 25px rgba(0,0,0,0.2);">
                 <h3 style="margin-top:0; color:var(--primary); margin-bottom:15px;">⚖️ Новая претензия</h3>
@@ -429,20 +355,6 @@ function initClaimsUI() {
                     <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Привязка к договору</label><select id="claimProj" class="auth-input" style="margin:0; width:100%;"></select></div>
                     <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Дата направления</label><input type="date" id="claimDateSent" class="auth-input" style="margin:0; width:100%;"></div>
                     <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Срок ответа до</label><input type="date" id="claimDeadline" class="auth-input" style="margin:0; width:100%;"></div>
-=======
-        <div id="createClaimModal" class="modal modal-overlay-custom">
-            <div class="modal-content fade-in modal-content-custom medium">
-                <h3 class="legal-title legal-modal-title">${getLegalScaleIcon()}<span>Новая претензия</span></h3>
-                <div class="form-grid">
-                    <div><label class="form-label-custom">Номер претензии</label><input type="text" id="claimNum" class="auth-input form-input-custom" placeholder="Например, ПР-01"></div>
-                    <div><label class="form-label-custom">Дата составления</label><input type="date" id="claimDate" class="auth-input form-input-custom"></div>
-                    <div><label class="form-label-custom">Инициатор</label><input type="text" id="claimInit" class="auth-input form-input-custom" value="ООО «КОРДА»"></div>
-                    <div><label class="form-label-custom">Адресат (Контрагент)</label><input type="text" id="claimAddr" class="auth-input form-input-custom"></div>
-                    <div><label class="form-label-custom">Сумма требований (₽)</label><input type="number" id="claimAmount" class="auth-input form-input-custom"></div>
-                    <div><label class="form-label-custom">Привязка к договору</label><select id="claimProj" class="auth-input form-input-custom"></select></div>
-                    <div><label class="form-label-custom">Дата направления</label><input type="date" id="claimDateSent" class="auth-input form-input-custom"></div>
-                    <div><label class="form-label-custom">Срок ответа до</label><input type="date" id="claimDeadline" class="auth-input form-input-custom"></div>
->>>>>>> Stashed changes
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:10px; border-top:1px solid var(--border); padding-top:15px;">
                     <button class="btn-secondary" onclick="document.getElementById('createClaimModal').style.display='none'">Отмена</button>
@@ -478,15 +390,23 @@ window.switchLegalTab = function(tab) {
     currentLegalTab = tab;
     document.getElementById('tabLegalClaims').classList.toggle('active', tab === 'claims');
     document.getElementById('tabLegalCourts').classList.toggle('active', tab === 'courts');
-    document.getElementById('btnCreateLegal').innerHTML = getLegalCreateButtonLabel(tab);
+    document.getElementById('btnCreateLegal').innerText = tab === 'claims' ? '+ Создать претензию' : '+ Добавить дело';
     if (tab === 'claims') renderClaims(); else renderCourts();
 };
 
 window.renderClaims = function() {
     const container = document.getElementById('legalListContainer');
-    const toolbarActions = document.getElementById('legalToolbarActions');
     if (!container) return;
-    if (toolbarActions) toolbarActions.innerHTML = renderLegalToolbarButton('claims');
+    
+    if (!document.getElementById('btnExportClaims')) {
+        const btn = document.createElement('button');
+        btn.id = 'btnExportClaims';
+        btn.className = 'btn-success no-print';
+        btn.style.marginBottom = '15px';
+        btn.innerHTML = '📊 Экспорт реестра в Excel';
+        btn.onclick = () => exportDataToExcel(claimsDB, 'Реестр_Претензий');
+        container.parentNode.insertBefore(btn, container);
+    }
 
     if (claimsDB.length === 0) {
         container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--secondary); background:rgba(0,0,0,0.02); border-radius:8px; border:1px dashed var(--border);">Нет зарегистрированных претензий.</div>';
@@ -528,11 +448,7 @@ window.renderClaims = function() {
                     <option value="Урегулирована" ${c.status==='Урегулирована'?'selected':''}>Урегулирована</option>
                     <option value="Отклонена" ${c.status==='Отклонена'?'selected':''}>Отклонена</option>
                 </select>
-<<<<<<< Updated upstream
                 <button class="btn-secondary" style="padding:4px; font-size:11px;" onclick="generateClaimTemplate(${c.id})">📄 Шаблон</button>
-=======
-                <button class="btn-secondary btn-xs legal-inline-btn" onclick="generateClaimTemplate(${c.id})">${getLegalDocIcon()}<span>Шаблон</span></button>
->>>>>>> Stashed changes
             </td>
         </tr>`;
     });
@@ -609,9 +525,17 @@ window.generateClaimTemplate = function(claimId) {
 // === ФУНКЦИИ СУДЕБНЫХ ДЕЛ ===
 window.renderCourts = function() {
     const container = document.getElementById('legalListContainer');
-    const toolbarActions = document.getElementById('legalToolbarActions');
     if (!container) return;
-    if (toolbarActions) toolbarActions.innerHTML = renderLegalToolbarButton('courts');
+    
+    if (!document.getElementById('btnExportCourts')) {
+        const btn = document.createElement('button');
+        btn.id = 'btnExportCourts';
+        btn.className = 'btn-success no-print';
+        btn.style.marginBottom = '15px';
+        btn.innerHTML = '📊 Экспорт реестра в Excel';
+        btn.onclick = () => exportDataToExcel(courtCasesDB, 'Реестр_Судебных_Дел');
+        container.parentNode.insertBefore(btn, container);
+    }
 
     if (courtCasesDB.length === 0) {
         container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--secondary); background:rgba(0,0,0,0.02); border-radius:8px; border:1px dashed var(--border);">Нет зарегистрированных судебных дел.</div>';
