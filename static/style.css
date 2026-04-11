@@ -583,6 +583,143 @@ button.btn-danger {
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; backdrop-filter: blur(2px); }
 .modal-card { width: 90%; max-width: 500px; background: var(--card-bg); border-radius: 12px; padding: 30px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border: 1px solid var(--border); max-height: 90vh; overflow-y: auto;}
 
+.project-create-modal {
+    max-width: 860px;
+    padding: 28px 28px 24px;
+    border-radius: 24px;
+    box-shadow: 0 26px 60px rgba(11, 29, 57, 0.18);
+}
+.project-create-header {
+    margin-bottom: 22px;
+}
+.project-create-title {
+    margin: 0;
+    font-size: 32px;
+    line-height: 1;
+    letter-spacing: -0.05em;
+    color: var(--primary-strong);
+}
+.project-create-subtitle {
+    margin: 8px 0 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--secondary);
+    max-width: 560px;
+}
+.project-create-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 18px;
+    margin-bottom: 20px;
+}
+.project-create-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+.project-create-field--wide {
+    grid-column: 1 / -1;
+}
+.project-create-label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--secondary);
+}
+.project-create-select {
+    appearance: auto;
+    cursor: pointer;
+}
+.project-create-section {
+    background: linear-gradient(180deg, #fbfdff 0%, #f5f8fc 100%);
+    border: 1px solid rgba(23, 59, 115, 0.08);
+    border-radius: 20px;
+    padding: 18px;
+    margin-bottom: 18px;
+}
+.project-create-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+.project-create-section-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--primary-strong);
+}
+.project-create-section-subtitle {
+    margin: 5px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--secondary);
+}
+.project-create-nom-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 110px auto;
+    gap: 10px;
+    align-items: center;
+}
+.project-create-qty {
+    text-align: center;
+}
+.project-create-list {
+    margin-top: 12px;
+    min-height: 56px;
+    max-height: 180px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.project-create-access-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+.project-create-access-box,
+.project-create-roles-box {
+    min-height: 160px;
+    max-height: 220px;
+    overflow-y: auto;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 14px;
+}
+.project-create-help {
+    margin: 8px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--secondary);
+}
+.project-create-checklist-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin: 4px 0 18px;
+    padding: 10px 14px;
+    border-radius: 14px;
+    background: rgba(23, 59, 115, 0.05);
+    border: 1px solid rgba(23, 59, 115, 0.08);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.project-create-checklist-toggle input {
+    margin: 0;
+}
+.project-create-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 4px;
+}
+
 /* КАНБАН ДОСКА */
 .kanban-board { display: flex; gap: 20px; overflow-x: auto; padding-bottom: 20px; min-height: 60vh; }
 .kanban-column { flex: 1; min-width: 300px; max-width: 350px; background: rgba(15, 23, 42, 0.02); border-radius: 16px; padding: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; flex-shrink: 0;}
@@ -631,25 +768,25 @@ button.btn-danger {
 .notif-bell:hover { background: var(--bg); border-color: var(--border); color: var(--text); }
 .notif-badge { position: absolute; top: -2px; right: -2px; background: var(--danger); color: white; font-size: 10px; font-weight: 700; height: 18px; min-width: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; border: 2px solid var(--card-bg); z-index: 2; }
 
-.notif-dropdown { position: absolute; top: 50px; right: 0; width: 380px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); z-index: 9999; display: none; flex-direction: column; overflow: hidden; cursor: default; }
-.notif-header { padding: 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; display:flex; justify-content: space-between; align-items:center; color: var(--text); background: var(--bg);}
-.notif-list { max-height: 400px; overflow-y: auto; background: var(--card-bg); display: flex; flex-direction: column;}
-.notif-item { padding: 16px; border-bottom: 1px solid var(--border); transition: background 0.2s; cursor: pointer; display: flex; gap: 12px; align-items: flex-start; }
-.notif-item:hover { background: rgba(30, 58, 138, 0.03); }
+.notif-dropdown { position: absolute; top: 50px; right: 0; width: 420px; background: var(--card-bg); border: 1px solid rgba(23, 59, 115, 0.08); border-radius: 20px; box-shadow: 0 22px 50px rgba(11, 29, 57, 0.18); z-index: 9999; display: none; flex-direction: column; overflow: hidden; cursor: default; }
+.notif-header { padding: 18px 18px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; display:flex; justify-content: space-between; align-items:center; color: var(--text); background: linear-gradient(180deg, #fbfdff 0%, #f4f7fb 100%);}
+.notif-list { max-height: 430px; overflow-y: auto; background: var(--card-bg); display: flex; flex-direction: column; padding: 10px; gap: 8px;}
+.notif-item { padding: 14px; border: 1px solid rgba(23, 59, 115, 0.08); border-radius: 16px; transition: background 0.2s, transform 0.2s, border-color 0.2s; cursor: pointer; display: flex; gap: 12px; align-items: flex-start; }
+.notif-item:hover { background: rgba(30, 58, 138, 0.03); border-color: rgba(23, 59, 115, 0.18); transform: translateY(-1px); }
 .notif-item:last-child { border-bottom: none; }
-.notif-icon { width: 36px; height: 36px; border-radius: 10px; background: var(--bg); display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid var(--border);}
+.notif-icon { width: 40px; height: 40px; border-radius: 12px; background: var(--bg); display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid var(--border);}
 .notif-content { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.notif-header-row { display: flex; justify-content: space-between; align-items: center; }
+.notif-header-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .notif-project { font-size: 10px; font-weight: 700; color: var(--primary); text-transform: uppercase; background: rgba(30, 58, 138, 0.06); padding: 3px 8px; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; letter-spacing: 0.05em; }
 .notif-time { font-size: 11px; color: var(--secondary); white-space: nowrap; font-weight: 500; }
-.notif-text { font-size: 13px; color: var(--text); line-height: 1.4; }
+.notif-text { font-size: 13px; color: var(--text); line-height: 1.5; }
 .notif-text b { font-weight: 600; color: var(--text); }
 
 .toast-container { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 12px; z-index: 10000; pointer-events: none;}
-.toast { background: var(--card-bg); border-left: 4px solid var(--success); box-shadow: 0 4px 20px rgba(0,0,0,0.15); padding: 16px 20px; border-radius: 12px; display: flex; flex-direction: column; gap: 4px; min-width: 250px; max-width: 350px; transform: translateX(120%); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); pointer-events: auto; cursor: pointer; border-right: 1px solid var(--border); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);}
+.toast { background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); border-left: 4px solid var(--success); box-shadow: 0 18px 36px rgba(11,29,57,0.16); padding: 16px 20px; border-radius: 16px; display: flex; flex-direction: column; gap: 4px; min-width: 260px; max-width: 360px; transform: translateX(120%); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); pointer-events: auto; cursor: pointer; border-right: 1px solid rgba(23, 59, 115, 0.08); border-top: 1px solid rgba(23, 59, 115, 0.08); border-bottom: 1px solid rgba(23, 59, 115, 0.08);}
 .toast.show { transform: translateX(0); }
-.toast-title { font-weight: 700; font-size: 13px; color: var(--text); }
-.toast-desc { font-size: 13px; color: var(--secondary); font-weight: 500;}
+.toast-title { font-weight: 800; font-size: 13px; color: var(--text); letter-spacing: 0.01em; }
+.toast-desc { font-size: 13px; color: var(--secondary); font-weight: 500; line-height: 1.45;}
 
 .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
 .metric-card { background: var(--card-bg); padding: 24px; border-radius: 20px; border: 1px solid var(--border); box-shadow: 0 4px 15px rgba(0,0,0,0.02); display: flex; flex-direction: column; gap: 8px;}
@@ -750,6 +887,13 @@ button.btn-danger {
     .legal-title-row, .legal-toolbar-actions { width: 100%; }
     .legal-board { padding: 0 10px 10px; overflow-x: auto; }
     .modal-card { width: 95% !important; padding: 20px !important; max-height: 90vh; overflow-y: auto; }
+    .project-create-modal { padding: 22px 18px 18px !important; border-radius: 20px; }
+    .project-create-title { font-size: 26px; }
+    .project-create-grid,
+    .project-create-access-grid,
+    .project-create-nom-controls { grid-template-columns: 1fr; }
+    .project-create-actions { flex-direction: column-reverse; }
+    .notif-dropdown { width: min(92vw, 420px); right: -10px; }
     .finance-block > div, .header-info > div { flex: 1 1 100% !important; border-left: none !important; padding-left: 0 !important; }
     .admin-table { display: block; overflow-x: auto; white-space: nowrap; width: 100%; -webkit-overflow-scrolling: touch; }
     .kanban-board { flex-direction: column; min-height: auto; } 

@@ -336,7 +336,7 @@ function renderNotifications() {
                 </div>`;
     });
 
-    if (allLogs.length === 0) html = '<div style="padding: 20px; text-align: center; color: var(--secondary); font-size: 13px;">Пока нет отметок в проектах</div>';
+    if (allLogs.length === 0) html = '<div class="notif-empty">Пока нет уведомлений по действиям в CRM</div>';
     const list = document.getElementById('notifList'); if(list) list.innerHTML = html;
     const badge = document.getElementById('notifBadge'); if(badge) { if(unread > 0) { badge.style.display = 'flex'; badge.innerText = unread > 99 ? '99+' : unread; } else { badge.style.display = 'none'; } }
     isFirstLoad = false;
@@ -345,15 +345,21 @@ function renderNotifications() {
 function showToast(title, action, proj_id) {
     const container = document.getElementById('toastContainer'); if (!container) return;
     let cleanText = action; let borderColor = 'var(--success)';
+    let toastTitle = title || 'Korda CRM';
     if (cleanText.includes('Выполнил задачу')) { cleanText = 'Поставил отметку в Чек-листе (Ждет проверки)'; borderColor = '#f59e0b'; }
     if (cleanText.includes('Утвердил')) cleanText = 'Задача проверена Директором';
     if (cleanText.includes('Снял галочку') || cleanText.includes('Снял утверждение')) { cleanText = 'Снял отметку в Чек-листе'; borderColor = 'var(--danger)'; }
     if (cleanText.includes('Вернул этап на доработку')) { cleanText = 'Внимание: этап возвращен на доработку!'; borderColor = '#f59e0b'; }
     if (cleanText.includes('АВТО-ЭСКАЛАЦИЯ')) borderColor = 'var(--danger)';
+    if (title === 'Внимание') borderColor = '#f59e0b';
+    if (title === 'Успех') borderColor = 'var(--success)';
+    if (title === 'Ошибка') borderColor = 'var(--danger)';
 
     const toast = document.createElement('div'); toast.className = 'toast'; toast.style.borderLeftColor = borderColor;
-    toast.innerHTML = `<div class="toast-title">${title}</div><div class="toast-desc">${cleanText}</div>`;
-    toast.onclick = () => openProject(proj_id);
+    toast.innerHTML = `<div class="toast-title">${toastTitle}</div><div class="toast-desc">${cleanText}</div>`;
+    if (typeof proj_id === 'number' && !Number.isNaN(proj_id)) {
+        toast.onclick = () => openProject(proj_id);
+    }
     container.appendChild(toast); setTimeout(() => toast.classList.add('show'), 100); 
     setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 400); }, 5000);
 }

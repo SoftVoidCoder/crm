@@ -196,13 +196,16 @@ window.updateProjectNomList = function() {
     const list = document.getElementById('newProjNomList');
     if(!list) return;
     if(selectedProjectNomenclature.length === 0) {
-        list.innerHTML = '<span style="color:var(--secondary);">Пока ничего не добавлено</span>';
+        list.innerHTML = '<div class="project-create-help">Пока ничего не добавлено. Выбери позиции из номенклатуры и добавь их в состав проекта.</div>';
         return;
     }
     list.innerHTML = selectedProjectNomenclature.map((item, index) =>
-        `<div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg); padding:8px 12px; border-radius:8px; margin-bottom:6px; border:1px solid var(--border);">
-            <span><b>${item.name}</b> — ${item.qty} ${item.unit}</span>
-            <span style="color:var(--danger); cursor:pointer; font-weight:bold; font-size: 16px;" onclick="selectedProjectNomenclature.splice(${index}, 1); updateProjectNomList();">×</span>
+        `<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; background:var(--card-bg); padding:10px 12px; border-radius:12px; border:1px solid var(--border);">
+            <div style="display:flex; flex-direction:column; gap:4px; min-width:0;">
+                <span style="font-weight:700; color:var(--text);">${item.name}</span>
+                <span style="font-size:12px; color:var(--secondary);">${item.qty} ${item.unit}${item.article ? ` · Арт. ${item.article}` : ''}</span>
+            </div>
+            <span style="color:var(--danger); cursor:pointer; font-weight:bold; font-size: 16px; flex-shrink:0;" onclick="selectedProjectNomenclature.splice(${index}, 1); updateProjectNomList();">×</span>
         </div>`
     ).join('');
 };
@@ -215,16 +218,19 @@ window.createNewProject = function() {
         sel.onchange = (e) => {
             const clientObj = clientsDB.find(x => x.name === e.target.value);
             const cSel = document.getElementById('newProjContact');
+            const cWrap = document.getElementById('newProjContactWrap');
             if (clientObj) {
                 const clientContacts = contactsDB.filter(x => x.client_id === clientObj.id);
                 if(clientContacts.length > 0) {
-                    cSel.style.display = 'block';
+                    if (cWrap) cWrap.style.display = 'flex';
                     cSel.innerHTML = '<option value="">Выберите контактное лицо</option>' + clientContacts.map(c => `<option value="${c.name}">${c.name} (${c.position})</option>`).join('');
                 } else {
-                    cSel.style.display = 'none'; cSel.value = '';
+                    if (cWrap) cWrap.style.display = 'none';
+                    cSel.value = '';
                 }
             } else {
-                cSel.style.display = 'none'; cSel.value = '';
+                if (cWrap) cWrap.style.display = 'none';
+                cSel.value = '';
             }
         };
     }
@@ -232,7 +238,13 @@ window.createNewProject = function() {
     const tDiv = document.getElementById('newProjTeam');
     if(tDiv) {
         tDiv.innerHTML = allUsersDB.filter(u => u.role !== 'Директор').map(u => 
-            `<label style="display:flex; gap:8px; align-items:center; margin-bottom:6px; cursor:pointer;"><input type="checkbox" value="${u.name}" class="team-cb-new"> <b>${u.name}</b> <span style="color:var(--secondary)">(${u.role})</span></label>`
+            `<label style="display:flex; gap:10px; align-items:flex-start; margin-bottom:8px; cursor:pointer; padding:8px 10px; border-radius:12px; background:var(--surface-muted);">
+                <input type="checkbox" value="${u.name}" class="team-cb-new" style="margin-top:2px;">
+                <span style="display:flex; flex-direction:column; gap:2px;">
+                    <b style="font-size:13px;">${u.name}</b>
+                    <span style="color:var(--secondary); font-size:12px;">${u.role}</span>
+                </span>
+            </label>`
         ).join('');
     }
     
@@ -243,7 +255,8 @@ window.createNewProject = function() {
     if (document.getElementById('newProjName')) document.getElementById('newProjName').value = '';
     if (document.getElementById('newProjManager')) document.getElementById('newProjManager').value = currentUser.name;
     if (document.getElementById('newProjBudget')) document.getElementById('newProjBudget').value = '';
-    if (document.getElementById('newProjContact')) { document.getElementById('newProjContact').style.display = 'none'; document.getElementById('newProjContact').value = ''; }
+    if (document.getElementById('newProjContactWrap')) document.getElementById('newProjContactWrap').style.display = 'none';
+    if (document.getElementById('newProjContact')) document.getElementById('newProjContact').value = '';
 
     selectedProjectNomenclature = [];
     updateProjectNomList();
