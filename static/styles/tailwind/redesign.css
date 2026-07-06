@@ -11497,3 +11497,107 @@ body.workspace-config-open {
         grid-column: 2 / -1;
     }
 }
+
+#navMobileScanner {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .krd-mobile-communication-mode .krd-shell-topbar__lead,
+    .krd-mobile-communication-mode .topbar-context,
+    .krd-mobile-communication-mode #topbarBackBtn,
+    .krd-mobile-communication-mode #topbarQuickTaskBtn,
+    .krd-mobile-communication-mode #topbarTaskControl,
+    .krd-mobile-communication-mode #topbarWorkspaceBtn,
+    .krd-mobile-communication-mode .krd-topbar-notif,
+    .krd-mobile-communication-mode .krd-topbar-user,
+    .krd-mobile-communication-mode .krd-shell-sidebar__brand {
+        display: none !important;
+    }
+
+    .krd-mobile-communication-mode .krd-shell-topbar__actions {
+        width: 100%;
+        justify-content: center;
+        gap: 0;
+    }
+
+    .krd-mobile-communication-mode #topbarQuickScanBtn {
+        display: inline-flex !important;
+        flex: 1 1 auto;
+        max-width: 220px;
+        justify-content: center;
+    }
+
+    .krd-mobile-communication-mode .main-content {
+        padding-bottom: 94px !important;
+    }
+
+    .krd-mobile-communication-mode .sidebar .nav-group,
+    .krd-mobile-communication-mode .krd-shell-sidebar .nav-group,
+    .krd-mobile-communication-mode .krd-shell-sidebar__user {
+        display: none !important;
+    }
+
+    .krd-mobile-communication-mode .sidebar .nav-group[data-nav-group="docflow"],
+    .krd-mobile-communication-mode .krd-shell-sidebar .nav-group[data-nav-group="docflow"] {
+        display: flex !important;
+        width: 100%;
+        gap: 8px;
+        padding-right: 0;
+    }
+
+    .krd-mobile-communication-mode .sidebar .nav-group[data-nav-group="docflow"] .nav-item,
+    .krd-mobile-communication-mode .krd-shell-sidebar .nav-group[data-nav-group="docflow"] .nav-item {
+        display: none !important;
+        flex: 1 1 0;
+        justify-content: center;
+        min-height: 46px;
+        border-radius: 14px;
+        padding: 12px 14px !important;
+        font-size: 12px;
+    }
+
+    .krd-mobile-communication-mode #navMessenger,
+    .krd-mobile-communication-mode #navMobileScanner {
+        display: inline-flex !important;
+    }
+
+    .krd-mobile-communication-mode .sidebar,
+    .krd-mobile-communication-mode .krd-shell-sidebar {
+        position: fixed !important;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        top: auto !important;
+        width: 100% !important;
+        height: auto !important;
+        flex-direction: row !important;
+        align-items: center;
+        justify-content: center;
+        gap: 0;
+        padding: 10px 14px !important;
+        border-right: none !important;
+        border-top: 1px solid rgba(15, 23, 42, 0.08) !important;
+        overflow: hidden !important;
+        z-index: 60;
+    }
+
+    .krd-mobile-communication-mode #messengerTabFeed,
+    .krd-mobile-communication-mode #messengerFeedPane {
+        display: none !important;
+    }
+
+    .krd-mobile-communication-mode #messengerView .view-header,
+    .krd-mobile-communication-mode #messengerView .messenger-hub-tabs {
+        display: none !important;
+    }
+
+    .krd-mobile-communication-mode #messengerView .messenger-hub {
+        padding: 18px 14px 20px !important;
+    }
+
+    .krd-mobile-communication-mode #messengerView .crm-chat-shell,
+    .krd-mobile-communication-mode #messengerView #messengerChatsPane {
+        display: block !important;
+    }
+}

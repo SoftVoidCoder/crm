@@ -1,4 +1,4 @@
-import os, asyncio, datetime, time, json, traceback
+import os, asyncio, datetime, time, json, traceback, html
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -16,7 +16,7 @@ from database import (
 )
 from app_logging import init_app_logging, get_logger
 from settings import using_insecure_defaults
-from utils import manager  # Подключаем наш менеджер WebSockets
+from utils import manager, verify_document_qr_token  # Подключаем наш менеджер WebSockets
 
 # Импортируем наши роутеры из папки routers
 from routers import users, projects, docs, communications, accounting, erp_deep, erp_ops_plus, workbench, integration_1c
@@ -90,6 +90,18 @@ def _find_guest_portal_project(token: str):
     finally:
         conn.close()
     return None
+
+
+def _is_public_document_file_url(file_url: str) -> bool:
+    raw = str(file_url or "").strip()
+    if not raw:
+        return False
+    if raw.startswith(("http://", "https://")):
+        return True
+    if raw.startswith("/uploads/"):
+        local_path = os.path.join(UPLOADS_DIR, raw.removeprefix("/uploads/"))
+        return os.path.exists(local_path)
+    return False
 
 
 def _parse_ru_date(value: str):
@@ -361,6 +373,62 @@ def read_root():
 @app.get("/app")
 def read_app(request: Request):
     return templates.TemplateResponse(request=request, name="index.html")
+
+
+@app.get("/qr/doc/{doc_id}")
+def open_document_by_qr(doc_id: int, token: str = ""):
+    if not verify_document_qr_token(doc_id, token):
+        return HTMLResponse("<h1>403</h1><p>QR-ссылка недействительна или устарела.</p>", status_code=403)
+    conn = get_connection(row_factory=True)
+    try:
+        row = conn.execute(
+            "SELECT id, number, d_date, correspondent, subject, file_url FROM documents WHERE id=?",
+            (int(doc_id or 0),),
+        ).fetchone()
+        document = dict(row) if row else {}
+    finally:
+        conn.close()
+    if not document:
+        return HTMLResponse("<h1>404</h1><p>Документ не найден.</p>", status_code=404)
+    file_url = str(document.get("file_url") or "").strip()
+    if _is_public_document_file_url(file_url):
+        return RedirectResponse(url=file_url, status_code=307)
+    title = html.escape(document.get("number") or f"#{doc_id}")
+    subject = html.escape(document.get("subject") or "Тема не указана")
+    correspondent = html.escape(document.get("correspondent") or "Не указан")
+    d_date = html.escape(document.get("d_date") or "Не указана")
+    return HTMLResponse(
+        f"""
+        <!doctype html>
+        <html lang="ru">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Документ {title}</title>
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#f3f6fb; margin:0; padding:24px; color:#183153; }}
+                .card {{ max-width:720px; margin:0 auto; background:#fff; border:1px solid #dbe4f0; border-radius:20px; padding:28px; box-shadow:0 20px 60px rgba(24,49,83,.08); }}
+                .eyebrow {{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.12em; color:#5b6f8f; margin-bottom:10px; }}
+                h1 {{ margin:0 0 8px; font-size:32px; line-height:1.1; }}
+                .meta {{ color:#5b6f8f; margin-bottom:18px; font-size:15px; }}
+                .box {{ background:#f7faff; border:1px solid #dbe4f0; border-radius:14px; padding:18px; line-height:1.6; }}
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="eyebrow">Korda CRM · QR-документ</div>
+                <h1>Документ № {title}</h1>
+                <div class="meta">Дата: {d_date} · Корреспондент: {correspondent}</div>
+                <div class="box">
+                    <strong>Файл пока не прикреплен.</strong><br>
+                    Тема документа: {subject}
+                </div>
+            </div>
+        </body>
+        </html>
+        """,
+        status_code=200,
+    )
 
 
 @app.get("/api/health")

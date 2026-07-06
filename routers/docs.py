@@ -4,6 +4,7 @@ from fastapi import APIRouter, UploadFile, File, Form, Request
 from fastapi.responses import FileResponse
 from database import audit_log, create_notification, get_connection, is_postgres_backend, notify_entity_watchers
 from permissions import require_approved_user, has_permission
+from settings import PUBLIC_BASE_URL
 from schemas import (
     ApprovalActionData,
     ApprovalData,
@@ -61,7 +62,7 @@ from services.workflow_engine_service import (
 )
 
 # === ПОДКЛЮЧАЕМ МЕНЕДЖЕР WEBSOCKETS ===
-from utils import manager
+from utils import manager, make_document_qr_token
 
 router = APIRouter()
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -175,6 +176,60 @@ def _normalize_doc_type(value: str) -> str:
 def _doc_type_prefix(doc_type: str) -> str:
     mapping = {"incoming": "IN", "outgoing": "OUT", "internal": "INT", "contract": "CTR", "act": "ACT", "invoice": "INV"}
     return mapping.get(_normalize_doc_type(doc_type), "DOC")
+
+
+def _resolve_public_base_url(request: Request | None = None) -> str:
+    if PUBLIC_BASE_URL:
+        return PUBLIC_BASE_URL.rstrip("/")
+    if request is not None:
+        try:
+            return str(request.base_url).rstrip("/")
+        except Exception:
+            pass
+    return "http://127.0.0.1:8000"
+
+
+def _build_document_qr_target_url(document_id: int, request: Request | None = None) -> str:
+    base_url = _resolve_public_base_url(request)
+    token = make_document_qr_token(document_id)
+    return f"{base_url}/qr/doc/{int(document_id or 0)}?token={token}"
+
+
+def _document_qr_disk_path(document_id: int) -> str:
+    return os.path.join(QR_UPLOADS_DIR, f"doc_{int(document_id or 0)}.png")
+
+
+def _document_qr_public_path(document_id: int) -> str:
+    return f"/uploads/qr/doc_{int(document_id or 0)}.png"
+
+
+def _write_document_qr_asset(document_id: int, request: Request | None = None) -> tuple[str, str]:
+    qr_target_url = _build_document_qr_target_url(document_id, request)
+    qr = qrcode.make(qr_target_url)
+    os.makedirs(QR_UPLOADS_DIR, exist_ok=True)
+    qr_disk_path = _document_qr_disk_path(document_id)
+    qr.save(qr_disk_path)
+    return _document_qr_public_path(document_id), qr_target_url
+
+
+def _ensure_document_qr(cursor, document_row: dict, request: Request | None = None, force: bool = False) -> dict:
+    document_id = int(document_row.get("id") or 0)
+    if not document_id:
+        return {"qr_code": "", "qr_payload": ""}
+    expected_payload = _build_document_qr_target_url(document_id, request)
+    qr_code = _safe_text(document_row.get("qr_code"))
+    qr_payload = _safe_text(document_row.get("qr_payload"))
+    qr_file_exists = bool(qr_code) and os.path.exists(_document_qr_disk_path(document_id))
+    if not force and qr_code and qr_file_exists and qr_payload == expected_payload:
+        return {"qr_code": qr_code, "qr_payload": qr_payload}
+    public_qr_path, payload_url = _write_document_qr_asset(document_id, request)
+    cursor.execute(
+        "UPDATE documents SET qr_code=?, qr_payload=? WHERE id=?",
+        (public_qr_path, payload_url, document_id),
+    )
+    document_row["qr_code"] = public_qr_path
+    document_row["qr_payload"] = payload_url
+    return {"qr_code": public_qr_path, "qr_payload": payload_url}
 
 
 def _format_registration_number(pattern: str, prefix: str, year: str, next_number: int) -> str:
@@ -1487,10 +1542,21 @@ def get_documents(request: Request):
     if not actor or not has_permission(actor, "documents", "read"):
         return {"error": "forbidden"}
     conn = get_connection(row_factory=True)
-    c = conn.cursor()
-    c.execute("SELECT * FROM documents ORDER BY id DESC")
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
+    try:
+        c = conn.cursor()
+        c.execute("SELECT * FROM documents ORDER BY id DESC")
+        rows = [dict(r) for r in c.fetchall()]
+        updated = False
+        for row in rows:
+            prev_qr_code = _safe_text(row.get("qr_code"))
+            prev_qr_payload = _safe_text(row.get("qr_payload"))
+            qr_state = _ensure_document_qr(c, row, request)
+            if qr_state.get("qr_code") != prev_qr_code or qr_state.get("qr_payload") != prev_qr_payload:
+                updated = True
+        if updated:
+            conn.commit()
+    finally:
+        conn.close()
     return rows
 
 @router.post("/api/documents")
@@ -1504,11 +1570,7 @@ async def create_document(data: DocData, request: Request):
         doc_id = _next_local_id(c, "documents")
         correspondent = _document_correspondent_fallback(data.type, data.sender_name, data.recipient_name, data.correspondent)
 
-        qr_data = json.dumps({"type": "doc", "id": doc_id})
-        qr = qrcode.make(qr_data)
-        os.makedirs(QR_UPLOADS_DIR, exist_ok=True)
-        qr_disk_path = os.path.join(QR_UPLOADS_DIR, f"doc_{doc_id}.png")
-        qr.save(qr_disk_path)
+        qr_code_path, qr_payload = _write_document_qr_asset(doc_id, request)
 
         project_id, contract_id, object_id = _resolve_document_master_links(c, data.project_id, data.contract_id, data.object_id)
         resolution_task_id, task_sync = _sync_resolution_task(c, doc_id, data, actor)
@@ -1516,9 +1578,9 @@ async def create_document(data: DocData, request: Request):
             """
             INSERT INTO documents (
                 id, type, number, d_date, correspondent, sender_name, recipient_name, source_number, source_date,
-                delivery_method, signer_name, executor_name, subject, status, file_url, qr_code,
+                delivery_method, signer_name, executor_name, subject, status, file_url, qr_code, qr_payload,
                 project_id, contract_id, object_id, parent_id, priority, resolution, resolution_author, resolution_deadline, resolution_assignee, resolution_task_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 doc_id,
@@ -1536,7 +1598,8 @@ async def create_document(data: DocData, request: Request):
                 data.subject,
                 data.status,
                 "",
-                f"/uploads/qr/doc_{doc_id}.png",
+                qr_code_path,
+                qr_payload,
                 project_id,
                 contract_id,
                 object_id,
@@ -1723,6 +1786,31 @@ async def update_document(doc_id: int, data: DocUpdate, request: Request):
     if should_notify_resolution or task_sync:
         await manager.broadcast({"type": "notifications"})
     return {"status": "success", "resolution_task_id": resolution_task_id}
+
+
+@router.post("/api/documents/qr/regenerate")
+async def regenerate_document_qr_codes(request: Request):
+    actor = require_approved_user(request)
+    if not actor or not has_permission(actor, "documents", "update"):
+        return {"error": "forbidden"}
+    conn = get_connection(row_factory=True)
+    try:
+        cursor = conn.cursor()
+        rows = [dict(row) for row in cursor.execute("SELECT * FROM documents ORDER BY id DESC").fetchall()]
+        regenerated = []
+        for row in rows:
+            qr_state = _ensure_document_qr(cursor, row, request, force=True)
+            regenerated.append({
+                "id": int(row.get("id") or 0),
+                "number": row.get("number") or "",
+                "qr_code": qr_state.get("qr_code") or "",
+                "qr_payload": qr_state.get("qr_payload") or "",
+            })
+        conn.commit()
+    finally:
+        conn.close()
+    await manager.broadcast({"type": "documents"})
+    return {"status": "success", "count": len(regenerated), "items": regenerated}
 
 @router.delete("/api/documents/{doc_id}")
 async def delete_document(doc_id: int, request: Request):

@@ -676,6 +676,7 @@ window.applyRoleShell = function() {
     const searchInput = document.getElementById('searchInput');
     if (searchInput) searchInput.placeholder = config.searchPlaceholder;
     if (typeof applyWorkspaceConfig === 'function') applyWorkspaceConfig();
+    if (typeof syncMobileWorkspaceMode === 'function') syncMobileWorkspaceMode();
 };
 
 window.getRoleUiConfig = getRoleUiConfig;
@@ -956,6 +957,7 @@ window.onload = async () => {
             const executiveBtn = document.getElementById('navExecutive');
             if (executiveBtn) executiveBtn.style.display = currentUser.role === 'Директор' ? 'flex' : 'none';
             if (typeof applyRoleShell === 'function') applyRoleShell();
+            if (typeof syncMobileWorkspaceMode === 'function') syncMobileWorkspaceMode();
             
             if (currentUser.role === 'Директор') {
                 const pUsers = await apiCall('/users/pending');

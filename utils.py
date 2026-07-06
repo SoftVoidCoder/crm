@@ -97,6 +97,24 @@ def validate_password_strength(password: str) -> str:
     return ""
 
 
+def _qr_signing_secret() -> str:
+    return APP_SECRET or "korda-qr-fallback-secret"
+
+
+def make_document_qr_token(document_id: int) -> str:
+    payload = f"document:{int(document_id or 0)}".encode("utf-8")
+    digest = hmac.new(_qr_signing_secret().encode("utf-8"), payload, hashlib.sha256).hexdigest()
+    return digest[:32]
+
+
+def verify_document_qr_token(document_id: int, token: str) -> bool:
+    candidate = str(token or "").strip()
+    if not candidate:
+        return False
+    expected = make_document_qr_token(document_id)
+    return hmac.compare_digest(expected, candidate)
+
+
 def _derive_secret_key(salt: bytes, iterations: int = 200000) -> bytes:
     return hashlib.pbkdf2_hmac("sha256", APP_SECRET.encode("utf-8"), salt, iterations, dklen=32)
 

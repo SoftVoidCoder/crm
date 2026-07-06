@@ -16,6 +16,29 @@ function clearDepartmentFilter(doRender = true) {
 
 window.__navHistory = window.__navHistory || [];
 window.__navCurrentView = window.__navCurrentView || '';
+const MOBILE_WORKSPACE_MAX_WIDTH = 768;
+const MOBILE_WORKSPACE_ALLOWED_VIEWS = new Set(['messenger']);
+
+function isMobileWorkspaceMode() {
+    return window.matchMedia(`(max-width: ${MOBILE_WORKSPACE_MAX_WIDTH}px)`).matches;
+}
+
+function syncMobileWorkspaceMode() {
+    const enabled = isMobileWorkspaceMode();
+    document.documentElement.classList.toggle('krd-mobile-communication-mode', enabled);
+    document.body.classList.toggle('krd-mobile-communication-mode', enabled);
+    return enabled;
+}
+
+function coerceMobileWorkspaceView(view) {
+    const nextView = String(view || '').trim();
+    if (!isMobileWorkspaceMode()) return nextView;
+    if (!nextView) return 'messenger';
+    return MOBILE_WORKSPACE_ALLOWED_VIEWS.has(nextView) ? nextView : 'messenger';
+}
+
+window.isMobileWorkspaceMode = isMobileWorkspaceMode;
+window.syncMobileWorkspaceMode = syncMobileWorkspaceMode;
 
 const VIEW_NAV_MAP = {
     dashboard: 'navDashboard',
@@ -133,7 +156,8 @@ function filterByDepartment(role, el) {
 }
 
 function navigateTo(view, triggerRender = true) {
-    const nextView = String(view || '');
+    syncMobileWorkspaceMode();
+    const nextView = coerceMobileWorkspaceView(view);
     if (!canAccessViewForCurrentRole(nextView)) {
         const fallback = getSafeRoleLandingView();
         if (window.__navCurrentView && canAccessViewForCurrentRole(window.__navCurrentView)) {
@@ -173,194 +197,194 @@ function navigateTo(view, triggerRender = true) {
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
 
     // 3. Выполняем логику и подсвечиваем нужный пункт меню
-    if (view === 'tasks') { 
+    if (nextView === 'tasks') { 
         const nav = document.getElementById('navTasks'); 
         if(nav) nav.classList.add('active'); 
         renderTasks(); 
     } 
-    else if (view === 'messenger') { 
+    else if (nextView === 'messenger') { 
         const nav = document.getElementById('navMessenger'); 
         if(nav) nav.classList.add('active'); 
-        if (typeof messengerSwitchTab === 'function') messengerSwitchTab('feed');
+        if (typeof messengerSwitchTab === 'function') messengerSwitchTab(isMobileWorkspaceMode() ? 'chats' : 'feed');
         else loadGlobalChats(); 
     }
-    else if (view === 'emails') { 
+    else if (nextView === 'emails') { 
         const nav = document.getElementById('navEmails'); 
         if(nav) nav.classList.add('active'); 
         renderEmails(); 
     }
-    else if (view === 'meetings') { 
+    else if (nextView === 'meetings') { 
         const nav = document.getElementById('navMeetings'); 
         if(nav) nav.classList.add('active'); 
         renderMeetings(); 
     }
-    else if (view === 'finance') {
+    else if (nextView === 'finance') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navFinance');
         if (nav) nav.classList.add('active');
         if (typeof renderFinance === 'function') renderFinance();
     }
-    else if (view === 'accounting') {
+    else if (nextView === 'accounting') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navAccounting');
         if (nav) nav.classList.add('active');
         if (typeof renderAccounting === 'function') renderAccounting();
     }
-    else if (view === 'integrations') {
+    else if (nextView === 'integrations') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navIntegrations');
         if (nav) nav.classList.add('active');
         if (typeof renderIntegrations === 'function') renderIntegrations();
     }
-    else if (view === 'supply') {
+    else if (nextView === 'supply') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navSupply');
         if (nav) nav.classList.add('active');
         if (typeof renderSupply === 'function') renderSupply();
     }
-    else if (view === 'sales') {
+    else if (nextView === 'sales') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navSales');
         if (nav) nav.classList.add('active');
         if (typeof renderSales === 'function') renderSales();
     }
-    else if (view === 'production') {
+    else if (nextView === 'production') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navProduction');
         if (nav) nav.classList.add('active');
         if (typeof renderProduction === 'function') renderProduction();
     }
-    else if (view === 'expenses') {
+    else if (nextView === 'expenses') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navExpenses');
         if (nav) nav.classList.add('active');
         if (typeof renderExpenses === 'function') renderExpenses();
     }
-    else if (view === 'requests') {
+    else if (nextView === 'requests') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navRequests');
         if (nav) nav.classList.add('active');
         if (typeof renderInternalRequests === 'function') renderInternalRequests();
     }
-    else if (view === 'resources') {
+    else if (nextView === 'resources') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navResources');
         if (nav) nav.classList.add('active');
         if (typeof renderResources === 'function') renderResources();
     }
-    else if (view === 'service') {
+    else if (nextView === 'service') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navService');
         if (nav) nav.classList.add('active');
         if (typeof renderServiceCases === 'function') renderServiceCases();
     }
-    else if (view === 'executive') {
+    else if (nextView === 'executive') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navExecutive');
         if (nav) nav.classList.add('active');
         if (typeof renderExecutiveDashboard === 'function') renderExecutiveDashboard();
     }
-    else if (view === 'operations') {
+    else if (nextView === 'operations') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navOperations');
         if (nav) nav.classList.add('active');
         if (typeof renderOperationsCenter === 'function') renderOperationsCenter();
     }
-    else if (view === 'documents') { 
+    else if (nextView === 'documents') { 
         const nav = document.getElementById('navDocuments'); 
         if(nav) nav.classList.add('active'); 
         renderDocuments(); 
     }
-    else if (view === 'claims') {
+    else if (nextView === 'claims') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navClaims');
         if (nav) nav.classList.add('active');
         if (currentLegalTab === 'courts' && typeof renderCourts === 'function') renderCourts();
         else if (typeof renderClaims === 'function') renderClaims();
     }
-    else if (view === 'knowledge') { 
+    else if (nextView === 'knowledge') { 
         const nav = document.getElementById('navKnowledge'); 
         if(nav) nav.classList.add('active'); 
         renderKnowledge(); 
     }
-    else if (view === 'approvals') { 
+    else if (nextView === 'approvals') { 
         const nav = document.getElementById('navApprovals'); 
         if(nav) nav.classList.add('active'); 
         renderApprovals(); 
     }
-    else if (view === 'kpi') { 
+    else if (nextView === 'kpi') { 
         const nav = document.getElementById('navKpi'); 
         if(nav) nav.classList.add('active'); 
         renderKPI(); 
     }
-    else if (view === 'dashboard') { 
+    else if (nextView === 'dashboard') { 
         clearDepartmentFilter(false); 
         const nav = document.getElementById('navDashboard'); 
         if(nav) nav.classList.add('active'); 
         if(triggerRender) renderDashboard(); 
     } 
-    else if (view === 'analytics') { 
+    else if (nextView === 'analytics') { 
         clearDepartmentFilter(false); 
         const nav = document.getElementById('navAnalytics'); 
         if(nav) nav.classList.add('active'); 
         requestAnimationFrame(() => drawCharts());
         setTimeout(() => drawCharts(), 120);
     } 
-    else if (view === 'clients') { 
+    else if (nextView === 'clients') { 
         clearDepartmentFilter(false); 
         const nav = document.getElementById('navClients'); 
         if(nav) nav.classList.add('active'); 
         renderClients(); 
     } 
-    else if (view === 'prospecting') {
+    else if (nextView === 'prospecting') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navProspecting');
         if (nav) nav.classList.add('active');
         if (typeof renderProspecting === 'function') renderProspecting();
     }
-    else if (view === 'leads') {
+    else if (nextView === 'leads') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navLeads');
         if (nav) nav.classList.add('active');
         if (typeof renderLeads === 'function') renderLeads();
     }
-    else if (view === 'deals') {
+    else if (nextView === 'deals') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navDeals');
         if (nav) nav.classList.add('active');
         if (typeof renderDeals === 'function') renderDeals();
     }
-    else if (view === 'client360') {
+    else if (nextView === 'client360') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navClient360');
         if (nav) nav.classList.add('active');
         if (typeof renderClient360 === 'function') renderClient360();
     }
-    else if (view === 'contract360') {
+    else if (nextView === 'contract360') {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navContract360');
         if (nav) nav.classList.add('active');
         if (typeof renderContract360 === 'function') renderContract360();
     }
-    else if (view === 'admin') { 
+    else if (nextView === 'admin') { 
         clearDepartmentFilter(false); 
         const nav = document.getElementById('adminBtn'); 
         if(nav) nav.classList.add('active'); 
         openAdminPanelLogic(); 
     } 
-    else if (view === 'profile') { 
+    else if (nextView === 'profile') { 
         clearDepartmentFilter(false); 
         const nav = document.getElementById('navProfile'); 
         if(nav) nav.classList.add('active'); 
         renderProfile(); 
     }
-    else if (view === 'nomenclature') { 
+    else if (nextView === 'nomenclature') { 
         clearDepartmentFilter(false); 
         const nav = document.getElementById('navNomenclature'); 
         if(nav) nav.classList.add('active'); 
         if(typeof renderNomenclature === 'function') renderNomenclature(); 
     } 
-    else if (view === 'contacts') { 
+    else if (nextView === 'contacts') { 
         clearDepartmentFilter(false); 
         const nav = document.getElementById('navContacts'); 
         if(nav) nav.classList.add('active'); 
@@ -368,7 +392,7 @@ function navigateTo(view, triggerRender = true) {
     }
 
     // 4. Показываем сам экран (контейнер)
-    const target = document.getElementById(view + 'View');
+    const target = document.getElementById(nextView + 'View');
     if (target) {
         target.classList.remove('krd-is-hidden');
         target.style.display = 'block';
@@ -377,16 +401,27 @@ function navigateTo(view, triggerRender = true) {
     scrollMainContentToTop();
     updateBackButtonState();
     if (typeof window.removeMountedSectionGuides === 'function') {
-        window.removeMountedSectionGuides(view + 'View');
+        window.removeMountedSectionGuides(nextView + 'View');
     }
     if (typeof mountSectionGuideForView === 'function') {
-        mountSectionGuideForView(view + 'View');
+        mountSectionGuideForView(nextView + 'View');
     }
     if (typeof window.refreshCollapsibleLayouts === 'function') {
-        window.refreshCollapsibleLayouts(view + 'View');
+        window.refreshCollapsibleLayouts(nextView + 'View');
     }
 }
 
 window.clearDepartmentFilter = clearDepartmentFilter;
 window.filterByDepartment = filterByDepartment;
 window.navigateTo = navigateTo;
+
+window.addEventListener('resize', () => {
+    const wasMobile = document.documentElement.classList.contains('krd-mobile-communication-mode');
+    const isMobile = syncMobileWorkspaceMode();
+    if (wasMobile === isMobile) return;
+    if (typeof applyRoleShell === 'function') applyRoleShell();
+    if (isMobile && window.__navCurrentView && !MOBILE_WORKSPACE_ALLOWED_VIEWS.has(window.__navCurrentView)) {
+        window.__navSkipHistoryPush = true;
+        navigateTo('messenger');
+    }
+});

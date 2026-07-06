@@ -8,6 +8,7 @@ load_env_file()
 
 APP_ENV = os.getenv("KORDA_ENV", "development").strip().lower() or "development"
 APP_SECRET = os.getenv("KORDA_APP_SECRET", "").strip()
+PUBLIC_BASE_URL = os.getenv("KORDA_PUBLIC_BASE_URL", "").strip().rstrip("/")
 DIRECTOR_EMAIL = os.getenv("KORDA_DIRECTOR_EMAIL", "").strip()
 DEFAULT_ADMIN_LOGIN = os.getenv("KORDA_DEFAULT_ADMIN_LOGIN", "Admin").strip() or "Admin"
 DEFAULT_ADMIN_PASSWORD = os.getenv("KORDA_DEFAULT_ADMIN_PASSWORD", "").strip()
