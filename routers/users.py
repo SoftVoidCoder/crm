@@ -334,25 +334,27 @@ def register(data: AuthData, bg_tasks: BackgroundTasks, request: Request):
 @router.post("/api/login")
 def login(data: AuthData, request: Request):
     ip_address, user_agent = _request_meta(request)
-    email = normalize_email(data.email)
-    if _is_rate_limited("login_ip", ip_address, 15, 600) or _is_rate_limited("login_email", email, 7, 600):
+    identifier_raw = (data.email or "").strip()
+    identifier_email = normalize_email(identifier_raw)
+    identifier_login = identifier_raw.lower()
+    if _is_rate_limited("login_ip", ip_address, 15, 600) or _is_rate_limited("login_email", identifier_login or identifier_email, 7, 600):
         return {"error": "Слишком много попыток входа. Попробуйте через 10 минут"}
 
     record_auth_attempt("login_ip", ip_address, 0)
-    record_auth_attempt("login_email", email, 0)
+    record_auth_attempt("login_email", identifier_login or identifier_email, 0)
 
     conn = get_connection(row_factory=True); c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE email=?", (email,))
+    c.execute("SELECT * FROM users WHERE LOWER(email)=? OR LOWER(COALESCE(username, ''))=?", (identifier_email, identifier_login))
     user = c.fetchone()
     conn.close()
     if not user or not verify_password(data.password, user["password"]):
-        audit_log("login_failed", actor_email=email, entity_type="user", entity_id=email, ip_address=ip_address, user_agent=user_agent)
+        audit_log("login_failed", actor_email=identifier_email, entity_type="user", entity_id=identifier_raw, ip_address=ip_address, user_agent=user_agent)
         return {"error": "Ошибка входа"}
     if int(user["two_factor_enabled"] or 0) == 1 and (user["two_factor_secret"] or "").strip():
         if not _verify_totp(user["two_factor_secret"], data.otp_code):
-            audit_log("login_2fa_required", actor_email=email, entity_type="user", entity_id=email, ip_address=ip_address, user_agent=user_agent)
+            audit_log("login_2fa_required", actor_email=user.get("email", ""), entity_type="user", entity_id=user.get("email", ""), ip_address=ip_address, user_agent=user_agent)
             return {"two_factor_required": True, "error": "Введите код 2FA"}
-    clear_auth_attempts("login_email", email)
+    clear_auth_attempts("login_email", identifier_login or identifier_email)
     clear_auth_attempts("login_ip", ip_address)
     payload = dict(user)
     payload.pop("password", None)

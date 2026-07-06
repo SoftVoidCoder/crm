@@ -9,6 +9,7 @@ load_env_file()
 APP_ENV = os.getenv("KORDA_ENV", "development").strip().lower() or "development"
 APP_SECRET = os.getenv("KORDA_APP_SECRET", "").strip()
 DIRECTOR_EMAIL = os.getenv("KORDA_DIRECTOR_EMAIL", "").strip()
+DEFAULT_ADMIN_LOGIN = os.getenv("KORDA_DEFAULT_ADMIN_LOGIN", "Admin").strip() or "Admin"
 DEFAULT_ADMIN_PASSWORD = os.getenv("KORDA_DEFAULT_ADMIN_PASSWORD", "").strip()
 COOKIE_SECURE = os.getenv("KORDA_COOKIE_SECURE", "0") == "1"
 BACKUP_RETENTION_COUNT = max(3, int(os.getenv("KORDA_BACKUP_RETENTION_COUNT", "14")))

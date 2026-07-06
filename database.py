@@ -13,7 +13,7 @@ from psycopg.rows import dict_row
 from utils import hash_password, is_password_hashed, encrypt_secret, is_secret_encrypted
 from db_migrations import apply_sql_migrations, get_migration_status
 from app_logging import get_logger
-from settings import DEFAULT_ADMIN_PASSWORD, DIRECTOR_EMAIL
+from settings import DEFAULT_ADMIN_LOGIN, DEFAULT_ADMIN_PASSWORD, DIRECTOR_EMAIL
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 logger = get_logger("database")
@@ -2190,7 +2190,7 @@ def _init_db_once():
         try: c.execute(f"ALTER TABLE projects ADD COLUMN {col} {default}")
         except: pass
         
-    for col, default in [('signature', "TEXT DEFAULT ''"), ('vacation_until', "TEXT DEFAULT ''"), ('deputy', "TEXT DEFAULT ''"), ('abs_start', "TEXT DEFAULT ''"), ('abs_end', "TEXT DEFAULT ''"), ('abs_type', "TEXT DEFAULT ''"), ('abs_reason', "TEXT DEFAULT ''"), ('is_head', "INTEGER DEFAULT 0"), ('hourly_rate', "INTEGER DEFAULT 500"), ('allowed_legal_entities', "TEXT DEFAULT '[]'"), ('allowed_business_units', "TEXT DEFAULT '[]'"), ('two_factor_enabled', "INTEGER DEFAULT 0"), ('two_factor_secret', "TEXT DEFAULT ''")]:
+    for col, default in [('username', "TEXT DEFAULT ''"), ('signature', "TEXT DEFAULT ''"), ('vacation_until', "TEXT DEFAULT ''"), ('deputy', "TEXT DEFAULT ''"), ('abs_start', "TEXT DEFAULT ''"), ('abs_end', "TEXT DEFAULT ''"), ('abs_type', "TEXT DEFAULT ''"), ('abs_reason', "TEXT DEFAULT ''"), ('is_head', "INTEGER DEFAULT 0"), ('hourly_rate', "INTEGER DEFAULT 500"), ('allowed_legal_entities', "TEXT DEFAULT '[]'"), ('allowed_business_units', "TEXT DEFAULT '[]'"), ('two_factor_enabled', "INTEGER DEFAULT 0"), ('two_factor_secret', "TEXT DEFAULT ''")]:
         try: c.execute(f"ALTER TABLE users ADD COLUMN {col} {default}")
         except: pass
 
@@ -2676,13 +2676,18 @@ def _init_db_once():
     c.execute("INSERT OR IGNORE INTO warehouse_policies (id, cost_method, allow_negative_stock, auto_pick_strategy, comment, updated_by, updated_at) VALUES (1, 'fifo', 0, 'best_fit', '', '', 0)")
         
     director_email = DIRECTOR_EMAIL or "ilyu5haosipow@yandex.ru"
+    director_login = DEFAULT_ADMIN_LOGIN or "Admin"
     c.execute("SELECT * FROM users WHERE email=?", (director_email,))
     if not c.fetchone():
         default_admin_password = DEFAULT_ADMIN_PASSWORD or secrets.token_urlsafe(10)
         c.execute(
-            "INSERT INTO users (email, password, name, role, status, is_head) VALUES (?, ?, ?, ?, ?, ?)",
-            (director_email, hash_password(default_admin_password), 'Илья Осипов', 'Директор', 'approved', 1)
+            "INSERT INTO users (email, username, password, name, role, status, is_head) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (director_email, director_login, hash_password(default_admin_password), 'Илья Осипов', 'Директор', 'approved', 1)
         )
+    try:
+        c.execute("UPDATE users SET username=? WHERE email=? AND COALESCE(username, '')=''", (director_login, director_email))
+    except Exception:
+        pass
 
     c.execute("SELECT email, password FROM users")
     for email, password in c.fetchall():
