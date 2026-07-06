@@ -2677,17 +2677,40 @@ def _init_db_once():
         
     director_email = DIRECTOR_EMAIL or "ilyu5haosipow@yandex.ru"
     director_login = DEFAULT_ADMIN_LOGIN or "Admin"
-    c.execute("SELECT * FROM users WHERE email=?", (director_email,))
-    if not c.fetchone():
+    current_director_email = ""
+    c.execute("SELECT email FROM users WHERE LOWER(email)=LOWER(?)", (director_email,))
+    director_row = c.fetchone()
+    if director_row:
+        current_director_email = director_row[0] if not isinstance(director_row, dict) else director_row.get("email", "")
+    if not current_director_email:
+        c.execute(
+            """
+            SELECT email
+            FROM users
+            WHERE role='Директор'
+            ORDER BY CASE WHEN COALESCE(is_head, 0) = 1 THEN 0 ELSE 1 END, email
+            LIMIT 1
+            """
+        )
+        director_row = c.fetchone()
+        if director_row:
+            current_director_email = director_row[0] if not isinstance(director_row, dict) else director_row.get("email", "")
+    if not current_director_email:
         default_admin_password = DEFAULT_ADMIN_PASSWORD or secrets.token_urlsafe(10)
         c.execute(
             "INSERT INTO users (email, username, password, name, role, status, is_head) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (director_email, director_login, hash_password(default_admin_password), 'Илья Осипов', 'Директор', 'approved', 1)
         )
+        current_director_email = director_email
     try:
-        c.execute("UPDATE users SET username=? WHERE email=? AND COALESCE(username, '')=''", (director_login, director_email))
+        c.execute("UPDATE users SET username=? WHERE email=?", (director_login, current_director_email))
     except Exception:
         pass
+    if DEFAULT_ADMIN_PASSWORD:
+        try:
+            c.execute("UPDATE users SET password=? WHERE email=?", (hash_password(DEFAULT_ADMIN_PASSWORD), current_director_email))
+        except Exception:
+            pass
 
     c.execute("SELECT email, password FROM users")
     for email, password in c.fetchall():
