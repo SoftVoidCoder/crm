@@ -1,12 +1,23 @@
+previews:
+  generation: off
+
+databases:
+  - name: korda-postgres
+    databaseName: korda
+    user: korda
+
 services:
   - type: web
     name: korda-crm
     runtime: python
-    plan: starter
+    plan: free
+    numInstances: 1
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.14.3
       - key: KORDA_ENV
         value: production
       - key: KORDA_COOKIE_SECURE
@@ -15,7 +26,7 @@ services:
         generateValue: true
       - key: KORDA_DATABASE_URL
         fromDatabase:
-          name: korda-crm-db
+          name: korda-postgres
           property: connectionString
       - key: KORDA_DIRECTOR_EMAIL
         sync: false
@@ -29,19 +40,7 @@ services:
         value: smtp.yandex.ru
       - key: KORDA_SMTP_PORT
         value: "465"
-      - key: KORDA_BACKUP_RETENTION_COUNT
-        value: "14"
-      - key: KORDA_MAIL_SYNC_BATCH
-        value: "40"
-      - key: KORDA_MAIL_IMAP_TIMEOUT
-        value: "20"
-      - key: KORDA_MAIL_SMTP_TIMEOUT
-        value: "20"
       - key: KORDA_DADATA_TOKEN
         sync: false
       - key: KORDA_DADATA_SECRET
         sync: false
-
-databases:
-  - name: korda-crm-db
-    plan: starter
