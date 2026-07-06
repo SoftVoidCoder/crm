@@ -1,0 +1,47 @@
+services:
+  - type: web
+    name: korda-crm
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /api/health
+    envVars:
+      - key: KORDA_ENV
+        value: production
+      - key: KORDA_COOKIE_SECURE
+        value: "1"
+      - key: KORDA_APP_SECRET
+        generateValue: true
+      - key: KORDA_DATABASE_URL
+        fromDatabase:
+          name: korda-crm-db
+          property: connectionString
+      - key: KORDA_DIRECTOR_EMAIL
+        sync: false
+      - key: KORDA_DEFAULT_ADMIN_PASSWORD
+        sync: false
+      - key: KORDA_SMTP_USER
+        sync: false
+      - key: KORDA_SMTP_PASS
+        sync: false
+      - key: KORDA_SMTP_HOST
+        value: smtp.yandex.ru
+      - key: KORDA_SMTP_PORT
+        value: "465"
+      - key: KORDA_BACKUP_RETENTION_COUNT
+        value: "14"
+      - key: KORDA_MAIL_SYNC_BATCH
+        value: "40"
+      - key: KORDA_MAIL_IMAP_TIMEOUT
+        value: "20"
+      - key: KORDA_MAIL_SMTP_TIMEOUT
+        value: "20"
+      - key: KORDA_DADATA_TOKEN
+        sync: false
+      - key: KORDA_DADATA_SECRET
+        sync: false
+
+databases:
+  - name: korda-crm-db
+    plan: starter
