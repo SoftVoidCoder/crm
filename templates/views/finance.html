@@ -1,0 +1,535 @@
+<div id="financeView" class="view-page" style="display: none;">
+    <div class="view-header">
+        <div class="view-heading">
+            <span class="view-eyebrow">Финансы</span>
+            <h1 class="view-title">Финансы и оплаты</h1>
+            <p class="view-subtitle">Платёжный календарь, дебиторка, расходы по проектам и быстрый контроль кассовых разрывов.</p>
+        </div>
+    </div>
+    <div class="ops-overview-card ops-overview-card--compact">
+        <div>
+            <div class="ops-overview-title">Финансовый пульт</div>
+            <div class="ops-overview-text">Один экран для плановых и фактических движений денег, просрочек и связанных документов.</div>
+        </div>
+    </div>
+    <div class="workbench-strip">
+        <div class="workbench-card">
+            <div class="workbench-card-title">Основной сценарий</div>
+            <div class="workbench-card-text">Создай операцию, укажи срок и источник. Для ежедневной работы этого достаточно.</div>
+        </div>
+        <div class="workbench-card">
+            <div class="workbench-card-title">Ниже по экрану</div>
+            <div class="workbench-card-text">Календарь и аналитика нужны уже после сохранения, как контроль статуса и суммы.</div>
+        </div>
+        <div class="workbench-card">
+            <div class="workbench-card-title">Быстро</div>
+            <div class="workbench-card-actions">
+                <button class="btn-primary" onclick="presetFinanceFlow('incoming')">Поступление</button>
+                <button class="btn-secondary" onclick="presetFinanceFlow('outgoing')">Оплата</button>
+                <button class="btn-secondary" onclick="setFinanceFilter('overdue')">Просрочки</button>
+            </div>
+        </div>
+    </div>
+    <div id="financeRoleWorkbenchMount"></div>
+
+    <div id="financeMetricsGrid" class="metrics-grid metrics-grid--info-rail"></div>
+    <div id="financeCockpitMount" class="erp-cockpit-grid" style="margin-bottom:20px;"></div>
+
+    <div class="finance-layout secondary-zone">
+        <section id="financeClosePeriodSection" class="surface-card surface-card--padded ops-form-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Новая финансовая операция</h3>
+                    <p class="section-subtitle">Фиксируй авансы, оплаты, счета, расходы и плановые движения денег.</p>
+                </div>
+        <span class="ops-section-chip">Рабочее место финансов</span>
+            </div>
+            <div id="financePolicyBanner" class="form-policy-banner" style="display:none;"></div>
+            <div id="financePaymentForm" class="finance-form-grid form-grid-standard">
+                <label class="form-field form-field--full">
+                    <span class="form-label">Название операции <span class="form-required">*</span></span>
+                    <input id="financeTitle" data-field="financeTitle" class="auth-input" placeholder="Например, аванс по договору">
+                    <span class="form-error" data-error-for="financeTitle"></span>
+                </label>
+                <label class="form-field">
+                    <span class="form-label">Проект</span>
+                    <select id="financeProjectId" data-field="financeProjectId" class="auth-input">
+                        <option value="0">Без проекта</option>
+                    </select>
+                    <span class="form-error" data-error-for="financeProjectId"></span>
+                </label>
+                <label class="form-field">
+                    <span class="form-label">Контрагент</span>
+                    <select id="financeClientId" data-field="financeClientId" class="auth-input">
+                        <option value="0">Без контрагента</option>
+                    </select>
+                    <span class="form-error" data-error-for="financeClientId"></span>
+                </label>
+                <label class="form-field">
+                    <span class="form-label">Направление потока</span>
+                    <select id="financeKind" data-field="financeKind" class="auth-input">
+                        <option value="incoming">Входящий поток</option>
+                        <option value="outgoing">Исходящий поток</option>
+                    </select>
+                    <span class="form-error" data-error-for="financeKind"></span>
+                </label>
+                <label class="form-field">
+                    <span class="form-label">Категория</span>
+                    <select id="financeCategory" data-field="financeCategory" class="auth-input">
+                        <option value="payment">Оплата</option>
+                        <option value="invoice">Счёт</option>
+                        <option value="advance">Аванс</option>
+                        <option value="expense">Расход</option>
+                        <option value="act">Акт / закрытие</option>
+                    </select>
+                    <span class="form-error" data-error-for="financeCategory"></span>
+                </label>
+                <label class="form-field">
+                    <span class="form-label">Сумма <span class="form-required">*</span></span>
+                    <input id="financeAmount" data-field="financeAmount" class="auth-input" placeholder="Например, 150000">
+                    <span class="form-error" data-error-for="financeAmount"></span>
+                </label>
+                <label class="form-field">
+                    <span class="form-label">Валюта</span>
+                    <select id="financeCurrency" data-field="financeCurrency" class="auth-input">
+                        <option value="RUB">Рубль</option>
+                        <option value="USD">Доллар</option>
+                        <option value="EUR">Евро</option>
+                        <option value="CNY">Юань</option>
+                    </select>
+                    <span class="form-error" data-error-for="financeCurrency"></span>
+                </label>
+                <label class="form-field">
+                    <span class="form-label">Юрлицо</span>
+                    <select id="financeLegalEntityId" data-field="financeLegalEntityId" class="auth-input">
+                        <option value="0">Выберите юрлицо</option>
+                    </select>
+                    <span class="form-error" data-error-for="financeLegalEntityId"></span>
+                </label>
+                <label class="form-field">
+                    <span class="form-label">Подразделение</span>
+                    <select id="financeBusinessUnitId" data-field="financeBusinessUnitId" class="auth-input">
+                        <option value="0">Выберите подразделение</option>
+                    </select>
+                    <span class="form-error" data-error-for="financeBusinessUnitId"></span>
+                </label>
+                <label class="form-field">
+                    <span class="form-label">Статья ДДС</span>
+                    <select id="financeTreasuryArticleId" data-field="financeTreasuryArticleId" class="auth-input">
+                        <option value="0">Выберите статью</option>
+                    </select>
+                    <span class="form-error" data-error-for="financeTreasuryArticleId"></span>
+                </label>
+                <label class="form-field">
+                    <span class="form-label">Ставка НДС</span>
+                    <select id="financeVatRateId" data-field="financeVatRateId" class="auth-input">
+                        <option value="0">Выберите ставку</option>
+                    </select>
+                    <span class="form-error" data-error-for="financeVatRateId"></span>
+                </label>
+                <label class="form-field">
+                    <span class="form-label">Плановая дата</span>
+                    <input id="financeDueDate" data-field="financeDueDate" class="auth-input" placeholder="дд.мм.гггг">
+                    <span class="form-error" data-error-for="financeDueDate"></span>
+                </label>
+                <label class="form-field">
+                    <span class="form-label">Дата оплаты</span>
+                    <input id="financePaidDate" data-field="financePaidDate" class="auth-input" placeholder="дд.мм.гггг">
+                    <span class="form-error" data-error-for="financePaidDate"></span>
+                </label>
+                <label class="form-field">
+                    <span class="form-label">Источник документа</span>
+                    <select id="financeSourceDocumentType" data-field="financeSourceDocumentType" class="auth-input">
+                        <option value="">Не выбран</option>
+                        <option value="sales_document">Документ реализации</option>
+                        <option value="purchase_order">Закупка</option>
+                        <option value="expense_request">Заявка на расход</option>
+                        <option value="contract">Договор</option>
+                        <option value="manual">Ручной ввод</option>
+                    </select>
+                    <span class="form-error" data-error-for="financeSourceDocumentType"></span>
+                </label>
+                <label class="form-field">
+          <span class="form-label">Идентификатор документа-источника</span>
+                    <input id="financeSourceDocumentId" data-field="financeSourceDocumentId" class="auth-input" placeholder="Например, 142">
+                    <span class="form-error" data-error-for="financeSourceDocumentId"></span>
+                </label>
+                <label class="form-field">
+                    <span class="form-label">Статус</span>
+                    <select id="financeStatus" data-field="financeStatus" class="auth-input">
+                        <option value="planned">План</option>
+                        <option value="issued">Выставлено</option>
+                        <option value="partially_paid">Частично оплачено</option>
+                        <option value="paid">Оплачено</option>
+                        <option value="overdue">Просрочено</option>
+                    </select>
+                    <span class="form-error" data-error-for="financeStatus"></span>
+                </label>
+                <label class="form-field form-field--full">
+                    <span class="form-label">Комментарий</span>
+                    <textarea id="financeComment" data-field="financeComment" class="auth-input" style="min-height:110px;" placeholder="Коротко: этап оплаты, договор, примечание"></textarea>
+                    <span class="form-error" data-error-for="financeComment"></span>
+                </label>
+            </div>
+            <div class="finance-actions-row form-actions">
+                <button class="btn-secondary" onclick="resetFinanceForm()">Отмена</button>
+                <button class="btn-primary" onclick="saveFinancePayment()">Сохранить</button>
+            </div>
+        </section>
+
+        <section class="surface-card surface-card--padded ops-list-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Платёжный календарь</h3>
+                    <p class="section-subtitle">Свежие операции, просрочки и план-факт по проектам и контрагентам.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary" onclick="exportFinanceToExcel()">Экспорт</button>
+                    <div id="financeSavedFiltersMount" class="view-actions"></div>
+                </div>
+            </div>
+            <div class="surface-card toolbar-strip" style="margin-bottom: 16px; padding: 14px 16px; display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
+                <div id="financeBulkSummary" style="font-size:13px; color:var(--secondary);">Выделение: 0 операций</div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button id="financeBulkSelectBtn" class="btn-secondary" onclick="toggleAllFinanceOnPage()">Выделить видимые</button>
+                    <button id="financeBulkPaidBtn" class="btn-success" onclick="bulkMarkFinancePaymentsPaid()">Оплачено</button>
+                    <button id="financeBulkOverdueBtn" class="btn-secondary" onclick="bulkMarkFinancePaymentsOverdue()">Просрочить</button>
+            <button id="financeBulkExportBtn" class="btn-secondary" onclick="exportSelectedFinanceToExcel()">Экспорт выбранного</button>
+                    <button id="financeBulkDeleteBtn" class="btn-danger" onclick="bulkDeleteFinancePayments()">Удалить</button>
+                    <button id="financeBulkClearBtn" class="btn-secondary" onclick="clearSelectedFinancePayments()">Снять выделение</button>
+                </div>
+            </div>
+            <div class="table-shell">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th style="width:44px;"><input id="financeSelectAllCheckbox" type="checkbox" onchange="toggleAllFinanceOnPage(this.checked)"></th>
+                            <th>Операция</th>
+                            <th>Проект / Контрагент</th>
+                            <th>Тип</th>
+                            <th>Сумма</th>
+                            <th>Срок</th>
+                            <th>Статус</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="financePaymentsTable"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <div id="financeErpMetricsGrid" class="metrics-grid metrics-grid--info-rail"></div>
+
+    <div class="finance-layout secondary-zone">
+        <section class="surface-card surface-card--padded ops-form-card">
+            <div class="section-header">
+                <div>
+          <h3 class="section-title">Основные справочники</h3>
+                    <p class="section-subtitle">Юрлица, подразделения, статьи ДДС и ставки НДС теперь управляются прямо из рабочего контура.</p>
+                </div>
+            <span class="ops-section-chip">Справочники</span>
+            </div>
+            <div class="finance-form-grid">
+                <input id="masterLegalEntityName" class="auth-input" placeholder="Юрлицо: полное название">
+                <input id="masterLegalEntityShortName" class="auth-input" placeholder="Краткое название">
+                <input id="masterLegalEntityInn" class="auth-input" placeholder="ИНН">
+                <input id="masterLegalEntityKpp" class="auth-input" placeholder="КПП">
+                <input id="masterBusinessUnitName" class="auth-input" placeholder="Подразделение">
+                <input id="masterBusinessUnitCode" class="auth-input" placeholder="Код подразделения">
+                <select id="masterBusinessUnitLegalEntityId" class="auth-input">
+                    <option value="0">Юрлицо подразделения</option>
+                </select>
+                <input id="masterBusinessUnitManagerName" class="auth-input" placeholder="Руководитель подразделения">
+                <input id="masterTreasuryArticleName" class="auth-input" placeholder="Статья ДДС">
+                <input id="masterTreasuryArticleCode" class="auth-input" placeholder="Код статьи">
+                <select id="masterTreasuryArticleFlowKind" class="auth-input">
+                    <option value="incoming">Входящий поток</option>
+                    <option value="outgoing">Исходящий поток</option>
+                </select>
+                <input id="masterTreasuryArticleCategory" class="auth-input" placeholder="Категория статьи">
+                <input id="masterVatRateName" class="auth-input" placeholder="Ставка НДС: название">
+                <input id="masterVatRateValue" class="auth-input" placeholder="НДС, %">
+                <select id="masterVatRateDefault" class="auth-input">
+                    <option value="0">Обычная ставка</option>
+                    <option value="1">Ставка по умолчанию</option>
+                </select>
+            </div>
+            <div class="finance-actions-row">
+                <button class="btn-secondary" onclick="saveFinanceMasterRecord('legal_entities')">Сохранить юрлицо</button>
+                <button class="btn-secondary" onclick="saveFinanceMasterRecord('business_units')">Сохранить подразделение</button>
+                <button class="btn-secondary" onclick="saveFinanceMasterRecord('treasury_articles')">Сохранить статью ДДС</button>
+                <button class="btn-primary" onclick="saveFinanceMasterRecord('vat_rates')">Сохранить ставку НДС</button>
+            </div>
+        </section>
+
+        <section class="surface-card surface-card--padded ops-list-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Активные справочники</h3>
+                    <p class="section-subtitle">Сразу видно, чем реально живёт финансовый контур и что используется в документах и движениях.</p>
+                </div>
+            <span class="ops-section-chip">Реестр</span>
+            </div>
+            <div class="table-shell" style="margin-bottom:16px;">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Юрлица</th>
+                            <th>Реквизиты</th>
+                            <th>Статус</th>
+                        </tr>
+                    </thead>
+                    <tbody id="financeMasterLegalEntitiesTable"></tbody>
+                </table>
+            </div>
+            <div class="table-shell" style="margin-bottom:16px;">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Подразделения</th>
+                            <th>Контекст</th>
+                            <th>Статус</th>
+                        </tr>
+                    </thead>
+                    <tbody id="financeMasterBusinessUnitsTable"></tbody>
+                </table>
+            </div>
+            <div class="table-shell" style="margin-bottom:16px;">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Статьи ДДС</th>
+                            <th>Поток</th>
+                            <th>Статус</th>
+                        </tr>
+                    </thead>
+                    <tbody id="financeMasterArticlesTable"></tbody>
+                </table>
+            </div>
+            <div class="table-shell">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Ставки НДС</th>
+                            <th>Параметры</th>
+                            <th>Статус</th>
+                        </tr>
+                    </thead>
+                    <tbody id="financeMasterVatRatesTable"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <div class="finance-layout">
+        <section class="surface-card surface-card--padded ops-form-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Казначейство и периоды</h3>
+                    <p class="section-subtitle">Лимиты по статьям ДДС, закрытие месяца и управляемый контур сверок.</p>
+                </div>
+            <span class="ops-section-chip">Казначейство</span>
+            </div>
+            <div class="finance-form-grid">
+                <input id="financeClosePeriodKey" class="auth-input" placeholder="Период закрытия (YYYY-MM)">
+                <input id="financeClosePeriodComment" class="auth-input" placeholder="Комментарий к закрытию периода">
+                <select id="treasuryLimitLegalEntityId" class="auth-input">
+                    <option value="0">Юрлицо лимита</option>
+                </select>
+                <select id="treasuryLimitBusinessUnitId" class="auth-input">
+                    <option value="0">Подразделение лимита</option>
+                </select>
+                <select id="treasuryLimitArticleId" class="auth-input">
+                    <option value="0">Статья ДДС лимита</option>
+                </select>
+                <input id="treasuryLimitPeriodKey" class="auth-input" placeholder="Период лимита (YYYY-MM)">
+                <input id="treasuryLimitAmount" class="auth-input" placeholder="Лимит, ₽">
+                <select id="treasuryLimitStatus" class="auth-input">
+                    <option value="active">Активен</option>
+                    <option value="paused">Пауза</option>
+                </select>
+                <select id="reconciliationClientId" class="auth-input">
+                    <option value="0">Контрагент сверки</option>
+                </select>
+                <input id="reconciliationPeriodKey" class="auth-input" placeholder="Период сверки (YYYY-MM)">
+                <input id="reconciliationActNumber" class="auth-input" placeholder="Номер акта сверки">
+                <input id="reconciliationReceivable" class="auth-input" placeholder="Дебиторка, ₽">
+                <input id="reconciliationPayable" class="auth-input" placeholder="Кредиторка, ₽">
+                <textarea id="reconciliationDetails" class="auth-input" style="margin:0; min-height:90px; grid-column:1 / -1;" placeholder="Детали сверки, расхождения, комментарии..."></textarea>
+            </div>
+            <div class="finance-actions-row">
+                <button class="btn-secondary" onclick="closeFinancePeriod()">Закрыть период</button>
+                <button class="btn-secondary" onclick="saveTreasuryLimit()">Сохранить лимит</button>
+                <button class="btn-primary" onclick="createReconciliationAct()">Создать акт сверки</button>
+            </div>
+        </section>
+
+        <section class="surface-card surface-card--padded ops-list-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">ЭДО и подписи</h3>
+                    <p class="section-subtitle">Юридически значимые подписи по финансовым документам.</p>
+                </div>
+            </div>
+            <div class="table-shell">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>ЭДО</th>
+                            <th>Подписант</th>
+                            <th>Статус</th>
+                            <th>Когда</th>
+                        </tr>
+                    </thead>
+                    <tbody id="financeEdoTable"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <div class="finance-layout">
+        <section class="surface-card surface-card--padded ops-list-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Журнал проводок</h3>
+                    <p class="section-subtitle">Регламентированный слой: источник документа, период, дебет/кредит, НДС и юридическое лицо.</p>
+                </div>
+            <span class="ops-section-chip">Журнал</span>
+            </div>
+            <div class="table-shell">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Дата</th>
+                            <th>Источник</th>
+                            <th>Дт / Кт</th>
+                            <th>Сумма</th>
+                            <th>Период</th>
+                            <th>Контекст</th>
+                        </tr>
+                    </thead>
+                    <tbody id="financeJournalTable"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="surface-card surface-card--padded ops-list-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Периоды, лимиты и сверки</h3>
+                    <p class="section-subtitle">Открытые и закрытые периоды, лимиты по статьям ДДС и последние акты сверки.</p>
+                </div>
+            <span class="ops-section-chip">Контроль</span>
+            </div>
+            <div class="table-shell" style="margin-bottom:16px;">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Период</th>
+                            <th>Статус</th>
+                            <th>Закрыл</th>
+                            <th>Комментарий</th>
+                        </tr>
+                    </thead>
+                    <tbody id="financePeriodsTable"></tbody>
+                </table>
+            </div>
+            <div class="table-shell" style="margin-bottom:16px;">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Лимит</th>
+                            <th>Период</th>
+                            <th>Сумма</th>
+                            <th>Статус</th>
+                        </tr>
+                    </thead>
+                    <tbody id="financeLimitsTable"></tbody>
+                </table>
+            </div>
+            <div class="table-shell">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Акт</th>
+                            <th>Контрагент</th>
+                            <th>Период</th>
+                            <th>Сальдо</th>
+                            <th>Статус</th>
+                        </tr>
+                    </thead>
+                    <tbody id="financeReconciliationTable"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <div id="financeAnalyticsMetricsGrid" class="metrics-grid metrics-grid--info-rail"></div>
+
+    <div class="finance-layout">
+        <section class="surface-card surface-card--padded ops-list-card">
+            <div class="section-header">
+                <div>
+          <h3 class="section-title">Прибыль, ДДС и просрочка</h3>
+                    <p class="section-subtitle">Управленческий срез по прибыли, денежному потоку и возрасту дебиторки/кредиторки.</p>
+                </div>
+            <span class="ops-section-chip">Аналитика</span>
+            </div>
+            <div class="table-shell" style="margin-bottom:16px;">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Контур</th>
+                            <th>Текущие</th>
+                            <th>1-30</th>
+                            <th>31-60</th>
+                            <th>60+</th>
+                        </tr>
+                    </thead>
+                    <tbody id="financeAgingTable"></tbody>
+                </table>
+            </div>
+            <div class="table-shell">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Статья ДДС</th>
+                            <th>Входящий</th>
+                            <th>Исходящий</th>
+              <th>Чистая сумма</th>
+                        </tr>
+                    </thead>
+                    <tbody id="financeCashflowArticlesTable"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="surface-card surface-card--padded ops-list-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Маржинальность по проектам</h3>
+          <p class="section-subtitle">Какие проекты уже дают деньги и прибыль, а какие пока тянут плановую маржу вниз.</p>
+                </div>
+            <span class="ops-section-chip">Маржа</span>
+            </div>
+            <div class="table-shell">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Проект</th>
+                            <th>План</th>
+                            <th>Факт</th>
+                            <th>Открыто</th>
+                            <th>Маржа</th>
+                        </tr>
+                    </thead>
+                    <tbody id="financeTopProjectsTable"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <div id="financeDeepMount"></div>
+    <div id="accountingDeepMount"></div>
+</div>

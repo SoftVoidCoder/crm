@@ -1,0 +1,98 @@
+<div id="salesView" class="view-page" style="display: none;">
+    <div class="view-header">
+        <div class="view-heading">
+    <span class="view-eyebrow">Продажи</span>
+            <h1 class="view-title">Счета, акты и реализация</h1>
+            <p class="view-subtitle">Полный контур выставления документов реализации, статусов подписания и связи с оплатами.</p>
+        </div>
+    </div>
+    <div class="ops-overview-card">
+        <div>
+            <div class="ops-overview-title">Документы реализации</div>
+            <div class="ops-overview-text">Счета, акты, УПД и статусы оплаты теперь живут в одном контуре. Это не просто реестр документов, а точка контроля по отгрузке денег и закрывающим.</div>
+        </div>
+        <div class="ops-overview-pills">
+            <span class="ops-pill">Счета</span>
+            <span class="ops-pill">УПД</span>
+            <span class="ops-pill">Оплаты</span>
+        </div>
+    </div>
+    <div id="salesMetricsGrid" class="metrics-grid metrics-grid--info-rail"></div>
+    <div class="workbench-strip">
+        <div class="workbench-card">
+            <div class="workbench-card-title">Основной сценарий</div>
+            <div class="workbench-card-text">Сначала тип документа, номер, сумма и контрагент. Привязка к оплате и отгрузке уже второй шаг.</div>
+        </div>
+        <div class="workbench-card">
+            <div class="workbench-card-title">Быстро</div>
+            <div class="workbench-card-actions">
+                <button class="btn-primary" onclick="presetSalesDocument('invoice')">Счёт</button>
+                <button class="btn-secondary" onclick="presetSalesDocument('act')">Акт</button>
+                <button class="btn-secondary" onclick="presetSalesDocument('upd')">УПД</button>
+            </div>
+        </div>
+    </div>
+    <div id="salesCockpitMount" class="surface-card surface-card--padded" style="margin-top:16px;"></div>
+    <div class="finance-layout">
+        <section class="surface-card surface-card--padded ops-form-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Новый документ реализации</h3>
+                    <p class="section-subtitle">Создавай документ, сразу связывай его с проектом и при необходимости прикрепляй к конкретной оплате.</p>
+                </div>
+      <span class="ops-section-chip">Рабочее место продаж</span>
+            </div>
+            <div id="salesPolicyBanner" class="form-policy-banner" style="display:none;"></div>
+            <div id="salesForm" class="finance-form-grid form-grid-standard">
+                <label class="form-field"><span class="form-label">Проект</span><select id="salesProjectId" data-field="salesProjectId" class="auth-input"><option value="0">Без проекта</option></select><span class="form-error" data-error-for="salesProjectId"></span></label>
+                <label class="form-field"><span class="form-label">Контрагент</span><select id="salesClientId" data-field="salesClientId" class="auth-input"><option value="0">Без контрагента</option></select><span class="form-error" data-error-for="salesClientId"></span></label>
+                <label class="form-field"><span class="form-label">Юрлицо</span><select id="salesLegalEntityId" data-field="salesLegalEntityId" class="auth-input"><option value="0">Выберите юрлицо</option></select><span class="form-error" data-error-for="salesLegalEntityId"></span></label>
+                <label class="form-field"><span class="form-label">Подразделение</span><select id="salesBusinessUnitId" data-field="salesBusinessUnitId" class="auth-input"><option value="0">Выберите подразделение</option></select><span class="form-error" data-error-for="salesBusinessUnitId"></span></label>
+                <label class="form-field"><span class="form-label">Тип документа</span><select id="salesDocType" data-field="salesDocType" class="auth-input"><option value="invoice">Счёт</option><option value="act">Акт</option><option value="upd">УПД</option><option value="invoice_fact">Счёт-фактура</option></select><span class="form-error" data-error-for="salesDocType"></span></label>
+                <label class="form-field"><span class="form-label">Номер документа <span class="form-required">*</span></span><input id="salesDocNumber" data-field="salesDocNumber" class="auth-input" placeholder="Например, СЧ-142"><span class="form-error" data-error-for="salesDocNumber"></span></label>
+                <label class="form-field"><span class="form-label">Дата документа</span><input id="salesDocDate" data-field="salesDocDate" class="auth-input" placeholder="дд.мм.гггг"><span class="form-error" data-error-for="salesDocDate"></span></label>
+                <label class="form-field"><span class="form-label">Сумма <span class="form-required">*</span></span><input id="salesAmount" data-field="salesAmount" class="auth-input" placeholder="Например, 450000"><span class="form-error" data-error-for="salesAmount"></span></label>
+                <label class="form-field"><span class="form-label">Валюта</span><select id="salesCurrency" data-field="salesCurrency" class="auth-input"><option value="RUB">Рубль</option><option value="USD">Доллар</option><option value="EUR">Евро</option><option value="CNY">Юань</option></select><span class="form-error" data-error-for="salesCurrency"></span></label>
+                <label class="form-field"><span class="form-label">Статус документа</span><select id="salesStatus" data-field="salesStatus" class="auth-input"><option value="draft">Черновик</option><option value="issued">Выставлен</option><option value="signed">Подписан</option><option value="closed">Закрыт</option></select><span class="form-error" data-error-for="salesStatus"></span></label>
+                <label class="form-field"><span class="form-label">Статус оплаты</span><select id="salesPaymentStatus" data-field="salesPaymentStatus" class="auth-input"><option value="planned">Ожидает оплаты</option><option value="partially_paid">Частично оплачен</option><option value="paid">Оплачен</option></select><span class="form-error" data-error-for="salesPaymentStatus"></span></label>
+                <label class="form-field"><span class="form-label">Связанная оплата</span><select id="salesLinkedPayment" data-field="salesLinkedPayment" class="auth-input"><option value="0">Без связанной оплаты</option></select><span class="form-error" data-error-for="salesLinkedPayment"></span></label>
+                <label class="form-field"><span class="form-label">Прайс-лист</span><select id="salesPriceListId" data-field="salesPriceListId" class="auth-input"><option value="0">Без прайс-листа</option></select><span class="form-error" data-error-for="salesPriceListId"></span></label>
+                <label class="form-field"><span class="form-label">Скидка, %</span><input id="salesDiscountPercent" data-field="salesDiscountPercent" class="auth-input" placeholder="Например, 5"><span class="form-error" data-error-for="salesDiscountPercent"></span></label>
+                <label class="form-field"><span class="form-label">Скидка, сумма</span><input id="salesDiscountAmount" data-field="salesDiscountAmount" class="auth-input" placeholder="Например, 15000"><span class="form-error" data-error-for="salesDiscountAmount"></span></label>
+      <label class="form-field"><span class="form-label">Заказ клиента / номер</span><input id="salesCustomerOrderNo" data-field="salesCustomerOrderNo" class="auth-input" placeholder="Например, ЗК-77"><span class="form-error" data-error-for="salesCustomerOrderNo"></span></label>
+                <label class="form-field"><span class="form-label">Статус отгрузки</span><select id="salesShipmentStatus" data-field="salesShipmentStatus" class="auth-input"><option value="not_shipped">Не отгружен</option><option value="ready">Готов к отгрузке</option><option value="shipped">Отгружен</option><option value="delivered">Доставлен</option></select><span class="form-error" data-error-for="salesShipmentStatus"></span></label>
+                <label class="form-field"><span class="form-label">Срок оплаты</span><input id="salesPaymentDueDate" data-field="salesPaymentDueDate" class="auth-input" placeholder="дд.мм.гггг"><span class="form-error" data-error-for="salesPaymentDueDate"></span></label>
+                <label class="form-field"><span class="form-label">Плановая отгрузка</span><input id="salesPlannedShipDate" data-field="salesPlannedShipDate" class="auth-input" placeholder="дд.мм.гггг"><span class="form-error" data-error-for="salesPlannedShipDate"></span></label>
+                <label class="form-field"><span class="form-label">Статус резерва</span><select id="salesReserveStatus" data-field="salesReserveStatus" class="auth-input"><option value="none">Без резерва</option><option value="reserved">Зарезервирован</option><option value="partial">Частичный резерв</option><option value="released">Резерв снят</option></select><span class="form-error" data-error-for="salesReserveStatus"></span></label>
+      <label class="form-field"><span class="form-label">Резерв, количество</span><input id="salesReserveQty" data-field="salesReserveQty" class="auth-input" placeholder="Например, 12"><span class="form-error" data-error-for="salesReserveQty"></span></label>
+      <label class="form-field"><span class="form-label">Эл. почта получателя</span><input id="salesRecipientEmail" data-field="salesRecipientEmail" class="auth-input" placeholder="user@пример.рф"><span class="form-error" data-error-for="salesRecipientEmail"></span></label>
+                <label class="form-field"><span class="form-label">Статус отправки</span><select id="salesSentStatus" data-field="salesSentStatus" class="auth-input"><option value="draft">Не отправлен</option><option value="sent">Отправлен</option><option value="delivered">Доставлен</option><option value="confirmed">Подтверждён клиентом</option></select><span class="form-error" data-error-for="salesSentStatus"></span></label>
+                <label class="form-field"><span class="form-label">Дата отправки</span><input id="salesSentAt" data-field="salesSentAt" class="auth-input" placeholder="дд.мм.гггг"><span class="form-error" data-error-for="salesSentAt"></span></label>
+                <label class="form-field"><span class="form-label">Дата доставки</span><input id="salesDeliveredAt" data-field="salesDeliveredAt" class="auth-input" placeholder="дд.мм.гггг"><span class="form-error" data-error-for="salesDeliveredAt"></span></label>
+                <label class="form-field"><span class="form-label">Дата подтверждения</span><input id="salesConfirmedAt" data-field="salesConfirmedAt" class="auth-input" placeholder="дд.мм.гггг"><span class="form-error" data-error-for="salesConfirmedAt"></span></label>
+                <label class="form-field form-field--full"><span class="form-label">Комментарий</span><textarea id="salesComment" data-field="salesComment" class="auth-input" style="min-height:96px;" placeholder="Коротко: условия отгрузки, замечание по оплате, комментарий менеджера"></textarea><span class="form-error" data-error-for="salesComment"></span></label>
+            </div>
+            <div class="finance-actions-row form-actions">
+                <button class="btn-secondary" onclick="resetSalesForm()">Отмена</button>
+                <button class="btn-primary" onclick="saveSalesDocument()">Сохранить</button>
+            </div>
+        </section>
+        <section class="surface-card surface-card--padded ops-list-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Реестр документов реализации</h3>
+                    <p class="section-subtitle">Текущие документы по клиентам и проектам с привязкой к статусу подписи и оплаты.</p>
+                </div>
+                <div id="salesSavedFiltersMount" class="view-actions"></div>
+            </div>
+            <div id="salesBulkActionsMount"></div>
+            <div class="table-shell">
+                <table class="admin-table">
+                    <thead><tr><th class="bulk-select-col">✓</th><th>Документ</th><th>Проект / Контрагент</th><th>Сумма</th><th>Статус</th><th>Отправка клиенту</th><th>Оплата</th><th>Действия</th></tr></thead>
+                    <tbody id="salesDocumentsTable"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+    <div id="salesExtendedMount" class="surface-card surface-card--padded" style="margin-top:24px;"></div>
+</div>

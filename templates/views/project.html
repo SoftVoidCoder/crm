@@ -1,257 +1,338 @@
-<div id="projectView" class="project-shell" style="display: none;">
-    
-    <style>
-        .passport-perfect-grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 18px 20px;
-            align-items: start;
-        }
-        .static-field {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .pos-name { grid-column: 1 / 2; grid-row: 1; }
-        .pos-contract { grid-column: 2 / 3; grid-row: 1; }
-        .pos-client { grid-column: 3 / 4; grid-row: 1; }
-        .pos-manager { grid-column: 4 / 5; grid-row: 1; }
-
-        #extendedContractDetails {
-            grid-column: 1 / -1 !important;
-            grid-row: 2;
-            width: 100%;
-        }
-        #editProjRoles {
-            grid-column: 1 / -1 !important;
-            grid-row: 3;
-            width: 100%;
-        }
-
-        .passport-perfect-grid .auth-input {
-            min-height: 46px;
-        }
-
-        @media (max-width: 1180px) {
-            .passport-perfect-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-            .pos-name { grid-column: 1 / 2; grid-row: 1; }
-            .pos-contract { grid-column: 2 / 3; grid-row: 1; }
-            .pos-client { grid-column: 1 / 2; grid-row: 2; }
-            .pos-manager { grid-column: 2 / 3; grid-row: 2; }
-            #extendedContractDetails {
-                grid-column: 1 / -1 !important;
-                grid-row: 3;
-            }
-            #editProjRoles {
-                grid-column: 1 / -1 !important;
-                grid-row: 4;
-            }
-        }
-
-        @media (max-width: 760px) {
-            .passport-perfect-grid {
-                grid-template-columns: 1fr;
-            }
-            .pos-name,
-            .pos-contract,
-            .pos-client,
-            .pos-manager,
-            #extendedContractDetails,
-            #editProjRoles {
-                grid-column: 1 / -1 !important;
-                grid-row: auto;
-            }
-        }
-    </style>
-
-    <div class="project-toolbar-shell no-print">
-        <div class="project-toolbar">
-            <div class="project-toolbar-group">
-                <button class="btn-secondary" onclick="navigateTo('dashboard')" style="border-radius: 8px; padding: 6px 14px; display: flex; align-items: center; gap: 6px; font-weight: 600;">
+<div id="projectView" class="project-shell view-page krd-project-view" style="display: none;">
+    <!-- Project toolbar -->
+    <section class="project-toolbar-shell krd-project-toolbar-shell no-print">
+        <div class="project-toolbar krd-card krd-card--pad krd-project-toolbar">
+            <div class="project-toolbar-group krd-project-toolbar__group">
+                <button class="btn-secondary krd-project-toolbar__back" onclick="navigateTo('dashboard')">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
                     Назад
                 </button>
-                <button class="btn-secondary" id="btnToggleChat" onclick="toggleChat()" style="border-radius: 8px; padding: 6px 12px; display: flex; align-items: center; gap: 6px;">
+                <button class="btn-secondary" id="btnToggleChat" onclick="toggleChat()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
                     Чат
                 </button>
-                <button class="btn-secondary" id="btnLogs" style="display: none; border-radius: 8px; padding: 6px 12px; align-items: center; gap: 6px;" onclick="openLogsModal()">
+                <button class="btn-secondary krd-is-hidden" id="btnLogs" onclick="openLogsModal()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line></svg>
                     Логи
                 </button>
-                <button class="btn-secondary" onclick="downloadPDF()" style="border-radius: 8px; padding: 6px 12px; display: flex; align-items: center; gap: 6px;">
+                <button class="btn-secondary" onclick="downloadPDF()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
-                    PDF Отчет
+                    Отчёт PDF
                 </button>
             </div>
 
-            <div class="project-toolbar-group project-toolbar-group--actions">
-                <button class="btn-success" id="btnRestore" style="display: none; border-radius: 8px; padding: 6px 12px; align-items: center; gap: 6px;" onclick="restoreProject()">
+            <div class="project-toolbar-group project-toolbar-group--actions krd-project-toolbar__group">
+                <button class="btn-secondary" onclick="syncCurrentProjectContractMaster()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><polyline points="21 3 21 9 15 9"></polyline></svg>
+                    Синхронизировать договор
+                </button>
+                <button class="btn-secondary" onclick="openProjectContractCard()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    Контракт 360
+                </button>
+                <button class="btn-success krd-is-hidden" id="btnRestore" onclick="restoreProject()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"></polyline><polyline points="23 20 23 14 17 14"></polyline><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path></svg>
                     Восстановить
                 </button>
-                <button class="btn-danger" id="btnCancel" onclick="cancelProject()" style="border-radius: 8px; padding: 6px 12px; display: flex; align-items: center; gap: 6px;">
+                <button class="btn-danger" id="btnCancel" onclick="cancelProject()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
                     Отменить
                 </button>
-                <button class="btn-primary" onclick="saveProjectInfo()" style="border-radius: 8px; padding: 6px 16px; display: flex; align-items: center; gap: 6px; font-weight: 600;">
+                <button class="btn-primary krd-project-toolbar__cta" onclick="saveProjectInfo()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
                     Сохранить
                 </button>
             </div>
 
-            <div id="projectToolbarStatusActions" class="project-toolbar-group project-toolbar-group--status"></div>
+            <div id="projectToolbarStatusActions" class="project-toolbar-group project-toolbar-group--status krd-project-toolbar__status"></div>
         </div>
+    </section>
+
+    <!-- Project passport and economy -->
+    <div class="tw-grid tw-gap-5 xl:tw-grid-cols-12">
+        <section class="project-panel krd-card krd-card--pad tw-col-span-12 xl:tw-col-span-8">
+            <div class="krd-card__head">
+                <div>
+                    <div class="krd-card__title">Карточка проекта</div>
+                    <div class="krd-card__subtitle">Паспорт сделки, роли доступа и связка с договорным контуром в едином рабочем блоке.</div>
+                </div>
+                <span class="ops-section-chip ops-section-chip--primary">Карточка сделки</span>
+            </div>
+
+            <div class="passport-perfect-grid krd-project-fields">
+                <label class="static-field pos-name krd-project-field">
+                    <span class="field-label">Наименование</span>
+                    <input type="text" id="projName" class="auth-input">
+                </label>
+
+                <label class="static-field pos-contract krd-project-field">
+                    <span class="field-label">Договор №</span>
+                    <input type="text" id="projContract" class="auth-input">
+                </label>
+
+                <label class="static-field pos-client krd-project-field">
+                    <span class="field-label">Заказчик</span>
+                    <input type="text" id="projClient" class="auth-input">
+                </label>
+
+                <label class="static-field pos-manager krd-project-field">
+                    <span class="field-label">Менеджер</span>
+                    <input type="text" id="projManager" class="auth-input">
+                </label>
+
+                <div id="editProjRoles" class="krd-project-field krd-project-field--roles"></div>
+            </div>
+        </section>
+
+        <section class="project-panel krd-card krd-card--pad tw-col-span-12 xl:tw-col-span-4">
+            <div class="krd-card__head">
+                <div>
+                    <div class="krd-card__title">Экономика сделки</div>
+                    <div class="krd-card__subtitle">Бюджет, себестоимость и маржа без переходов по другим модулям.</div>
+                </div>
+                <span class="ops-section-chip">Финансы</span>
+            </div>
+
+            <div class="project-metrics-strip krd-project-metrics">
+                <div class="project-metric krd-project-metric">
+                    <label class="project-metric-label">Сумма договора (₽)</label>
+                    <input type="number" id="projBudget" class="auth-input project-metric-input" onchange="calcMargin()" onkeyup="calcMargin()">
+                </div>
+
+                <div class="project-metric krd-project-metric">
+                    <label class="project-metric-label">Себестоимость (₽)</label>
+                    <input type="number" id="projCosts" class="auth-input project-metric-input" readonly title="Считается автоматически">
+                </div>
+
+                <div class="project-metrics-divider"></div>
+
+                <div class="project-metric krd-project-metric">
+                    <label class="project-metric-label">Трудозатраты</label>
+                    <div id="projLaborCosts" class="project-metric-value">0 ₽</div>
+                </div>
+
+                <div class="project-metric krd-project-metric">
+                    <label class="project-metric-label">Смета материалов</label>
+                    <div id="projMaterialCosts" class="project-metric-value">0 ₽</div>
+                </div>
+
+                <div class="project-metrics-divider"></div>
+
+                <div class="project-metric project-metric--align-end project-metric--emphasis krd-project-metric krd-project-metric--accent">
+                    <label class="project-metric-label">Чистая маржа</label>
+                    <div id="projMargin" class="project-metric-value">0 ₽ (0%)</div>
+                </div>
+            </div>
+        </section>
     </div>
 
-    <div class="project-panel">
-        <div class="passport-perfect-grid">
-            <div class="static-field pos-name">
-                <label style="font-size: 11px; font-weight: 700; color: var(--secondary); text-transform: uppercase;">Наименование</label>
-                <input type="text" id="projName" class="auth-input" style="margin: 0; background: var(--bg); border-radius: 8px;">
-            </div>
-
-            <div class="static-field pos-contract">
-                <label style="font-size: 11px; font-weight: 700; color: var(--secondary); text-transform: uppercase;">Договор №</label>
-                <input type="text" id="projContract" class="auth-input" style="margin: 0; background: var(--bg); border-radius: 8px;">
-            </div>
-
-            <div class="static-field pos-client">
-                <label style="font-size: 11px; font-weight: 700; color: var(--secondary); text-transform: uppercase;">Заказчик</label>
-                <input type="text" id="projClient" class="auth-input" style="margin: 0; background: var(--bg); border-radius: 8px;">
-            </div>
-
-            <div class="static-field pos-manager">
-                <label style="font-size: 11px; font-weight: 700; color: var(--secondary); text-transform: uppercase;">Менеджер</label>
-                <input type="text" id="projManager" class="auth-input" style="margin: 0; background: var(--bg); border-radius: 8px;">
-            </div>
-
-            <div id="editProjRoles"></div>
-        </div>
-    </div>
-
-    <div class="project-panel">
-        <div class="project-metrics-strip">
-            <div class="project-metric">
-                <label style="font-weight: 700; color: var(--secondary); font-size: 11px; text-transform: uppercase;">Сумма договора (₽)</label>
-                <input type="number" id="projBudget" class="auth-input" onchange="calcMargin()" onkeyup="calcMargin()" style="margin:0; font-weight: bold; font-size: 18px; border: 2px solid var(--success); background: #fff; padding: 12px; border-radius: 8px;">
-            </div>
-
-            <div class="project-metric">
-                <label style="font-weight: 700; color: var(--secondary); font-size: 11px; text-transform: uppercase;">Себестоимость (₽)</label>
-                <input type="number" id="projCosts" class="auth-input" readonly style="margin:0; font-weight: bold; font-size: 18px; background: rgba(239, 68, 68, 0.05); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); padding: 12px; border-radius: 8px;" title="Считается автоматически">
-            </div>
-
-            <div class="project-metrics-divider"></div>
-
-            <div class="project-metric">
-                <label style="font-weight: 700; color: var(--secondary); font-size: 11px; text-transform: uppercase;">Трудозатраты</label>
-                <div id="projLaborCosts" style="font-size: 18px; font-weight: 800; color: var(--text);">0 ₽</div>
-            </div>
-
-            <div class="project-metric">
-                <label style="font-weight: 700; color: var(--secondary); font-size: 11px; text-transform: uppercase;">Смета материалов</label>
-                <div id="projMaterialCosts" style="font-size: 18px; font-weight: 800; color: var(--text);">0 ₽</div>
-            </div>
-
-            <div class="project-metrics-divider"></div>
-
-            <div class="project-metric project-metric--align-end">
-                <label style="font-weight: 700; color: var(--secondary); font-size: 11px; text-transform: uppercase;">Чистая маржа</label>
-                <div id="projMargin" style="font-size: 24px; font-weight: 800; color: var(--success);">0 ₽ (0%)</div>
-            </div>
-        </div>
-    </div>
-
-    <div class="project-panel">
-        <label style="font-size: 12px; font-weight: 700; color: var(--primary); text-transform: uppercase; display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-            Рабочая группа (Доступ)
-        </label>
-        <div id="projTeam" style="padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); max-height: 250px; overflow-y: auto; font-size: 13px; line-height: 1.6;"></div>
-    </div>
-
-    <div id="projNomenclatureBlock" class="project-panel">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+    <!-- Smart tools -->
+    <section class="project-panel krd-card krd-card--pad">
+        <div class="krd-card__head">
             <div>
-                <h3 style="margin: 0; font-size: 16px; color: var(--text); display: flex; align-items: center; gap: 8px;">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-                    Спецификация проекта
-                </h3>
-                <p style="margin: 4px 0 0 0; font-size: 13px; color: var(--secondary);">Материалы и оборудование из базы НСИ</p>
+                <div class="krd-card__title">Клиентские и договорные инструменты</div>
+                <div class="krd-card__subtitle">Быстрый доступ к порталу заказчика, проверке договора и происхождению проекта.</div>
             </div>
-            <button class="btn-primary no-print" style="padding: 8px 16px; font-size: 13px; border-radius: 8px; font-weight: 600;" onclick="openAddNomToProjectModal()">+ Добавить позицию</button>
+            <span class="ops-section-chip">Умные инструменты</span>
         </div>
-        <div id="projNomenclatureTable"></div>
-    </div>
-        
-    <div class="project-panel no-print">
-        <label style="color:var(--secondary); font-size:12px; font-weight:700; text-transform: uppercase; display: flex; align-items: center; gap: 8px; margin-bottom: 20px;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-            Файлы проекта
-        </label>
-        
-        <div id="projectFilesList" style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px;"></div>
-        
-        <div class="project-files-actions">
-            <input type="file" id="fileUploadInput" style="display:none" onchange="uploadFile(event)">
-            <button class="btn-secondary" style="border-radius: 8px; padding: 10px 16px; display: flex; align-items: center; gap: 8px; font-weight: 500;" onclick="document.getElementById('fileUploadInput').click()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                Загрузить файл
-            </button>
-            <button class="btn-primary" style="border-radius: 8px; padding: 10px 16px; display: flex; align-items: center; gap: 8px; font-weight: 600;" onclick="generateContractDoc()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15l2 2 4-4"></path></svg>
-                Сгенерировать договор
-            </button>
-            <button class="btn-secondary" style="border-radius: 8px; padding: 10px 16px; display: flex; align-items: center; gap: 8px; font-weight: 500;" onclick="request1CInvoice()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                Выставить счет (1С)
-            </button>
-        </div>
-    </div>
 
-    <div class="progress-container project-progress no-print"><div class="progress-bar" id="progressBar"></div></div>
-
-    <div class="project-grid-layout" id="projectGrid">
-        <div>
-            <div id="ganttContainer" class="no-print" style="margin-bottom: 24px;"></div>
-
-            <div id="checklist"></div>
-            
-            <div class="final-block" id="finalBlock">
-                <div class="final-message">СДЕЛКА УСПЕШНО ЗАКРЫТА</div>
-                <div style="margin-top: 20px; background: rgba(0,0,0,0.03); padding: 20px; border-radius: 12px; text-align: left;">
-                    <label style="font-size: 12px; font-weight: bold; color: var(--secondary);">ДАННЫЕ ФИЗИЧЕСКОГО АРХИВА:</label>
-                    <div style="display: flex; gap: 12px; margin-top: 10px; flex-wrap: wrap;">
-                        <input type="text" id="arcFolder" class="auth-input" style="margin:0; border-radius: 8px; flex: 1; min-width: 120px;" placeholder="№ Папки">
-                        <input type="text" id="arcRack" class="auth-input" style="margin:0; border-radius: 8px; flex: 1; min-width: 120px;" placeholder="Стеллаж">
-                        <input type="text" id="arcDate" class="date-picker auth-input" style="margin:0; border-radius: 8px; flex: 1; min-width: 120px;" placeholder="Дата">
+        <div class="smart-tools-grid">
+            <div class="smart-tool-card">
+                <div class="smart-tool-head">
+                    <div>
+                        <h3 class="smart-tool-title">Портал заказчика</h3>
+                        <p class="smart-tool-subtitle">Ссылка без логина для статуса проекта, этапов и файлов.</p>
+                    </div>
+                    <span class="smart-tool-badge">Быстрая ссылка</span>
+                </div>
+                <div class="smart-tool-body">
+                    <input type="text" id="guestPortalLink" class="auth-input" readonly placeholder="Сначала сгенерируйте ссылку">
+                    <div class="smart-tool-actions">
+                        <button class="btn-secondary" onclick="generateGuestPortalLink()">Сгенерировать</button>
+                        <button class="btn-secondary" onclick="copyGuestPortalLink()">Копировать</button>
+                        <button class="btn-primary" onclick="openGuestPortal()">Открыть</button>
                     </div>
                 </div>
-                <button class="btn-primary no-print" id="btnArchiveFinal" style="margin-top: 20px; width: 100%; justify-content: center; padding: 16px; border-radius: 12px; font-weight: 600; font-size: 14px;" onclick="archiveCurrentProject()">Передать в Архив</button>
+            </div>
+
+            <div class="smart-tool-card">
+                <div class="smart-tool-head">
+                    <div>
+                        <h3 class="smart-tool-title">Сканер рисков договора</h3>
+                        <p class="smart-tool-subtitle">Проверьте спорные условия и красные флаги по тексту договора.</p>
+                    </div>
+                    <span class="smart-tool-badge">Проверка рисков</span>
+                </div>
+                <div class="smart-tool-body">
+                    <textarea id="contractScanInput" class="auth-input smart-tool-textarea" rows="6" placeholder="Вставьте сюда текст договора или спорного раздела"></textarea>
+                    <div class="smart-tool-actions">
+                        <button class="btn-primary" onclick="runContractRiskScan()">Проверить договор</button>
+                    </div>
+                    <div id="contractScanResult" class="smart-tool-result"></div>
+                </div>
+            </div>
+
+            <div class="smart-tool-card">
+                <div class="smart-tool-head">
+                    <div>
+                        <h3 class="smart-tool-title">Источник проекта</h3>
+                        <p class="smart-tool-subtitle">Если проект пришёл из тендера, здесь будет его краткая выжимка.</p>
+                    </div>
+                    <span class="smart-tool-badge">Тендер</span>
+                </div>
+                <div id="tenderSourceCard" class="smart-tool-result smart-tool-result--plain"></div>
             </div>
         </div>
-        
-        <div class="chat-container project-chat-panel no-print">
-            <div class="chat-header project-chat-header">Единая лента (Чат и Документы)</div>
-            <div class="chat-messages" id="chatMessages" style="padding: 20px;"></div>
-            <div class="chat-input-area project-chat-input">
-                <input type="text" id="chatInput" class="project-chat-field" placeholder="Написать сообщение..." onkeypress="if(event.key === 'Enter') sendChatMessage()">
-                <button class="btn-icon-send project-chat-send" onclick="sendChatMessage()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>
+    </section>
+
+    <!-- Team and operations -->
+    <div class="tw-grid tw-gap-5 xl:tw-grid-cols-12">
+        <section class="project-panel krd-card krd-card--pad tw-col-span-12 xl:tw-col-span-5">
+            <div class="krd-card__head">
+                <div>
+                    <div class="krd-card__title">Рабочая группа</div>
+                    <div class="krd-card__subtitle">Состав команды и доступ к сделке в одном управляемом блоке.</div>
+                </div>
+                <span class="ops-section-chip">Доступ</span>
             </div>
-        </div>
+            <div id="projTeam" class="project-team-box"></div>
+        </section>
+
+        <section class="project-panel krd-card krd-card--pad tw-col-span-12 xl:tw-col-span-7">
+            <div class="krd-card__head">
+                <div>
+                    <div class="krd-card__title">Операционный контур проекта</div>
+                    <div class="krd-card__subtitle">Финансы, закупки, производство и реализация по текущему проекту.</div>
+                </div>
+                <span class="ops-section-chip ops-section-chip--primary">Операционный пульт</span>
+            </div>
+            <div class="ops-overview-card ops-overview-card--compact">
+                <div>
+                    <div class="ops-overview-title">Операционный вид проекта</div>
+                    <div class="ops-overview-text">Здесь сводятся деньги, закупки, реализация и производство по одной сделке, чтобы менеджер и директор видели единый контекст без скачков между разделами.</div>
+                </div>
+            </div>
+            <div id="projectOpsSummary" class="client360-grid"></div>
+        </section>
     </div>
+
+    <!-- Specification -->
+    <section id="projNomenclatureBlock" class="project-panel krd-card krd-card--pad">
+        <div class="krd-card__head">
+            <div>
+                <div class="krd-card__title">Спецификация проекта</div>
+                <div class="krd-card__subtitle">Материалы, оборудование и история версий спецификации по сделке.</div>
+            </div>
+            <div class="view-actions">
+                <button class="btn-primary no-print" onclick="openAddNomToProjectModal()">Добавить позицию</button>
+            </div>
+        </div>
+        <div id="projNomenclatureTable"></div>
+        <div class="ops-inline-section">
+            <div class="section-header">
+                <div>
+                    <h4 class="section-title">Версии спецификации</h4>
+                    <p class="section-subtitle">История состава проекта: кто сохранил версию, когда и с каким комментарием.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary no-print" onclick="createSpecificationVersionPrompt()">Сохранить версию</button>
+                </div>
+            </div>
+            <div id="projectSpecVersions" class="client360-list"></div>
+        </div>
+    </section>
+
+    <!-- File manager -->
+    <section class="project-panel krd-card krd-card--pad no-print">
+        <div class="krd-card__head">
+            <div>
+                <div class="krd-card__title">Файлы проекта</div>
+                <div class="krd-card__subtitle">Документы, версии и история изменений без потери предыдущих загрузок.</div>
+            </div>
+            <span class="ops-section-chip">Версионные файлы</span>
+        </div>
+
+        <div class="krd-project-file-toolbar">
+            <div class="krd-project-file-toolbar__meta">
+                <span class="ops-pill ops-pill--primary">v1.0 / v1.1 / v2.0</span>
+                <span class="krd-project-file-toolbar__hint">Последняя версия остаётся основной, история раскрывается по документу.</span>
+            </div>
+            <div class="project-files-actions krd-project-file-toolbar__actions">
+                <input type="file" id="fileUploadInput" class="krd-file-input" onchange="uploadFile(event)">
+                <button class="btn-secondary" onclick="document.getElementById('fileUploadInput').click()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    Загрузить файл
+                </button>
+                <button class="btn-primary" onclick="generateContractDoc()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15l2 2 4-4"></path></svg>
+                    Сгенерировать договор
+                </button>
+                <button class="btn-secondary" onclick="request1CInvoice()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    Выставить счёт (1С)
+                </button>
+            </div>
+        </div>
+
+        <div id="projectFilesList" class="project-files-list krd-file-list"></div>
+    </section>
+
+    <!-- Progress and execution workspace -->
+    <section class="project-panel krd-card krd-card--pad no-print">
+        <div class="krd-card__head">
+            <div>
+                <div class="krd-card__title">Исполнение и коммуникации</div>
+                <div class="krd-card__subtitle">График, чек-лист, архив сделки и единая командная лента в одном рабочем контуре.</div>
+            </div>
+        </div>
+
+        <div class="progress-container project-progress"><div class="progress-bar" id="progressBar"></div></div>
+
+        <div class="project-grid-layout" id="projectGrid">
+            <div class="krd-project-workspace">
+                <section class="krd-project-stack-card">
+                    <div id="ganttContainer" class="no-print"></div>
+                </section>
+
+                <section class="krd-project-stack-card">
+                    <div id="checklist"></div>
+                </section>
+
+                <section class="final-block krd-project-stack-card" id="finalBlock">
+                    <div class="final-message">СДЕЛКА УСПЕШНО ЗАКРЫТА</div>
+                    <div class="project-archive-box">
+                        <label class="field-label">Данные физического архива</label>
+                        <div class="project-archive-grid">
+                            <input type="text" id="arcFolder" class="auth-input" placeholder="№ папки">
+                            <input type="text" id="arcRack" class="auth-input" placeholder="Стеллаж">
+                            <input type="text" id="arcDate" class="date-picker auth-input" placeholder="Дата">
+                        </div>
+                    </div>
+                    <button class="btn-primary no-print" id="btnArchiveFinal" onclick="archiveCurrentProject()">Передать в архив</button>
+                </section>
+            </div>
+
+            <aside class="chat-container project-chat-panel no-print">
+                <div class="chat-header project-chat-header">Единая лента проекта</div>
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-input-area project-chat-input">
+                    <input type="text" id="chatInput" class="project-chat-field" placeholder="Написать сообщение..." onkeypress="if(event.key === 'Enter') sendChatMessage()">
+                    <button class="btn-icon-send project-chat-send" onclick="sendChatMessage()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>
+                </div>
+            </aside>
+        </div>
+    </section>
 </div>
 
-<div id="fileHistoryModal" class="modal-overlay" style="display: none; z-index: 10000;">
-    <div class="modal-card" style="max-width: 500px; padding: 24px; border-radius: 16px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h2 style="margin: 0; font-size: 18px; color: var(--primary);">История версий файла</h2>
-            <button class="btn-danger" style="padding: 6px 10px; font-size: 12px; border-radius: 6px;" onclick="document.getElementById('fileHistoryModal').style.display='none'">✕</button>
+<div id="fileHistoryModal" class="modal-overlay krd-project-history-modal" style="display: none;">
+    <div class="modal-card krd-history-modal__card">
+        <div class="krd-history-modal__head">
+            <div>
+                <h2 class="krd-history-modal__title">История версий файла</h2>
+                <p class="krd-history-modal__subtitle">Все опубликованные версии документа и ответственные за загрузку.</p>
+            </div>
+            <button class="btn-secondary krd-history-modal__close" onclick="document.getElementById('fileHistoryModal').style.display='none'">Закрыть</button>
         </div>
-        <div id="fileHistoryList" style="display: flex; flex-direction: column; max-height: 400px; overflow-y: auto; padding-right: 5px;"></div>
+        <div id="fileHistoryList" class="krd-history-modal__list"></div>
     </div>
 </div>

@@ -1,55 +1,65 @@
-<header class="topbar no-print">
-    
-    <div class="search-bar">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--secondary)" stroke-width="2" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); pointer-events: none;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-        <input type="text" id="searchInput" placeholder="Глобальный поиск (Сделки, Документы, Поручения)..." onkeyup="if(typeof handleOmniSearch === 'function') handleOmniSearch()" style="padding-left: 40px;">
-        <div id="omniSearchResults" style="display:none; position:absolute; top:calc(100% + 8px); left:0; width:100%; max-height:400px; overflow-y:auto; background:var(--card-bg); border:1px solid var(--border); border-radius:10px; box-shadow:0 10px 25px rgba(0,0,0,0.1); z-index:10000; padding:8px; display:flex; flex-direction:column; gap:4px;"></div>
+<header class="topbar no-print krd-shell-topbar">
+    <!-- Navigation and search -->
+    <div class="krd-shell-topbar__lead">
+        <button id="topbarBackBtn" class="icon-btn topbar-back-btn krd-topbar-back krd-is-hidden" type="button" onclick="if(typeof navigateBack === 'function') navigateBack()" aria-label="Назад">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"></path></svg>
+        </button>
+
+        <div class="search-bar krd-topbar-search">
+            <svg class="topbar-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--secondary)" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" id="searchInput" placeholder="Поиск..." onkeyup="if(typeof handleOmniSearch === 'function') handleOmniSearch()" class="topbar-search-input">
+            <button id="commandPaletteHint" class="command-palette-hint" type="button" onclick="if(typeof openCommandPalette === 'function') openCommandPalette()" title="Командная палитра">⌘K</button>
+            <div id="omniSearchResults" class="omni-search-results krd-is-hidden"></div>
+        </div>
     </div>
-    
-    <div class="topbar-actions">
-        
-        <button class="btn-secondary" onclick="if(typeof openCreateTaskModal === 'function') openCreateTaskModal()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-            Поручение
+
+    <!-- Context badge -->
+    <div class="topbar-context">
+        <span id="topbarRoleBadge" class="topbar-context-badge">Роль</span>
+    </div>
+
+    <!-- Action bar -->
+    <div class="topbar-actions krd-shell-topbar__actions">
+        <button id="topbarQuickTaskBtn" class="btn-secondary" onclick="if(typeof openCreateTaskModal === 'function') openCreateTaskModal()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            <span id="topbarQuickTaskLabel">Поручение</span>
         </button>
-        
-        <div id="topbarTaskControl" class="topbar-task-control" style="display: none;" onclick="if(typeof navigateTo === 'function') navigateTo('tasks')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-            Активный таймер
+
+        <div id="topbarTaskControl" class="topbar-task-control krd-is-hidden" onclick="if(typeof navigateTo === 'function') navigateTo('tasks')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            Таймер
         </div>
 
-        <button class="btn-secondary" onclick="if(typeof openScanner === 'function') openScanner()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><path d="M7 7h.01"></path><path d="M17 7h.01"></path><path d="M7 17h.01"></path><path d="M17 17h.01"></path></svg>
-            Сканер QR
-        </button>
-        
-        <div class="topbar-divider"></div>
-        
-        <button class="icon-btn" onclick="if(typeof toggleTheme === 'function') toggleTheme()">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+        <button id="topbarQuickScanBtn" class="btn-secondary" onclick="if(typeof openScanner === 'function') openScanner()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><path d="M7 7h.01"></path><path d="M17 7h.01"></path><path d="M7 17h.01"></path><path d="M17 17h.01"></path></svg>
+            <span id="topbarQuickScanLabel">QR</span>
         </button>
 
-        <div class="notif-wrapper" style="position: relative; margin-right: 4px;">
-            <div class="notif-bell" onclick="if(typeof toggleNotifications === 'function') toggleNotifications()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-                <span class="notif-badge" id="notifBadge" style="display: none; position: absolute; top: 0px; right: 0px; background: var(--danger); color: white; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 10px; border: 2px solid var(--card-bg);">0</span>
-            </div>
-            
-            <div class="notif-dropdown" id="notifDropdown" style="display: none; position: absolute; top: calc(100% + 10px); right: 0; width: 350px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); z-index: 1000; overflow: hidden;">
-                <div class="notif-header" style="padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg);">
-                    <span style="font-weight: 600; font-size: 13px; color: var(--text);">Уведомления</span>
-                    <button class="btn-secondary" style="padding: 4px 8px; font-size: 11px; border-radius: 6px; height: 26px;" onclick="if(typeof markAllNotificationsRead === 'function') markAllNotificationsRead()">Прочитано</button>
+        <button id="topbarWorkspaceBtn" class="btn-secondary" onclick="if(typeof openWorkspaceConfigModal === 'function') openWorkspaceConfigModal()" title="Настроить интерфейс">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+            <span>Конфиг</span>
+        </button>
+
+        <div class="notif-wrapper krd-topbar-notif">
+            <button class="icon-btn notif-bell" onclick="if(typeof toggleNotifications === 'function') toggleNotifications()" title="Уведомления">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                <span class="notif-badge krd-is-hidden" id="notifBadge">0</span>
+            </button>
+
+            <div class="notif-dropdown krd-notif-dropdown krd-is-hidden" id="notifDropdown">
+                <div class="notif-header krd-notif-dropdown__head">
+                    <span class="krd-notif-dropdown__title">Уведомления</span>
+                    <button class="btn-secondary krd-notif-dropdown__action" onclick="if(typeof markAllNotificationsRead === 'function') markAllNotificationsRead()">Прочитано</button>
                 </div>
-                <div class="notif-list" id="notifList" style="max-height: 350px; overflow-y: auto;">
-                    <div style="padding: 24px; text-align: center; color: var(--secondary); font-size: 13px;">Нет новых уведомлений</div>
+                <div class="notif-list" id="notifList">
+                    <div class="krd-notif-dropdown__empty">Нет новых уведомлений</div>
                 </div>
             </div>
         </div>
 
-        <div class="user-profile" onclick="if(typeof navigateTo === 'function') navigateTo('profile')" style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-            <div style="display: flex; flex-direction: column; text-align: right;">
-                <span id="topbarUserName" style="font-size: 13px; font-weight: 600; color: var(--text);">Загрузка...</span>
-                <span style="font-size: 11px; color: var(--secondary);">Личный кабинет</span>
+        <div class="user-profile krd-topbar-user" onclick="if(typeof navigateTo === 'function') navigateTo('profile')">
+            <div class="topbar-user-meta">
+                <span id="topbarUserName" class="krd-topbar-user__name">Загрузка...</span>
             </div>
             <div id="topbarUserInitials" class="topbar-user-avatar">?</div>
         </div>

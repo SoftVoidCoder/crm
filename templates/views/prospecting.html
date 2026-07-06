@@ -1,0 +1,95 @@
+<div id="prospectingView" class="view-page" style="display:none;">
+    <div class="surface-card surface-card--padded crm-workspace-shell">
+        <div class="view-header">
+            <div class="view-heading">
+                <span class="view-eyebrow">CRM</span>
+                <h1 class="view-title">База развития</h1>
+                <p class="view-subtitle">Холодная и отложенная база клиентов: импорт списков, назначение менеджеров, прозвон, письма, ежедневные отчёты и конверсия в лиды.</p>
+            </div>
+            <div class="view-actions">
+                <button class="btn-primary" onclick="openOutreachEditor()">+ Новый клиент в базу</button>
+            </div>
+        </div>
+
+        <div id="outreachSummaryStrip" class="crm-summary-strip"></div>
+
+        <div class="client360-grid" style="margin-bottom:20px;">
+            <section class="surface-card prospecting-panel">
+                <div class="section-header">
+                    <div>
+                        <h3 class="section-title">Загрузка базы</h3>
+                        <p class="section-subtitle">Поддерживаются `xlsx`, `xls`, `xlsm`, `xlsb`, `ods`, `csv`, `tsv`, `txt`, `json`. Поля маппятся автоматически.</p>
+                    </div>
+                </div>
+                <div class="prospecting-inline-grid">
+                    <input id="outreachImportFile" class="auth-input" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,.csv,.tsv,.txt,.json">
+                    <input id="outreachImportSource" class="auth-input" type="text" placeholder="Источник списка: сайт, тендер, вручную">
+                    <select id="outreachImportManager" class="auth-input"></select>
+                    <input id="outreachImportPlanDate" class="auth-input" type="text" placeholder="План контакта: дд.мм.гггг">
+                    <button class="btn-secondary" onclick="importOutreachFile()">Импортировать список</button>
+                </div>
+            </section>
+            <section class="surface-card prospecting-panel" id="outreachReportPanel"></section>
+        </div>
+
+        <div class="crm-toolbar">
+            <div class="crm-toolbar__group crm-toolbar__group--wide">
+                <input id="outreachSearchInput" class="auth-input" type="search" placeholder="Поиск по компании, контакту, телефону, почте" oninput="applyOutreachSearch(this.value)">
+            </div>
+            <div class="crm-toolbar__group">
+                <select id="outreachStatusFilter" class="auth-input" onchange="setOutreachStatusFilter(this.value)">
+                    <option value="">Все статусы</option>
+                    <option value="new">Не обработан</option>
+                    <option value="assigned">Назначен</option>
+                    <option value="in_progress">В работе</option>
+                    <option value="no_answer">Не дозвонились</option>
+                    <option value="follow_up">Повторный контакт</option>
+                    <option value="warm">Тёплый</option>
+                    <option value="meeting">Назначена встреча</option>
+                    <option value="converted">Переведён в лид</option>
+                    <option value="do_not_contact">Не беспокоить</option>
+                    <option value="archived">Архив</option>
+                </select>
+                <select id="outreachPriorityFilter" class="auth-input" onchange="setOutreachPriorityFilter(this.value)">
+                    <option value="">Все приоритеты</option>
+                    <option value="high">Высокий</option>
+                    <option value="normal">Обычный</option>
+                    <option value="low">Низкий</option>
+                </select>
+                <select id="outreachManagerFilter" class="auth-input" onchange="setOutreachManagerFilter(this.value)"></select>
+                <select id="outreachProcessedFilter" class="auth-input" onchange="setOutreachProcessedFilter(this.value)">
+                    <option value="">Все покрытия</option>
+                    <option value="no">Не обработаны</option>
+                    <option value="yes">Обработаны</option>
+                </select>
+            </div>
+            <div class="crm-toolbar__group">
+                <button id="outreachOverdueBtn" class="btn-secondary" onclick="toggleOutreachOverdueFilter()">Только просроченные</button>
+                <button id="outreachTodayBtn" class="btn-secondary" onclick="toggleOutreachTodayFilter()">План на сегодня</button>
+                <button class="btn-secondary" onclick="resetOutreachFilters()">Сбросить</button>
+            </div>
+        </div>
+
+        <div class="prospecting-bulkbar">
+            <div class="prospecting-bulkbar__title">Массовые действия</div>
+            <div class="prospecting-bulkbar__controls">
+                <select id="outreachBulkManager" class="auth-input"></select>
+                <input id="outreachBulkPlanDate" class="auth-input" type="text" placeholder="дд.мм.гггг">
+                <select id="outreachBulkStatus" class="auth-input">
+                    <option value="">Статус без изменения</option>
+                    <option value="assigned">Назначен</option>
+                    <option value="in_progress">В работе</option>
+                    <option value="follow_up">Повторный контакт</option>
+                    <option value="warm">Тёплый</option>
+                    <option value="converted">Конвертирован</option>
+                    <option value="archived">Архив</option>
+                </select>
+                <input id="outreachBulkNote" class="auth-input" type="text" placeholder="Комментарий к массовому действию">
+                <button class="btn-primary" onclick="applyOutreachBulkAction()">Применить к выбранным</button>
+            </div>
+        </div>
+
+        <div id="outreachEditorPanel" class="crm-editor-panel" style="display:none;"></div>
+        <div id="prospectingContentMount"></div>
+    </div>
+</div>

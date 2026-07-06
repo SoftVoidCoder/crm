@@ -1,7 +1,13 @@
-<div id="knowledgeView" style="display: none;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-        <h1 style="margin:0; font-size: 22px;">База знаний и Приказы</h1>
-        <button class="btn-primary" id="btnCreateKnowledge" style="display:none;" onclick="openCreateKnowledgeModal()">+ Опубликовать регламент</button>
+<div id="knowledgeView" class="view-page" style="display: none;">
+    <div class="view-header">
+        <div class="view-heading">
+    <span class="view-eyebrow">База знаний</span>
+            <h1 class="view-title">База знаний и приказы</h1>
+            <p class="view-subtitle">Регламенты, инструкции и внутренние приказы в одном аккуратном реестре для команды.</p>
+        </div>
+        <div class="view-actions">
+            <button class="btn-primary" id="btnCreateKnowledge" style="display:none;" onclick="openCreateKnowledgeModal()">+ Опубликовать регламент</button>
+        </div>
     </div>
     <div id="knowledgeListContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;"></div>
 </div>

@@ -1,9 +1,23 @@
-<div id="adminView" style="display: none;">
-    <div style="background: var(--card-bg); border-radius: 20px; border: 1px solid var(--border); overflow: hidden; padding: 24px;">
-        <h3 style="margin-top:0; margin-bottom:20px;">Заявки на доступ к системе</h3>
-        <table class="admin-table">
-            <thead><tr><th>Сотрудник</th><th>Email</th><th>Роль</th><th>Управление</th><th>Действие</th></tr></thead>
-            <tbody id="adminUsersList"></tbody>
-        </table>
+<div id="adminView" class="view-page crm-page-shell" style="display: none;">
+    <div class="view-header">
+        <div class="view-heading">
+            <span class="view-eyebrow">Администрирование</span>
+            <h1 class="view-title">Заявки на доступ</h1>
+            <p class="view-subtitle">Очередь новых пользователей, роли и статусы согласования в одном экране без лишних переходов.</p>
+        </div>
+    </div>
+    <div class="surface-card surface-card--padded tw-flex tw-flex-col tw-gap-4">
+        <div class="section-header">
+            <div>
+                <h3 class="section-title">Очередь согласования</h3>
+                <p class="section-subtitle">Проверьте сотрудника, запрошенную роль и сразу примите решение по доступу к системе.</p>
+            </div>
+        </div>
+        <div class="table-shell">
+            <table class="admin-table">
+                <thead><tr><th>Сотрудник</th><th>Эл. почта</th><th>Роль</th><th>Управление</th><th>Действие</th></tr></thead>
+                <tbody id="adminUsersList"></tbody>
+            </table>
+        </div>
     </div>
 </div>

@@ -1,0 +1,198 @@
+<div id="operationsView" class="view-page view-page--compact" style="display:none;">
+    <div class="view-header">
+        <div class="view-heading">
+            <span class="view-eyebrow">Операции</span>
+<h1 class="view-title">Операционный центр</h1>
+            <p class="view-subtitle">Единый экран для 1С-мониторинга, сверки, банковской выписки, телефонии и блокировок редактирования.</p>
+        </div>
+    </div>
+    <div class="ops-overview-card ops-overview-card--compact">
+        <div>
+            <div class="ops-overview-title">Живой операционный мониторинг</div>
+            <div class="ops-overview-text">Повседневный пульт: где завис обмен, что не сведено с банком, какие звонки пропущены и какие записи сейчас заблокированы.</div>
+        </div>
+    </div>
+    <div class="workbench-strip">
+        <div class="workbench-card">
+            <div class="workbench-card-title">Первый экран</div>
+            <div class="workbench-card-text">Сначала мониторинг 1С и сверка. Именно там чаще всего лежат реальные операционные блокеры.</div>
+        </div>
+        <div class="workbench-card">
+            <div class="workbench-card-title">Порядок</div>
+      <div class="workbench-card-text">Сначала снимай зависшие и ошибочные записи, потом разбирай банк и телефонию. Так экран не превращается в шумную панель.</div>
+        </div>
+    </div>
+    <div id="operationsRoleWorkbenchMount"></div>
+    <div id="operationsCockpitMount" class="erp-cockpit-grid" style="margin-bottom:20px;"></div>
+
+    <div class="client360-grid secondary-zone">
+        <section class="surface-card surface-card--padded">
+            <div class="section-header">
+                <div>
+        <h3 class="section-title">1С мониторинг и восстановление</h3>
+        <p class="section-subtitle">Очередь, ошибки, конфликты, зависшая обработка и последние проблемы обмена.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary" onclick="processExecutiveIntegrationQueue()">Обработать очередь</button>
+                    <button class="btn-secondary" onclick="runOperationsReconciliation()">Сверить</button>
+        <button class="btn-secondary" onclick="recoverExecutiveIntegration(0)">Снять зависшие</button>
+        <button class="btn-secondary" onclick="recoverExecutiveIntegration(1)">Повторить ошибочные</button>
+        <button class="btn-secondary" onclick="exportOperationsSnapshot('integration')">Экспорт данных</button>
+                </div>
+            </div>
+            <div id="operationsIntegrationList" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <div class="section-header">
+                <div>
+        <h3 class="section-title">Сверка 1С</h3>
+                    <p class="section-subtitle">Автоматическая сверка расхождений по финансам, продажам, закупкам, складу, производству и ЭПЛ.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary" onclick="reloadOperationsCenter()">Обновить</button>
+        <button class="btn-secondary" onclick="exportOperationsSnapshot('reconciliation')">Экспорт данных</button>
+                </div>
+            </div>
+            <div id="operationsReconciliationList" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <h3 class="section-title">Блокировки редактирования</h3>
+            <div id="operationsLocksList" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Банк и выписка</h3>
+                    <p class="section-subtitle">Счета, импорт строк выписки и ручная сводка с оплатами.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary" onclick="saveBankAccount()">Счёт</button>
+                    <button class="btn-primary" onclick="importBankStatementLines()">Импорт строк</button>
+        <button class="btn-secondary" onclick="exportOperationsSnapshot('bank')">Экспорт данных</button>
+                </div>
+            </div>
+            <div class="finance-form-grid" style="margin-bottom:16px;">
+                <input id="bankAccountName" class="auth-input" placeholder="Название счёта">
+                <input id="bankAccountBankName" class="auth-input" placeholder="Банк">
+                <input id="bankAccountNumber" class="auth-input" placeholder="Расчётный счёт">
+                <input id="bankAccountBik" class="auth-input" placeholder="БИК">
+                <textarea id="bankStatementImportPayload" class="auth-input" style="margin:0; min-height:110px; grid-column:1 / -1;" placeholder='[{"line_date":"13.04.2026","amount":150000,"direction":"incoming","counterparty":"ООО Клиент","purpose":"Оплата по счету","client_id":1}]'></textarea>
+            </div>
+            <div id="operationsBankList" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Телефония</h3>
+                    <p class="section-subtitle">Линии связи, журнал звонков и пропущенные обращения клиентов.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary" onclick="saveTelephonyAccount()">Линия</button>
+                    <button class="btn-primary" onclick="saveTelephonyCall()">Звонок</button>
+        <button class="btn-secondary" onclick="exportOperationsSnapshot('telephony')">Экспорт данных</button>
+                </div>
+            </div>
+            <div class="finance-form-grid" style="margin-bottom:16px;">
+                <input id="telephonyLineName" class="auth-input" placeholder="Линия / отдел">
+                <input id="telephonyProvider" class="auth-input" placeholder="Провайдер">
+                <input id="telephonyContactName" class="auth-input" placeholder="Контакт">
+                <input id="telephonyPhone" class="auth-input" placeholder="Телефон">
+                <select id="telephonyDirection" class="auth-input">
+                    <option value="inbound">Входящий</option>
+                    <option value="outbound">Исходящий</option>
+                </select>
+                <select id="telephonyCallStatus" class="auth-input">
+                    <option value="answered">Отвечен</option>
+                    <option value="missed">Пропущен</option>
+                    <option value="failed">Неуспешен</option>
+                </select>
+                <input id="telephonyDurationSec" class="auth-input" placeholder="Длительность, сек">
+                <input id="telephonyCallSummary" class="auth-input" placeholder="Краткий итог звонка">
+            </div>
+            <div id="operationsTelephonyList" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <div class="section-header">
+                <div>
+        <h3 class="section-title">Аналитика и сохранённые отчёты</h3>
+                    <p class="section-subtitle">Сохраняй нужные аналитические срезы и запускай их без ручной сборки.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-primary" onclick="saveOperationsReport()">Сохранить отчёт</button>
+                </div>
+            </div>
+            <div class="finance-form-grid" style="margin-bottom:16px;">
+                <input id="operationsReportTitle" class="auth-input" placeholder="Название отчёта">
+                <select id="operationsReportType" class="auth-input">
+                    <option value="finance_analytics">Финансовая аналитика</option>
+          <option value="analytics_deep">Глубокая аналитика компании</option>
+                    <option value="dashboard_hub">Ролевые панели</option>
+                    <option value="analytics_drilldown">Проваливание в первичку</option>
+                    <option value="integration_monitoring">Мониторинг 1С</option>
+                    <option value="operations_monitoring">Операционный центр</option>
+          <option value="reliability_dashboard">Надёжность и восстановление</option>
+                </select>
+                <select id="operationsReportScope" class="auth-input">
+                    <option value="private">Личный отчёт</option>
+                    <option value="shared">Общий отчёт</option>
+                </select>
+                <select id="operationsReportRole" class="auth-input">
+                    <option value="">Для всех ролей</option>
+                    <option value="Директор">Директор</option>
+                    <option value="Бухгалтерия">Бухгалтерия</option>
+                    <option value="Менеджер">Менеджер</option>
+                    <option value="Склад и закупки">Склад и закупки</option>
+                    <option value="Производство и ОТК">Производство и ОТК</option>
+                </select>
+                <select id="operationsReportDashboardKind" class="auth-input">
+                    <option value="table">Табличный режим</option>
+                    <option value="cockpit">Операционный пульт</option>
+                    <option value="dashboard">Панель</option>
+                </select>
+                <input id="operationsReportDimension" class="auth-input" placeholder="Срез: клиент / продукт / склад">
+                <input id="operationsReportTags" class="auth-input" placeholder="Теги через запятую">
+            </div>
+            <div id="operationsReportsList" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Надёжность и целостность</h3>
+        <p class="section-subtitle">Проверки модулей, проблемы целостности, зависшие сущности и кандидаты на восстановление.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary" onclick="reloadOperationsCenter()">Обновить</button>
+        <button class="btn-secondary" onclick="exportOperationsSnapshot('reliability')">Экспорт данных</button>
+                </div>
+            </div>
+            <div id="operationsReliabilityList" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <div class="section-header">
+                <div>
+        <h3 class="section-title">Работа базы и сценарии восстановления</h3>
+        <p class="section-subtitle">База, миграции, фоновые запуски, контрольная точка и журнал действий по восстановлению.</p>
+                </div>
+                <div class="view-actions">
+        <button class="btn-secondary" onclick="runSystemRecoveryAction('release_stale_locks')">Снять зависшие блокировки</button>
+        <button class="btn-secondary" onclick="runSystemRecoveryAction('recover_sync_queue')">Разблокировать синхронизацию</button>
+        <button class="btn-secondary" onclick="runSystemRecoveryAction('checkpoint')">Контрольная точка</button>
+                </div>
+            </div>
+            <div id="operationsRuntimeList" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <div class="section-header">
+                <div>
+        <h3 class="section-title">Единый поток событий</h3>
+        <p class="section-subtitle">Общий поток событий из журнала аудита и изменений полей по доменам компании.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary" onclick="reloadOperationsCenter()">Обновить</button>
+                </div>
+            </div>
+            <div id="operationsEventStreamList" class="client360-list"></div>
+        </section>
+    </div>
+    <div id="integrationPlusMount" style="margin-top:20px;"></div>
+</div>

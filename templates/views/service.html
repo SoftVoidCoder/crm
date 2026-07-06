@@ -1,0 +1,77 @@
+<div id="serviceView" class="view-page view-page--compact" style="display:none;">
+    <div class="view-header">
+        <div class="view-heading">
+            <span class="view-eyebrow">Сервис</span>
+            <h1 class="view-title">Сервис и гарантия</h1>
+    <p class="view-subtitle">Рекламации, гарантийные обращения, дефекты, сроки сервиса и история закрытия сервисных кейсов.</p>
+        </div>
+    </div>
+    <div class="ops-overview-card">
+        <div>
+            <div class="ops-overview-title">Послепродажный контур</div>
+      <div class="ops-overview-text">Этот раздел закрывает гарантийные обращения и сервисные инциденты по проектам и контрагентам: дефект, ответственный, срок сервиса и решение.</div>
+        </div>
+        <div class="ops-overview-pills">
+            <span class="ops-pill">Гарантия</span>
+        <span class="ops-pill">Срок сервиса</span>
+            <span class="ops-pill">Рекламации</span>
+        </div>
+    </div>
+    <div id="serviceMetricsGrid" class="metrics-grid metrics-grid--info-rail"></div>
+    <div class="finance-layout">
+        <section class="surface-card surface-card--padded ops-form-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Новый сервисный кейс</h3>
+        <p class="section-subtitle">Фиксируй дефект, гарантийный срок, срок сервиса и ответственное лицо.</p>
+                </div>
+                <span class="ops-section-chip">Сервисная заявка</span>
+            </div>
+            <div class="finance-form-grid">
+                <select id="serviceProjectId" class="auth-input"><option value="0">Без проекта</option></select>
+                <select id="serviceClientId" class="auth-input"><option value="0">Без контрагента</option></select>
+                <input id="serviceCaseNumber" class="auth-input" placeholder="Номер кейса">
+                <input id="serviceTitle" class="auth-input" placeholder="Название обращения">
+                <select id="serviceCaseType" class="auth-input">
+                    <option value="warranty">Гарантия</option>
+                    <option value="claim">Рекламация</option>
+                    <option value="maintenance">Сервисный выезд</option>
+                </select>
+                <select id="serviceStatus" class="auth-input">
+                    <option value="open">Открыт</option>
+                    <option value="in_work">В работе</option>
+                    <option value="waiting_client">Ждёт клиента</option>
+                    <option value="closed">Закрыт</option>
+                </select>
+                <select id="servicePriority" class="auth-input">
+                    <option value="normal">Обычный</option>
+                    <option value="high">Высокий</option>
+                    <option value="critical">Критичный</option>
+                </select>
+                <input id="serviceWarrantyUntil" class="auth-input" placeholder="Гарантия до">
+                <input id="serviceSlaDeadline" class="auth-input" placeholder="Срок по регламенту">
+                <input id="serviceResponsible" class="auth-input" placeholder="Ответственный">
+                <textarea id="serviceDefect" class="auth-input" style="margin:0; min-height:96px;" placeholder="Описание дефекта"></textarea>
+                <textarea id="serviceResolution" class="auth-input" style="margin:0; min-height:96px;" placeholder="Решение / результат"></textarea>
+            </div>
+            <div class="finance-actions-row">
+                <button class="btn-secondary" onclick="resetServiceForm()">Очистить</button>
+                <button class="btn-primary" onclick="saveServiceCase()">Сохранить кейс</button>
+            </div>
+        </section>
+        <section class="surface-card surface-card--padded ops-list-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Реестр сервисных кейсов</h3>
+                    <p class="section-subtitle">Открытые обращения, гарантия и история устранения.</p>
+                </div>
+            </div>
+            <div class="table-shell">
+                <table class="admin-table admin-table--service">
+          <thead><tr><th>Кейс</th><th>Проект / Контрагент</th><th>Тип</th><th>Срок сервиса</th><th>Статус</th><th>Действия</th></tr></thead>
+                    <tbody id="serviceCasesTable"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>

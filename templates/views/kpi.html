@@ -1,4 +1,21 @@
-<div id="kpiView" style="display: none;">
-    <h1 style="margin:0 0 24px 0; font-size: 22px;">Дашборд эффективности сотрудников (KPI)</h1>
-    <div id="kpiListContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;"></div>
+<div id="kpiView" class="view-page crm-page-shell" style="display: none;">
+    <div class="view-header">
+        <div class="view-heading">
+            <span class="view-eyebrow">Аналитика</span>
+            <h1 class="view-title">Панель эффективности сотрудников</h1>
+            <p class="view-subtitle">Сводка по таймеру, поручениям, согласованиям и активности сотрудников в одном управленческом срезе.</p>
+        </div>
+        <div class="view-actions">
+            <button class="btn-secondary" onclick="renderKPI()">Обновить</button>
+        </div>
+    </div>
+    <div class="surface-card surface-card--padded tw-flex tw-flex-col tw-gap-4">
+        <div class="section-header">
+            <div>
+                <h3 class="section-title">Срез по команде</h3>
+                <p class="section-subtitle">Сравнивайте загрузку, результативность и операционную активность сотрудников без перехода в карточки пользователей.</p>
+            </div>
+        </div>
+        <div id="kpiListContainer" class="crm-kpi-grid tw-grid tw-gap-4"></div>
+    </div>
 </div>

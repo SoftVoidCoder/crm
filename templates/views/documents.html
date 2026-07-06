@@ -1,17 +1,97 @@
-<div id="documentsView" style="display: none;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-        <h1 style="margin:0; font-size: 22px;">Канцелярия (Реестр документов)</h1>
-        <button class="btn-primary" onclick="document.getElementById('createDocModal').style.display='flex'">+ Зарегистрировать документ</button>
+<!-- ========================================================================
+     Канцелярия (Documents) — Phase 1 design-system refactor.
+     Layout: view-header → workbench hints → tabs → toolbar → file list (Korda DS).
+     No inline styles; spacing + visuals come from .krd-* utilities in style.css.
+     ======================================================================== -->
+<div id="documentsView" class="view-page">
+    <!-- Page header -->
+    <header class="view-header">
+        <div class="view-heading">
+            <span class="view-eyebrow">Документы</span>
+            <h1 class="view-title">Канцелярия</h1>
+            <p class="view-subtitle">Единый реестр входящих, исходящих и внутренних документов с версиями файлов.</p>
+        </div>
+        <div class="view-actions">
+            <button class="krd-btn krd-btn--primary" onclick="openDocumentModalWithPreset()">
+                <svg class="krd-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Зарегистрировать документ
+            </button>
+        </div>
+    </header>
+
+    <!-- Quick-start workbench (kept for UX continuity) -->
+    <section class="workbench-strip">
+        <article class="workbench-card">
+            <div class="workbench-card-title">Работа с документом</div>
+            <div class="workbench-card-text">Выбери вкладку, зарегистрируй документ и дальше веди его уже в карточке и статусе.</div>
+        </article>
+        <article class="workbench-card">
+            <div class="workbench-card-title">Массовые действия</div>
+            <div class="workbench-card-text">Статусы, архив и выгрузка делаются ниже одной панелью без лишних переходов.</div>
+        </article>
+        <article class="workbench-card">
+            <div class="workbench-card-title">Быстро</div>
+            <div class="workbench-card-actions">
+                <button class="krd-btn krd-btn--primary krd-btn--sm" onclick="openDocumentModalWithPreset({ type: 'incoming' })">Входящий</button>
+                <button class="krd-btn krd-btn--outline krd-btn--sm" onclick="openDocumentModalWithPreset({ type: 'outgoing' })">Исходящий</button>
+                <button class="krd-btn krd-btn--outline krd-btn--sm" onclick="openDocumentModalWithPreset({ type: 'internal_order' })">Внутренний</button>
+            </div>
+        </article>
+    </section>
+
+    <!-- Saved filters -->
+    <div id="documentsSavedFiltersMount" class="view-actions"></div>
+
+    <!-- Operational counters -->
+    <div id="documentsOpsCounters" class="metrics-grid documents-ops-counters"></div>
+
+    <!-- Type tabs -->
+    <nav class="krd-tablist" aria-label="Типы документов">
+        <button class="krd-tab is-active" id="tabDocIncoming" role="tab" aria-selected="true" onclick="switchDocTab('incoming')">Входящие</button>
+        <button class="krd-tab" id="tabDocOutgoing" role="tab" aria-selected="false" onclick="switchDocTab('outgoing')">Исходящие</button>
+        <button class="krd-tab" id="tabDocInternal" role="tab" aria-selected="false" onclick="switchDocTab('internal')">Внутренние (приказы)</button>
+        <button class="krd-tab" id="tabDocDrafts" role="tab" aria-selected="false" onclick="switchDocTab('drafts')">Черновики</button>
+    </nav>
+
+    <!-- Bulk actions toolbar -->
+    <section class="krd-toolbar" aria-label="Массовые действия">
+        <div class="krd-toolbar__info" id="documentsBulkSummary">Выделение: 0 документов</div>
+        <div class="krd-toolbar__actions">
+            <button id="documentsBulkSelectBtn" class="krd-btn krd-btn--ghost krd-btn--sm" onclick="toggleAllDocumentsOnPage()">Выделить видимые</button>
+            <button id="documentsBulkRegisterBtn" class="krd-btn krd-btn--outline krd-btn--sm" onclick="bulkUpdateDocumentsStatus('registered')">Зарегистрировать</button>
+            <button id="documentsBulkArchiveBtn" class="krd-btn krd-btn--outline krd-btn--sm" onclick="bulkUpdateDocumentsStatus('archived')">В архив</button>
+            <button id="documentsBulkExportBtn" class="krd-btn krd-btn--outline krd-btn--sm" onclick="exportSelectedDocuments()">Экспорт</button>
+            <button id="documentsBulkDeleteBtn" class="krd-btn krd-btn--danger-ghost krd-btn--sm" onclick="bulkDeleteDocuments()">Удалить</button>
+            <button id="documentsBulkClearBtn" class="krd-btn krd-btn--ghost krd-btn--sm" onclick="clearSelectedDocuments()">Снять выделение</button>
+        </div>
+    </section>
+
+    <!-- Document packages mount -->
+    <div id="documentPackagesMount"></div>
+
+    <!-- Main document list (div-based, rendered by renderDocuments()) -->
+    <div class="krd-card krd-card--flush">
+        <header class="krd-card__head">
+            <div>
+                <h3 class="krd-card__title">Реестр документов</h3>
+                <p class="krd-card__subtitle">Плотный журнал корреспонденции: регистрация, маршрут, исполнитель, срок ответа и быстрые действия прямо из строки.</p>
+            </div>
+            <label class="krd-hstack krd-hstack--sm documents-select-all-label">
+                <input id="documentsSelectAllCheckbox" type="checkbox" onchange="toggleAllDocumentsOnPage(this.checked)">
+                Выделить всё
+            </label>
+        </header>
+        <div class="documents-registry-head">
+            <div>Документ и регистрация</div>
+            <div>Маршрут и связи</div>
+            <div>Срок и контроль</div>
+            <div>Исполнитель</div>
+            <div>Статус</div>
+            <div>Действия</div>
+        </div>
+        <div id="documentsListTable" class="krd-file-list krd-card__body--flush"></div>
     </div>
-    <div class="tabs" style="margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
-        <button class="tab active" id="tabDocIncoming" onclick="switchDocTab('incoming')">Входящие</button>
-        <button class="tab" id="tabDocOutgoing" onclick="switchDocTab('outgoing')">Исходящие</button>
-        <button class="tab" id="tabDocInternal" onclick="switchDocTab('internal')">Внутренние (Приказы)</button>
-    </div>
-    <div style="background: var(--card-bg); border-radius: 20px; border: 1px solid var(--border); overflow: hidden; padding: 24px;">
-        <table class="admin-table">
-            <thead><tr><th>№</th><th>Дата</th><th>Контрагент/Отдел</th><th>Тема (Кратко)</th><th>Статус</th><th>Скан</th></tr></thead>
-            <tbody id="documentsListTable"></tbody>
-        </table>
-    </div>
+
+    <!-- Deep mount -->
+    <div id="docflowPlusMount"></div>
 </div>

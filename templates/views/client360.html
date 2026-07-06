@@ -1,0 +1,91 @@
+<div id="client360View" class="view-page" style="display: none;">
+    <div class="view-header">
+        <div class="view-heading">
+    <span class="view-eyebrow">Клиент 360</span>
+            <h1 class="view-title">Контрагент 360</h1>
+            <p class="view-subtitle">Полная картина по клиенту: сделки, контакты, финансы, документы, претензии и суды в одном окне.</p>
+        </div>
+    </div>
+
+    <div id="client360EmptyState" class="surface-card surface-card--padded">
+        <div class="empty-state">Выбери контрагента из базы клиентов или открой первый доступный, чтобы увидеть полное досье.</div>
+    </div>
+
+    <div id="client360Content" class="client360-content" style="display:none;">
+        <div class="surface-card surface-card--padded">
+            <div class="client360-hero">
+                <div>
+                    <div class="client360-title-row">
+                        <h2 id="client360Name" class="section-title" style="margin:0;"></h2>
+                        <span id="client360Inn" class="email-mailbox-chip"></span>
+                    </div>
+                    <p id="client360Contact" class="section-subtitle" style="margin-top:8px;"></p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary" onclick="navigateTo('clients')">К базе клиентов</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="ops-overview-card">
+            <div>
+                <div class="ops-overview-title">Единое досье по контрагенту</div>
+                <div class="ops-overview-text">Этот экран собирает сделки, контакты, деньги, закупки, производство и юридическую историю в одном месте. Он должен отвечать на вопрос “что сейчас происходит по клиенту?” без похода по разным разделам.</div>
+            </div>
+            <div class="ops-overview-pills">
+                <span class="ops-pill">Сделки</span>
+                <span class="ops-pill">Финансы</span>
+                <span class="ops-pill">История</span>
+            </div>
+        </div>
+
+        <div id="client360Metrics" class="metrics-grid"></div>
+
+        <div class="client360-grid">
+            <section class="surface-card surface-card--padded">
+                <h3 class="section-title">Проекты и сделки</h3>
+                <div id="client360Projects" class="client360-list"></div>
+            </section>
+            <section class="surface-card surface-card--padded">
+                <h3 class="section-title">Контакты</h3>
+                <div id="client360Contacts" class="client360-list"></div>
+            </section>
+            <section class="surface-card surface-card--padded">
+                <h3 class="section-title">Финансовый контур</h3>
+                <div id="client360Finance" class="client360-list"></div>
+            </section>
+            <section class="surface-card surface-card--padded">
+                <h3 class="section-title">Коммерческие условия</h3>
+                <div id="client360Commercial" class="client360-list"></div>
+            </section>
+            <section class="surface-card surface-card--padded">
+                <h3 class="section-title">Закупки и производство</h3>
+                <div id="client360Ops" class="client360-list"></div>
+            </section>
+            <section class="surface-card surface-card--padded">
+                <h3 class="section-title">1С ЭПЛ</h3>
+                <div id="client360Epl" class="client360-list"></div>
+            </section>
+            <section class="surface-card surface-card--padded">
+                <h3 class="section-title">Интеграции и коммуникации</h3>
+                <div id="client360Integrations" class="client360-list"></div>
+            </section>
+            <section class="surface-card surface-card--padded">
+                <h3 class="section-title">Документы</h3>
+                <div id="client360Documents" class="client360-list"></div>
+            </section>
+            <section class="surface-card surface-card--padded">
+                <h3 class="section-title">Претензии и суды</h3>
+                <div id="client360Legal" class="client360-list"></div>
+            </section>
+            <section class="surface-card surface-card--padded">
+                <h3 class="section-title">Сервис и гарантия</h3>
+                <div id="client360Service" class="client360-list"></div>
+            </section>
+            <section class="surface-card surface-card--padded">
+                <h3 class="section-title">Лента событий</h3>
+                <div id="client360Timeline" class="client360-list"></div>
+            </section>
+        </div>
+    </div>
+</div>

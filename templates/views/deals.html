@@ -1,0 +1,56 @@
+<div id="dealsView" class="view-page" style="display:none;">
+    <div class="surface-card surface-card--padded crm-workspace-shell">
+        <div class="view-header">
+            <div class="view-heading">
+                <span class="view-eyebrow">CRM</span>
+                <h1 class="view-title">Сделки</h1>
+                <p class="view-subtitle">Плотный рабочий контур по воронке, суммам, следующим шагам и активности по клиентам.</p>
+            </div>
+            <div class="view-actions">
+                <button class="btn-primary" onclick="openDealEditor()">+ Новая сделка</button>
+            </div>
+        </div>
+
+        <div id="dealSummaryStrip" class="crm-summary-strip"></div>
+
+        <div class="crm-toolbar">
+            <div class="crm-toolbar__group crm-toolbar__group--wide">
+                <input id="dealSearchInput" class="auth-input" type="search" placeholder="Поиск по сделкам, клиентам, номеру КП" oninput="applyDealSearch(this.value)">
+            </div>
+            <div class="crm-toolbar__group">
+                <select id="dealStageFilter" class="auth-input" onchange="setDealStageFilter(this.value)">
+                    <option value="">Все стадии</option>
+                    <option value="qualification">Квалификация</option>
+                    <option value="proposal">Предложение</option>
+                    <option value="negotiation">Переговоры</option>
+                    <option value="won">Выиграно</option>
+                    <option value="lost">Потеряно</option>
+                </select>
+                <select id="dealResponsibleFilter" class="auth-input" onchange="setDealResponsibleFilter(this.value)">
+                    <option value="">Все ответственные</option>
+                </select>
+                <select id="dealSortSelect" class="auth-input" onchange="setDealSort(this.value)">
+                    <option value="due_asc">Сначала ближайшие действия</option>
+                    <option value="due_desc">Сначала дальние действия</option>
+                    <option value="amount_desc">Сумма по убыванию</option>
+                    <option value="title_asc">По названию</option>
+                    <option value="margin_desc">По марже</option>
+                </select>
+            </div>
+            <div class="crm-toolbar__group">
+                <select id="dealPresetSelect" class="auth-input" onchange="applyDealPreset(this.value)">
+                    <option value="">Пресет фильтра</option>
+                </select>
+                <button class="btn-secondary" onclick="saveDealPreset()">Сохранить фильтр</button>
+                <button class="btn-secondary" onclick="resetDealFilters()">Сбросить</button>
+            </div>
+            <div class="crm-mode-switch">
+                <button id="dealModeRegistry" class="btn-secondary" onclick="setDealViewMode('registry')">Реестр</button>
+                <button id="dealModeKanban" class="btn-secondary" onclick="setDealViewMode('kanban')">Канбан</button>
+            </div>
+        </div>
+
+        <div id="dealEditorPanel" class="crm-editor-panel" style="display:none;"></div>
+        <div id="dealsContentMount"></div>
+    </div>
+</div>

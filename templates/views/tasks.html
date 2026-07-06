@@ -1,11 +1,72 @@
-<div id="tasksView" style="display: none;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-        <h1 style="margin:0; font-size: 22px;">Мои поручения</h1>
-        <button class="btn-primary" onclick="openCreateTaskModal()">+ Дать поручение</button>
+<div id="tasksView" class="view-page task-center-page" style="display: none;">
+    <div class="view-header task-center-header">
+        <div class="view-heading">
+            <span class="view-eyebrow">Операционный центр</span>
+            <h1 class="view-title">Центр задач</h1>
+            <p class="view-subtitle">Плотный реестр поручений, быстрые действия, сроки, календарь и живая переписка по каждой задаче.</p>
+        </div>
+        <div class="view-actions task-center-header__actions">
+            <button class="btn-secondary" onclick="taskCenterResetLayout()">Сбросить вид</button>
+            <button class="btn-secondary" onclick="taskCenterSaveCurrentFilter()">Сохранить фильтр</button>
+            <button class="btn-primary" onclick="openCreateTaskModal()">+ Дать поручение</button>
+        </div>
     </div>
-    <div class="tabs" style="margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
-        <button class="tab active" id="tabTaskActive" onclick="switchTaskTab('active')">В работе</button>
-        <button class="tab" id="tabTaskCompleted" onclick="switchTaskTab('completed')">Выполненные</button>
+
+    <div id="taskCenterCounters" class="task-center-counters"></div>
+
+    <div class="surface-card task-center-shell">
+        <div class="task-center-toolbar">
+            <div class="task-center-search">
+                <input id="taskCenterSearch" type="text" class="auth-input" placeholder="Поиск по задаче, описанию, проекту, исполнителю" oninput="taskCenterHandleSearch(this.value)">
+            </div>
+            <div class="task-center-toolbar__filters">
+                <select id="taskCenterStatusFilter" class="auth-input" onchange="taskCenterSetFilter('statusScope', this.value)">
+                    <option value="all">Все статусы</option>
+                    <option value="active">В работе</option>
+                    <option value="completed">Выполнено</option>
+                    <option value="overdue">Просрочено</option>
+                    <option value="mine">Назначено мне</option>
+                    <option value="delegated">Назначено мной</option>
+                </select>
+                <select id="taskCenterPriorityFilter" class="auth-input" onchange="taskCenterSetFilter('priority', this.value)">
+                    <option value="all">Все приоритеты</option>
+                    <option value="high">Высокий</option>
+                    <option value="normal">Нормальный</option>
+                </select>
+                <select id="taskCenterSavedFilter" class="auth-input" onchange="taskCenterApplySavedFilter(this.value)">
+                    <option value="">Сохранённые фильтры</option>
+                </select>
+                <button class="btn-secondary" onclick="taskCenterOpenColumns()">Колонки</button>
+            </div>
+        </div>
+
+        <div class="task-center-modes">
+            <button class="tab active" id="taskModeList" onclick="taskCenterSwitchMode('list')">Список</button>
+            <button class="tab" id="taskModeDeadlines" onclick="taskCenterSwitchMode('deadlines')">Сроки</button>
+            <button class="tab" id="taskModePlan" onclick="taskCenterSwitchMode('plan')">Мой план</button>
+            <button class="tab" id="taskModeCalendar" onclick="taskCenterSwitchMode('calendar')">Календарь</button>
+            <button class="tab" id="taskModeGantt" onclick="taskCenterSwitchMode('gantt')">Гант</button>
+        </div>
+
+        <div id="taskCenterBulkBar" class="task-center-bulkbar" style="display:none;"></div>
+
+        <div class="task-center-layout">
+            <div class="task-center-main">
+                <div id="taskCenterViewMount"></div>
+            </div>
+            <aside class="task-center-side">
+                <div class="task-center-side__card">
+                    <div class="task-center-side__head">
+                        <div>
+                            <div class="task-center-side__eyebrow">Детали</div>
+                            <div id="taskDetailTitle" class="task-center-side__title">Выбери задачу</div>
+                        </div>
+                    </div>
+                    <div id="taskDetailBody" class="task-center-side__body">
+                        <div class="task-center-empty">Открой строку в реестре, чтобы увидеть историю, комментарии и быстрые действия.</div>
+                    </div>
+                </div>
+            </aside>
+        </div>
     </div>
-    <div id="tasksListContainer" style="display: flex; flex-direction: column; gap: 12px;"></div>
 </div>

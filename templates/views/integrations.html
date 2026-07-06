@@ -1,0 +1,96 @@
+<div id="integrationsView" class="view-page" style="display: none;">
+    <div class="view-header">
+        <div class="view-heading">
+            <span class="view-eyebrow">Интеграции</span>
+            <h1 class="view-title">Обмен с 1С и внешними системами</h1>
+            <p class="view-subtitle">Перенос документов, входящие ответы по оплатам и контроль ошибок обмена собраны в одном разделе.</p>
+        </div>
+        <div class="view-actions">
+            <button class="btn-secondary" onclick="navigateTo('operations')">Операционный мониторинг</button>
+        </div>
+    </div>
+
+    <section class="surface-card surface-card--padded ops-form-card" style="margin-bottom:16px;">
+        <div class="section-header">
+            <div>
+                <h3 class="section-title">Перенос документов из 1С</h3>
+                <p class="section-subtitle">Скопируй список документов из 1С или Excel, проверь пакет и перенеси его в канцелярию Korda.</p>
+            </div>
+            <span class="ops-section-chip">Документы</span>
+        </div>
+        <div class="workbench-strip" style="margin:0 0 14px 0;">
+            <div class="workbench-card">
+                <div class="workbench-card-title">1. В 1С</div>
+                <div class="workbench-card-text">Открой журнал документов, выдели строки и выгрузи список через «Ещё» или «Выгрузить список».</div>
+            </div>
+            <div class="workbench-card">
+                <div class="workbench-card-title">2. Вставь сюда</div>
+                <div class="workbench-card-text">Нужны колонки: тип, номер, дата, контрагент, тема, статус, ссылка/ID 1С. Можно вставлять таблицу из Excel.</div>
+            </div>
+            <div class="workbench-card">
+                <div class="workbench-card-title">3. Проверь</div>
+                <div class="workbench-card-text">Korda покажет, что создаст, что обновит и где надо исправить номер, дату или описание.</div>
+            </div>
+        </div>
+        <div class="finance-form-grid">
+            <textarea id="documentsOneCImportPayload" class="auth-input" style="margin:0; min-height:150px; grid-column:1 / -1;" placeholder='[{"тип": "входящий", "номер": "ВХ-42", "дата": "23.04.2026", "контрагент": "ООО Ромашка", "тема": "Договор поставки", "статус": "зарегистрирован", "внешний идентификатор": "1C-DOC-42"}]'></textarea>
+            <input id="documentsOneCImportNote" class="auth-input" style="margin:0; grid-column:1 / -1;" placeholder="Комментарий к переносу / номер выгрузки из 1С">
+        </div>
+        <div id="documentsOneCImportPreview" class="surface-card surface-card--soft surface-card--padded" style="margin-top:14px;">
+            <div class="nsi-empty-row" style="padding:14px;">Проверка ещё не запускалась. Вставь выгрузку из 1С и нажми «Проверить перенос».</div>
+        </div>
+        <div class="finance-actions-row">
+            <button class="btn-secondary" onclick="clearDocumentsOneCImport()">Очистить</button>
+            <button class="btn-secondary" onclick="previewDocumentsOneCImport()">Проверить перенос</button>
+            <button class="btn-primary" onclick="applyDocumentsOneCImport()">Перенести документы</button>
+        </div>
+    </section>
+
+    <section class="surface-card surface-card--padded ops-form-card">
+        <div class="section-header">
+            <div>
+                <h3 class="section-title">Входящие статусы оплат из 1С</h3>
+                <p class="section-subtitle">Проверка и применение ответов 1С по оплатам, внешним идентификаторам и расхождениям сумм.</p>
+            </div>
+            <span class="ops-section-chip">Финансы</span>
+        </div>
+        <div class="finance-form-grid">
+            <textarea id="financeInboundSyncPayload" class="auth-input" style="margin:0; min-height:160px; grid-column:1 / -1;" placeholder='[{"идентификатор записи": 15, "внешний идентификатор": "1C-FIN-15", "статус": "оплачено", "дата оплаты": "12.04.2026", "сумма": 150000}]'></textarea>
+            <input id="financeInboundSyncNote" class="auth-input" style="margin:0; grid-column:1 / -1;" placeholder="Комментарий оператора синхронизации / номер пакета обмена">
+        </div>
+        <div id="financeInboundSyncPreview" class="surface-card surface-card--soft surface-card--padded" style="margin-top:14px;">
+            <div class="nsi-empty-row" style="padding:14px;">Проверка ещё не запускалась. Вставь пакет из 1С и нажми «Проверить пакет».</div>
+        </div>
+        <div class="finance-actions-row">
+            <button class="btn-secondary" onclick="clearFinanceInboundSync()">Очистить</button>
+            <button class="btn-secondary" onclick="previewFinanceInboundSync()">Проверить пакет</button>
+            <button class="btn-primary" onclick="applyFinanceInboundSync()">Применить статусы оплат</button>
+        </div>
+    </section>
+
+    <section class="surface-card surface-card--padded ops-form-card" style="margin-top:16px;">
+        <div class="section-header">
+            <div>
+                <h3 class="section-title">Прочие контуры обмена</h3>
+                <p class="section-subtitle">Служебные интеграции остаются в рабочих модулях, но вход в них собран здесь.</p>
+            </div>
+            <span class="ops-section-chip">Мониторинг</span>
+        </div>
+        <div class="workbench-strip" style="margin:0;">
+            <div class="workbench-card">
+                <div class="workbench-card-title">ЭПЛ и транспорт</div>
+                <div class="workbench-card-text">Обмен статусами путевых листов и контроль ошибок отправки.</div>
+                <div class="workbench-card-actions">
+                    <button class="btn-secondary" onclick="navigateTo('accounting'); setTimeout(() => { if (typeof switchAccountingTab === 'function') switchAccountingTab('integration'); }, 120);">Открыть обмен ЭПЛ</button>
+                </div>
+            </div>
+            <div class="workbench-card">
+                <div class="workbench-card-title">Очередь и ошибки</div>
+                <div class="workbench-card-text">Технический мониторинг обмена, повторы, конфликты и сверка с внешними системами.</div>
+                <div class="workbench-card-actions">
+                    <button class="btn-secondary" onclick="navigateTo('operations')">Открыть мониторинг</button>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

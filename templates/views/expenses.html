@@ -1,0 +1,84 @@
+<div id="expensesView" class="view-page" style="display:none;">
+    <div class="view-header">
+        <div class="view-heading">
+    <span class="view-eyebrow">Контроль расходов</span>
+            <h1 class="view-title">Оплаты и согласование затрат</h1>
+            <p class="view-subtitle">Запросы на оплату, согласование расходов, связь с проектами и контроль, кто инициировал и кто утвердил.</p>
+        </div>
+    </div>
+    <div class="ops-overview-card">
+        <div>
+            <div class="ops-overview-title">Контур согласования затрат</div>
+            <div class="ops-overview-text">Этот раздел закрывает 1С-подобный процесс: инициатор, сумма, срок, согласующий и итоговый статус оплаты.</div>
+        </div>
+        <div class="ops-overview-pills">
+            <span class="ops-pill">Согласование</span>
+            <span class="ops-pill">Оплата</span>
+            <span class="ops-pill">Контроль</span>
+        </div>
+    </div>
+    <div id="expensesMetricsGrid" class="metrics-grid metrics-grid--info-rail"></div>
+    <div class="finance-layout">
+        <section class="surface-card surface-card--padded ops-form-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Новый запрос</h3>
+                    <p class="section-subtitle">Оформи заявку на оплату или расход и направь её на согласование.</p>
+                </div>
+        <span class="ops-section-chip">Рабочее место расходов</span>
+            </div>
+            <div class="finance-form-grid">
+                <select id="expenseProjectId" class="auth-input"><option value="0">Без проекта</option></select>
+                <select id="expenseClientId" class="auth-input"><option value="0">Без контрагента</option></select>
+                <input id="expenseTitle" class="auth-input" placeholder="Название запроса">
+                <select id="expenseType" class="auth-input">
+                    <option value="payment">Оплата поставщику</option>
+                    <option value="expense">Внутренний расход</option>
+                    <option value="advance">Аванс</option>
+                    <option value="budget_shift">Сдвиг бюджета</option>
+                </select>
+                <input id="expenseAmount" class="auth-input" placeholder="Сумма">
+                <input id="expenseDueDate" class="auth-input" placeholder="Срок оплаты">
+                <select id="expenseCurrency" class="auth-input">
+                    <option value="RUB">Рубль</option>
+                    <option value="USD">Доллар</option>
+                    <option value="EUR">Евро</option>
+                    <option value="CNY">Юань</option>
+                </select>
+                <select id="expenseApproverRole" class="auth-input">
+                    <option value="Директор">Директор</option>
+                    <option value="Бухгалтерия">Бухгалтерия</option>
+                    <option value="Юрист">Юрист</option>
+                </select>
+                <input id="expenseApproverName" class="auth-input" placeholder="Согласующий по имени">
+                <select id="expenseLinkedPayment" class="auth-input"><option value="0">Без связанной оплаты</option></select>
+                <select id="expenseStatus" class="auth-input">
+                    <option value="draft">Черновик</option>
+                    <option value="pending">На согласовании</option>
+                    <option value="approved">Согласовано</option>
+                    <option value="paid">Оплачено</option>
+                    <option value="rejected">Отклонено</option>
+                </select>
+                <textarea id="expenseComment" class="auth-input" style="margin:0; min-height:96px; grid-column:1 / -1;" placeholder="Комментарий, основание, поставщик, статья расхода"></textarea>
+            </div>
+            <div class="finance-actions-row">
+                <button class="btn-secondary" onclick="resetExpenseForm()">Очистить</button>
+                <button class="btn-primary" onclick="saveExpenseRequest()">Сохранить запрос</button>
+            </div>
+        </section>
+        <section class="surface-card surface-card--padded ops-list-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Реестр согласований</h3>
+                    <p class="section-subtitle">Все запросы на оплату и расходы по проектам с историей статусов.</p>
+                </div>
+            </div>
+            <div class="table-shell">
+                <table class="admin-table">
+                    <thead><tr><th>Запрос</th><th>Проект / Контрагент</th><th>Сумма</th><th>Согласование</th><th>Статус</th><th>Действия</th></tr></thead>
+                    <tbody id="expenseRequestsTable"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>

@@ -1,0 +1,256 @@
+<div id="accountingView" class="view-page" style="display: none;">
+    <div class="view-header">
+        <div class="view-heading">
+    <span class="view-eyebrow">ЭПЛ</span>
+            <h1 class="view-title">Бухгалтерия / ЭПЛ</h1>
+    <p class="view-subtitle">Единый контур для электронных путевых листов: справочники водителей и ТС, маршрутные карточки, титулы медосмотра и техконтроля, QR-код и подготовка к передаче во внешний контур.</p>
+        </div>
+    </div>
+
+    <div class="ops-overview-card">
+        <div>
+            <div class="ops-overview-title">Электронный путевой лист без разрыва по процессу</div>
+        <div class="ops-overview-text">Раздел собирает в одном месте всё, что обычно разваливается по чатам, таблицам и бумаге: выпуск на линию, возврат, подписи по титулам и контроль проблемных путёвок.</div>
+        </div>
+        <div class="ops-overview-pills">
+        <span class="ops-pill">QR-код</span>
+            <span class="ops-pill">Титулы</span>
+            <span class="ops-pill">ЭПД</span>
+        </div>
+    </div>
+
+    <div id="eplMetricsGrid" class="metrics-grid metrics-grid--info-rail"></div>
+
+    <div class="accounting-pulse-grid">
+        <section class="surface-card surface-card--padded">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Последние ЭПЛ</h3>
+                    <p class="section-subtitle">Быстрый срез по последним путевым листам и их готовности.</p>
+                </div>
+            </div>
+            <div id="eplRecentList" class="accounting-stack"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Сигналы и допуски</h3>
+                    <p class="section-subtitle">Просрочки, истекающие допуски и проблемные ЭПЛ без закрытых титулов.</p>
+                </div>
+            </div>
+            <div id="eplAlertsDigest" class="accounting-stack"></div>
+        </section>
+    </div>
+
+    <div class="tabs accounting-tabs">
+        <button id="accountingTabWaybills" class="tab active" onclick="switchAccountingTab('waybills')">ЭПЛ</button>
+        <button id="accountingTabDrivers" class="tab" onclick="switchAccountingTab('drivers')">Водители</button>
+        <button id="accountingTabVehicles" class="tab" onclick="switchAccountingTab('vehicles')">Транспорт</button>
+    </div>
+
+    <div id="accountingWaybillsPanel">
+        <div class="finance-layout">
+            <section class="surface-card surface-card--padded ops-form-card">
+                <div class="section-header">
+                    <div>
+                        <h3 class="section-title">Карточка путевого листа</h3>
+                        <p class="section-subtitle">Заполни маршрут, назначь водителя и машину, зафиксируй выпуск и держи в одной карточке весь жизненный цикл ЭПЛ.</p>
+                    </div>
+                    <span class="ops-section-chip">ЭПЛ</span>
+                </div>
+                <div id="eplWaybillPolicyBanner" class="form-policy-banner" style="display:none;"></div>
+                <div id="eplWaybillForm" class="finance-form-grid">
+                    <input id="eplWaybillNumber" class="auth-input" placeholder="Номер ЭПЛ">
+                    <div><input id="eplWaybillIssueDate" data-field="eplWaybillIssueDate" class="auth-input" placeholder="Дата оформления (дд.мм.гггг)"><span class="form-error" data-error-for="eplWaybillIssueDate"></span></div>
+                    <div><input id="eplWaybillShiftDate" data-field="eplWaybillShiftDate" class="auth-input" placeholder="Дата рейса (дд.мм.гггг)"><span class="form-error" data-error-for="eplWaybillShiftDate"></span></div>
+                    <select id="eplWaybillType" class="auth-input">
+                        <option value="truck">Грузовой</option>
+                        <option value="passenger">Пассажирский</option>
+                        <option value="special">Спецтехника</option>
+                    </select>
+                    <select id="eplWaybillProjectId" class="auth-input"><option value="0">Без проекта</option></select>
+                    <div><select id="eplWaybillClientId" data-field="eplWaybillClientId" class="auth-input"><option value="0">Без контрагента</option></select><span class="form-error" data-error-for="eplWaybillClientId"></span></div>
+                    <select id="eplWaybillDriverId" class="auth-input"><option value="0">Выбери водителя</option></select>
+                    <select id="eplWaybillVehicleId" class="auth-input"><option value="0">Выбери ТС</option></select>
+                    <input id="eplWaybillRouteText" class="auth-input" style="margin:0; grid-column:1 / -1;" placeholder="Маршрут / задание / номер рейса">
+                    <input id="eplWaybillCargo" class="auth-input" placeholder="Груз / назначение">
+                    <input id="eplWaybillDeparturePoint" class="auth-input" placeholder="Пункт выезда">
+                    <input id="eplWaybillDestinationPoint" class="auth-input" placeholder="Пункт назначения">
+                    <input id="eplWaybillDispatcherName" class="auth-input" placeholder="Диспетчер">
+                    <input id="eplWaybillMedicalName" class="auth-input" placeholder="Медработник">
+                    <input id="eplWaybillMechanicName" class="auth-input" placeholder="Механик / контролёр">
+                    <input id="eplWaybillPlannedDeparture" class="auth-input" placeholder="Плановый выезд">
+                    <input id="eplWaybillActualDeparture" class="auth-input" placeholder="Факт выезда">
+                    <input id="eplWaybillActualReturn" class="auth-input" placeholder="Факт возврата">
+                    <input id="eplWaybillOdometerOut" class="auth-input" placeholder="Одометр при выезде">
+                    <input id="eplWaybillOdometerIn" class="auth-input" placeholder="Одометр при возврате">
+                    <input id="eplWaybillFuelIssued" class="auth-input" placeholder="Топливо выдано, л">
+                    <input id="eplWaybillFuelReturned" class="auth-input" placeholder="Топливо остаток, л">
+                    <select id="eplWaybillStatus" class="auth-input">
+                        <option value="draft">Черновик</option>
+                        <option value="ready">Готов к выпуску</option>
+                        <option value="on_route">На линии</option>
+                        <option value="returned">Возврат зафиксирован</option>
+                        <option value="closed">Закрыт</option>
+                    </select>
+                    <select id="eplWaybillIntegrationStatus" class="auth-input">
+                        <option value="draft">Черновик</option>
+                        <option value="collecting">Сбор титулов</option>
+                        <option value="ready">Готов к отправке</option>
+                        <option value="queued">В очереди</option>
+                        <option value="sent">Отправлен</option>
+                        <option value="accepted">Принят</option>
+                        <option value="error">Ошибка</option>
+                    </select>
+                    <input id="eplWaybillOperatorName" class="auth-input" placeholder="Оператор ЭДО / контур">
+                    <input id="eplWaybillExternalId" class="auth-input" placeholder="Внешний идентификатор / GUID">
+                    <textarea id="eplWaybillNotes" class="auth-input" style="margin:0; min-height:110px; grid-column:1 / -1;" placeholder="Примечание, особые условия, причина ошибки интеграции, комментарий по рейсу..."></textarea>
+                </div>
+                <div class="finance-actions-row">
+                    <button class="btn-secondary" onclick="resetEplWaybillForm()">Очистить</button>
+                    <button class="btn-primary" onclick="saveEplWaybill()">Сохранить ЭПЛ</button>
+                </div>
+            </section>
+
+            <section class="surface-card surface-card--padded ops-list-card">
+                <div class="section-header">
+                    <div>
+                        <h3 class="section-title">Реестр путевых листов</h3>
+          <p class="section-subtitle">Фильтруй проблемные рейсы, отслеживай выпуск и возврат, открывай карточку титулов и выгружай реестр в таблицу.</p>
+                    </div>
+                    <div class="view-actions">
+                        <div id="eplSavedFiltersMount" class="view-actions"></div>
+                        <button class="btn-secondary" onclick="seedEplDemoData(true)">Заполнить пример</button>
+          <button class="btn-secondary" onclick="exportEplWaybills()">Экспорт</button>
+                    </div>
+                </div>
+                <div id="eplWaybillRegistryHint" class="surface-card accounting-info-strip"></div>
+                <div id="eplBulkActionsMount"></div>
+                <div class="table-shell">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th class="bulk-select-col">✓</th>
+                                <th>ЭПЛ</th>
+                                <th>Водитель / ТС</th>
+                                <th>Маршрут</th>
+                                <th>Готовность</th>
+                                <th>Обмен</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="eplWaybillsTable"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <section class="surface-card surface-card--padded accounting-detail-card">
+            <div class="section-header">
+                <div>
+                    <h3 id="eplSelectedWaybillTitle" class="section-title">Карточка титулов ЭПЛ</h3>
+          <p class="section-subtitle">Выбери путевой лист в реестре, чтобы подписывать этапы, смотреть QR-код и видеть журнал событий.</p>
+                </div>
+                <div class="view-actions">
+          <button class="btn-secondary" onclick="openSelectedEplQr()">QR-код</button>
+                    <button class="btn-secondary" onclick="openSelectedEplProject()">Проект</button>
+          <button class="btn-secondary" onclick="processEplSyncQueue()">В очередь</button>
+          <button class="btn-secondary" onclick="replaySelectedEplSync()">Повтор</button>
+          <button class="btn-secondary" onclick="reopenSelectedEplWaybill()">Вернуть</button>
+                </div>
+            </div>
+            <div id="eplWaybillDetailBody" class="accounting-detail-body"></div>
+        </section>
+    </div>
+
+    <div id="accountingDriversPanel" style="display:none;">
+        <div class="finance-layout">
+            <section class="surface-card surface-card--padded ops-form-card">
+                <div class="section-header"><div><h3 class="section-title">Справочник водителей</h3><p class="section-subtitle">Держи под рукой удостоверения, допуски и профиль подписи для ЭПЛ.</p></div></div>
+                <div id="eplDriverPolicyBanner" class="form-policy-banner" style="display:none;"></div>
+                <div class="finance-form-grid">
+                    <input id="eplDriverFullName" class="auth-input" placeholder="ФИО">
+                    <input id="eplDriverPersonnelNumber" class="auth-input" placeholder="Табельный номер">
+                    <input id="eplDriverLicenseNumber" class="auth-input" placeholder="Номер ВУ">
+                    <input id="eplDriverLicenseCategory" class="auth-input" placeholder="Категории">
+                    <input id="eplDriverPhone" class="auth-input" placeholder="Телефон">
+                    <input id="eplDriverMedicalValidTo" class="auth-input" placeholder="Меддопуск до (дд.мм.гггг)">
+                    <select id="eplDriverSignatureProfile" class="auth-input"><option value="УНЭП">УНЭП</option><option value="УКЭП">УКЭП</option><option value="Внешняя ЭП">Внешняя ЭП</option></select>
+                    <select id="eplDriverStatus" class="auth-input"><option value="active">Активен</option><option value="vacation">Отпуск</option><option value="blocked">Заблокирован</option><option value="archived">Архив</option></select>
+                    <textarea id="eplDriverComment" class="auth-input" style="margin:0; min-height:100px; grid-column:1 / -1;" placeholder="Примечание по допуску, роли или ограничениям..."></textarea>
+                </div>
+                <div class="finance-actions-row"><button class="btn-secondary" onclick="resetEplDriverForm()">Очистить</button><button class="btn-primary" onclick="saveEplDriver()">Сохранить водителя</button></div>
+            </section>
+            <section class="surface-card surface-card--padded ops-list-card">
+                <div class="section-header">
+                    <div><h3 class="section-title">Реестр водителей</h3><p class="section-subtitle">Активные, отпуск, архив и контроль сроков меддопуска.</p></div>
+                    <div class="view-actions">
+                        <button class="btn-secondary" onclick="setEplDriverFilter('all')">Все</button>
+                        <button class="btn-secondary" onclick="setEplDriverFilter('active')">Активные</button>
+                        <button class="btn-secondary" onclick="setEplDriverFilter('vacation')">Отпуск</button>
+                        <button class="btn-secondary" onclick="setEplDriverFilter('blocked')">Заблок.</button>
+                        <button class="btn-secondary" onclick="setEplDriverFilter('expiring')">Допуск истекает</button>
+                    </div>
+                </div>
+                <div class="table-shell"><table class="admin-table"><thead><tr><th>Водитель</th><th>ВУ</th><th>Меддопуск</th><th>Статус</th><th>Действия</th></tr></thead><tbody id="eplDriversTable"></tbody></table></div>
+            </section>
+        </div>
+    </div>
+
+    <div id="accountingVehiclesPanel" style="display:none;">
+        <div class="finance-layout">
+            <section class="surface-card surface-card--padded ops-form-card">
+                <div class="section-header"><div><h3 class="section-title">Справочник транспорта</h3><p class="section-subtitle">Веди парк, гаражные номера, одометр и сроки диагностики в одном месте.</p></div></div>
+                <div id="eplVehiclePolicyBanner" class="form-policy-banner" style="display:none;"></div>
+                <div class="finance-form-grid">
+                    <input id="eplVehicleRegistrationNo" class="auth-input" placeholder="Госномер">
+                    <input id="eplVehicleGarageNumber" class="auth-input" placeholder="Гаражный номер">
+                    <input id="eplVehicleBrand" class="auth-input" placeholder="Марка">
+                    <input id="eplVehicleModel" class="auth-input" placeholder="Модель">
+                    <input id="eplVehicleTrailerRegistration" class="auth-input" placeholder="Прицеп / полуприцеп">
+                    <input id="eplVehicleOdometer" class="auth-input" placeholder="Текущий одометр">
+                    <input id="eplVehicleCarryingCapacity" class="auth-input" placeholder="Грузоподъёмность, т">
+                    <input id="eplVehicleDiagnosticValidTo" class="auth-input" placeholder="Диагностика до">
+                    <input id="eplVehicleInsuranceValidTo" class="auth-input" placeholder="ОСАГО / страхование до">
+                    <select id="eplVehicleStatus" class="auth-input"><option value="active">Активно</option><option value="repair">Ремонт</option><option value="reserve">Резерв</option><option value="archived">Архив</option></select>
+                    <textarea id="eplVehicleComment" class="auth-input" style="margin:0; min-height:100px; grid-column:1 / -1;" placeholder="Примечание, ограничения, кузов, холодильник, спецоборудование..."></textarea>
+                </div>
+                <div class="finance-actions-row"><button class="btn-secondary" onclick="resetEplVehicleForm()">Очистить</button><button class="btn-primary" onclick="saveEplVehicle()">Сохранить ТС</button></div>
+            </section>
+            <section class="surface-card surface-card--padded ops-list-card">
+                <div class="section-header">
+                    <div><h3 class="section-title">Реестр транспорта</h3><p class="section-subtitle">Оперативный парк и контроль диагностических сроков.</p></div>
+                    <div class="view-actions">
+                        <button class="btn-secondary" onclick="setEplVehicleFilter('all')">Все</button>
+                        <button class="btn-secondary" onclick="setEplVehicleFilter('active')">Активные</button>
+                        <button class="btn-secondary" onclick="setEplVehicleFilter('repair')">Ремонт</button>
+                        <button class="btn-secondary" onclick="setEplVehicleFilter('reserve')">Резерв</button>
+                        <button class="btn-secondary" onclick="setEplVehicleFilter('expiring')">Диагностика истекает</button>
+                    </div>
+                </div>
+                <div class="table-shell"><table class="admin-table"><thead><tr><th>ТС</th><th>Одометр</th><th>Диагностика</th><th>Статус</th><th>Действия</th></tr></thead><tbody id="eplVehiclesTable"></tbody></table></div>
+            </section>
+        </div>
+    </div>
+
+    <div id="accountingIntegrationPanel" style="display:none;">
+        <div class="finance-layout">
+            <section class="surface-card surface-card--padded ops-list-card">
+                <div class="section-header"><div><h3 class="section-title">Очередь обмена</h3><p class="section-subtitle">Здесь видно, какие ЭПЛ готовы к передаче во внешний контур, какие уже ушли, а какие требуют доработки.</p></div></div>
+                <div id="eplIntegrationQueue" class="accounting-stack"></div>
+                <div id="eplIntegrationConflicts" class="accounting-stack" style="margin-top:16px;"></div>
+            </section>
+            <section class="surface-card surface-card--padded ops-list-card">
+        <div class="section-header"><div><h3 class="section-title">Памятка по боевому контуру</h3><p class="section-subtitle">Системная часть уже закрывает процесс, но для юридически значимого обмена нужен реальный внешний контур.</p></div></div>
+                <div id="eplAlertsList" class="accounting-stack"></div>
+                <div class="usage-guide-grid" style="margin-top:18px;">
+                    <div class="usage-guide-item"><h3 class="usage-guide-title">Что нужно для реального обмена</h3><p class="usage-guide-text">Оператор ЭДО, подписи сотрудников, согласованный сценарий подписания и живая настройка внешнего контура ЭПД/ЭДО.</p></div>
+                    <div class="usage-guide-item"><h3 class="usage-guide-title">Официальные ссылки</h3><ul class="usage-guide-list"><li><a href="https://mintrans.gov.ru/activities/228" target="_blank" rel="noopener noreferrer">Минтранс: ЭТрО / ЭПД</a></li></ul></div>
+          <div class="usage-guide-item"><h3 class="usage-guide-title">Как работать внутри системы</h3><ul class="usage-guide-list"><li>Сначала заведи водителя и ТС или нажми «Заполнить пример», чтобы быстро увидеть рабочий сценарий.</li><li>Создай ЭПЛ и открой карточку титулов.</li><li>Фиксируй предрейс, выезд, возврат и послерейс по факту.</li><li>Когда все титулы собраны, система разрешит перевод документа в очередь обмена.</li></ul></div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <div id="accountingDeepMount"></div>
+</div>

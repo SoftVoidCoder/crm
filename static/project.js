@@ -1,3 +1,115 @@
+function parseProjectJsonField(value, fallback) {
+    if (value === null || value === undefined || value === '') return fallback;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return fallback;
+        try {
+            return JSON.parse(trimmed);
+        } catch (error) {
+            return fallback;
+        }
+    }
+    return value;
+}
+
+function normalizeProjectNomenclatureItem(item) {
+    const lookupCatalogItem = (article, name) => {
+        if (typeof nomenclatureDB === 'undefined' || !Array.isArray(nomenclatureDB) || !nomenclatureDB.length) return null;
+        const normalizedArticle = String(article || '').trim();
+        const normalizedName = String(name || '').trim();
+        return nomenclatureDB.find(row =>
+            (normalizedArticle && String(row.article || '').trim() === normalizedArticle) ||
+            (normalizedName && String(row.name || '').trim() === normalizedName)
+        ) || null;
+    };
+
+    if (typeof item === 'string') {
+        const article = item.trim();
+        if (!article) return null;
+        const catalogItem = lookupCatalogItem(article, '');
+        return {
+            name: String(catalogItem?.name || article),
+            article,
+            unit: String(catalogItem?.unit || 'шт'),
+            price: Number.parseFloat(catalogItem?.price ?? 0) || 0,
+            qty: 1,
+        };
+    }
+
+    if (!item || typeof item !== 'object') return null;
+
+    const catalogItem = lookupCatalogItem(item.article, item.name);
+    const article = String(item.article || catalogItem?.article || '').trim();
+    const fallbackName = article || 'Позиция';
+    return {
+        name: String(item.name || catalogItem?.name || fallbackName).trim(),
+        article,
+        unit: String(item.unit || catalogItem?.unit || 'шт').trim() || 'шт',
+        price: Number.parseFloat(item.price ?? catalogItem?.price ?? 0) || 0,
+        qty: Number.parseFloat(item.qty ?? item.quantity ?? 1) || 1,
+    };
+}
+
+function normalizeProjectPayload(project) {
+    if (!project || typeof project !== 'object') return project;
+
+    if (project.checkedState === undefined && project.checkedstate !== undefined) {
+        project.checkedState = project.checkedstate;
+    }
+    if (project.taskFiles === undefined && project.taskfiles !== undefined) {
+        project.taskFiles = project.taskfiles;
+    }
+
+    project.checkedState = parseProjectJsonField(project.checkedState, {});
+    if (!project.checkedState || Array.isArray(project.checkedState) || typeof project.checkedState !== 'object') project.checkedState = {};
+
+    project.comments = parseProjectJsonField(project.comments, {});
+    if (!project.comments || Array.isArray(project.comments) || typeof project.comments !== 'object') project.comments = {};
+
+    project.deadlines = parseProjectJsonField(project.deadlines, {});
+    if (!project.deadlines || Array.isArray(project.deadlines) || typeof project.deadlines !== 'object') project.deadlines = {};
+
+    project.team = parseProjectJsonField(project.team, []);
+    if (!Array.isArray(project.team)) project.team = [];
+
+    project.allowed_roles = parseProjectJsonField(project.allowed_roles, []);
+    if (!Array.isArray(project.allowed_roles)) project.allowed_roles = [];
+
+    project.checklist = parseProjectJsonField(project.checklist, []);
+    if (!Array.isArray(project.checklist)) project.checklist = [];
+
+    project.nomenclature = parseProjectJsonField(project.nomenclature, []);
+    if (!Array.isArray(project.nomenclature)) project.nomenclature = [];
+    project.nomenclature = project.nomenclature.map(normalizeProjectNomenclatureItem).filter(Boolean);
+
+    project.logs = parseProjectJsonField(project.logs, []);
+    if (!Array.isArray(project.logs)) project.logs = [];
+
+    project.chat = parseProjectJsonField(project.chat, []);
+    if (!Array.isArray(project.chat)) project.chat = [];
+
+    project.files = parseProjectJsonField(project.files, []);
+    if (!Array.isArray(project.files)) project.files = [];
+
+    project.taskFiles = parseProjectJsonField(project.taskFiles, {});
+    if (!project.taskFiles || Array.isArray(project.taskFiles) || typeof project.taskFiles !== 'object') project.taskFiles = {};
+
+    project.subtasks = parseProjectJsonField(project.subtasks, {});
+    if (!project.subtasks || Array.isArray(project.subtasks) || typeof project.subtasks !== 'object') project.subtasks = {};
+
+    project.time_logs = parseProjectJsonField(project.time_logs, []);
+    if (!Array.isArray(project.time_logs)) project.time_logs = [];
+
+    return project;
+}
+
+function normalizeProjectCollection(projects) {
+    return Array.isArray(projects) ? projects.map(project => normalizeProjectPayload(project)) : [];
+}
+
+window.normalizeProjectPayload = normalizeProjectPayload;
+window.normalizeProjectCollection = normalizeProjectCollection;
+
 function createNewProject() { 
     const sel = document.getElementById('newProjClient');
     if(sel) sel.innerHTML = '<option value="">Свободный ввод или выберите из базы</option>' + clientsDB.map(c => `<option value="${c.name}">${c.name} (ИНН: ${c.inn})</option>`).join('');
@@ -90,12 +202,25 @@ function toggleChat() {
 }
 
 function openProject(id) {
-    currentProjectId = id; const p = projectsDB.find(x => x.id === id);
+    currentProjectId = id; const p = normalizeProjectPayload(projectsDB.find(x => x.id === id));
     if (!p) return;
+    if (typeof addDashboardRecentItem === 'function') {
+        addDashboardRecentItem({
+            type: 'project',
+            id: p.id,
+            title: p.name || p.contract || `Проект #${p.id}`,
+            meta: `${p.contract || ''} · ${p.client || ''}`,
+            view: 'dashboard',
+        });
+    }
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) mainContent.scrollTop = 0;
+    window.scrollTo(0, 0);
 
-    ['dashboardView', 'analyticsView', 'adminView', 'clientsView', 'profileView', 'emailsView', 'meetingsView', 'messengerView', 'documentsView'].forEach(v => { const e = document.getElementById(v); if(e) e.style.display = 'none'; });
+    ['dashboardView', 'analyticsView', 'adminView', 'clientsView', 'prospectingView', 'leadsView', 'dealsView', 'profileView', 'emailsView', 'meetingsView', 'messengerView', 'documentsView', 'financeView', 'accountingView', 'client360View', 'contract360View', 'supplyView', 'salesView', 'productionView', 'expensesView', 'requestsView', 'resourcesView', 'serviceView', 'executiveView', 'operationsView'].forEach(v => { const e = document.getElementById(v); if(e) e.style.display = 'none'; });
     
-    const pView = document.getElementById('projectView'); if(pView) pView.style.display = 'block';
+    const pView = document.getElementById('projectView'); if(pView) { pView.classList.remove('krd-is-hidden'); pView.style.display = 'block'; }
+    if (typeof mountSectionGuideForView === 'function') mountSectionGuideForView('projectView');
     document.querySelectorAll('.nav-item, .dept-item').forEach(el => el.classList.remove('active'));
     
     const pName = document.getElementById('projName'); if(pName) pName.value = p.name;
@@ -108,23 +233,25 @@ function openProject(id) {
     const contractBlock = document.getElementById('projContract')?.parentElement;
     if (contractBlock && !document.getElementById('extendedContractDetails')) {
         const extHtml = `
-            <div id="extendedContractDetails" style="margin-top:20px; padding:20px; background:var(--bg); border:1px solid var(--border); border-radius:10px; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:15px; font-weight:600; font-size:14px; color:var(--text);">
+            <div id="extendedContractDetails" class="contract-meta-card">
+                <div class="contract-meta-header">
+                    <div class="contract-meta-title">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                     Свойства и реквизиты договора
+                    </div>
                 </div>
                 
-                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:15px; margin-bottom:20px;">
-                    <div>
-                        <label style="font-size:12px; font-weight:500; color:var(--secondary); display:block; margin-bottom:6px;">Доп. номер</label>
+                <div class="contract-meta-grid">
+                    <div class="field-stack">
+                        <label class="field-label">Доп. номер</label>
                         <input type="text" id="projContractAdd" class="auth-input" placeholder="Например, к ДС №1" style="margin:0; width:100%; box-sizing:border-box;">
                     </div>
-                    <div>
-                        <label style="font-size:12px; font-weight:500; color:var(--secondary); display:block; margin-bottom:6px;">Входящий № (Заказчика)</label>
+                    <div class="field-stack">
+                        <label class="field-label">Входящий № заказчика</label>
                         <input type="text" id="projContractInc" class="auth-input" placeholder="№ по учету контрагента" style="margin:0; width:100%; box-sizing:border-box;">
                     </div>
-                    <div>
-                        <label style="font-size:12px; font-weight:500; color:var(--secondary); display:block; margin-bottom:6px;">Валюта договора</label>
+                    <div class="field-stack">
+                        <label class="field-label">Валюта договора</label>
                         <select id="projCurrency" class="auth-input" style="margin:0; width:100%; box-sizing:border-box;">
                             <option value="RUB">RUB (₽) - Рубль</option>
                             <option value="USD">USD ($) - Доллар США</option>
@@ -134,15 +261,18 @@ function openProject(id) {
                     </div>
                 </div>
 
-                <div style="border-top:1px solid var(--border); padding-top:15px; margin-top:10px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                        <div style="font-weight:600; font-size:13px; color:var(--text);">Пользовательские поля (Кастомные)</div>
-                        <button class="btn-primary" style="padding:6px 12px; font-size:11px; border-radius:6px; display:flex; align-items:center; gap:4px;" onclick="addCustomField()">
+                <div class="contract-custom-fields">
+                    <div class="contract-custom-fields-header">
+                        <div>
+                            <div class="field-label" style="color: var(--primary);">Пользовательские поля</div>
+                            <div class="section-subtitle" style="margin-top: 8px;">Дополнительные реквизиты для конкретного договора и сделки.</div>
+                        </div>
+                        <button class="btn-primary" style="padding:10px 14px; font-size:12px; border-radius:12px;" onclick="addCustomField()">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                             Добавить поле
                         </button>
                     </div>
-                    <div id="customFieldsContainer" style="display:flex; flex-direction:column; gap:8px;"></div>
+                    <div id="customFieldsContainer" class="custom-field-list"></div>
                 </div>
             </div>
         `;
@@ -200,11 +330,18 @@ function openProject(id) {
     renderFiles();
 
     if (typeof renderProjectNomenclature === 'function') renderProjectNomenclature();
+    if (typeof loadSpecificationVersions === 'function') {
+        loadSpecificationVersions().then(() => {
+            if (typeof renderSpecificationVersions === 'function') renderSpecificationVersions();
+        });
+    }
     calcMargin();
+    if (typeof renderProjectSmartTools === 'function') renderProjectSmartTools();
+    if (typeof renderProjectOpsSummary === 'function') renderProjectOpsSummary();
 }
 
 function calcMargin() {
-    const p = projectsDB.find(x => x.id === currentProjectId);
+    const p = normalizeProjectPayload(projectsDB.find(x => x.id === currentProjectId));
     if (!p) return;
     
     const bEl = document.getElementById('projBudget');
@@ -226,7 +363,7 @@ function calcMargin() {
     let materialCosts = 0;
     if (p.nomenclature && p.nomenclature.length > 0) {
         p.nomenclature.forEach(n => {
-            materialCosts += (n.price * n.qty);
+            materialCosts += ((Number.parseFloat(n.price) || 0) * (Number.parseFloat(n.qty) || 0));
         });
     }
     const matEl = document.getElementById('projMaterialCosts');
@@ -251,7 +388,7 @@ function calcMargin() {
 }
 
 function appendLog(action) {
-    const p = projectsDB.find(x => x.id === currentProjectId);
+    const p = normalizeProjectPayload(projectsDB.find(x => x.id === currentProjectId));
     if(!p.logs) p.logs = [];
     const now = new Date();
     p.logs.unshift({time: `${now.getDate().toString().padStart(2,'0')}.${(now.getMonth()+1).toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`, user: currentUser.name, action: action});
@@ -299,8 +436,28 @@ async function saveProjectInfo() {
     p.costs = pCosts ? (parseFloat(pCosts.value) || 0) : 0; 
     
     await syncProject(p); 
+    if (typeof syncCurrentProjectContractMaster === 'function') {
+        await syncCurrentProjectContractMaster(false);
+    }
+    if (typeof renderProjectSmartTools === 'function') renderProjectSmartTools();
     showToast("Система", "Данные проекта успешно сохранены");
 }
+
+window.syncCurrentProjectContractMaster = async function(showMessage = true) {
+    if (!currentProjectId) return null;
+    const res = await apiCall(`/projects/${currentProjectId}/contract_master/sync`, 'POST');
+    if (!res || res.error) {
+        if (showMessage) customAlert('Не удалось синхронизировать master-data договора.');
+        return null;
+    }
+    const project = (projectsDB || []).find(item => Number(item.id) === Number(currentProjectId));
+    if (project) {
+        project.contract_id = Number(res.contract_id || 0);
+        project.object_id = Number(res.object_id || 0);
+    }
+    if (showMessage) showToast("Контракт 360", "Договор и объект синхронизированы с проектом");
+    return res;
+};
 
 async function cancelProject() { 
     if(await customConfirm("Отменить проект?")) { 
@@ -316,7 +473,10 @@ async function restoreProject() {
         await syncProject(p); navigateTo('dashboard'); 
     } 
 }
-async function syncProject(p) { await apiCall(`/projects/${p.id}`, 'PUT', p); }
+async function syncProject(p) {
+    const normalizedProject = normalizeProjectPayload(p);
+    return await apiCall(`/projects/${normalizedProject.id}`, 'PUT', normalizedProject);
+}
 
 // === ФУНКЦИИ РЕЕСТРА ДОГОВОРОВ ===
 window.addCustomField = async function() {
@@ -333,22 +493,22 @@ window.renderCustomFields = function() {
     if(!c) return;
     
     if (window.currentCustomFields.length === 0) {
-        c.innerHTML = '<div style="text-align:center; padding:15px; font-size:12px; color:var(--secondary); background:rgba(0,0,0,0.02); border-radius:8px; border:1px dashed var(--border);">Нет дополнительных полей. Нажмите «Добавить поле», чтобы создать кастомный реквизит.</div>';
+        c.innerHTML = '<div class="custom-field-empty">Нет дополнительных полей. Нажмите «Добавить поле», чтобы создать кастомный реквизит.</div>';
         return;
     }
 
     c.innerHTML = window.currentCustomFields.map((cf, i) => `
-        <div style="display:flex; gap:10px; align-items:center; background:var(--card-bg); padding:10px; border-radius:8px; border:1px solid var(--border);">
-            <div style="flex:1;">
-                <label style="font-size:10px; color:var(--secondary); display:block; margin-bottom:4px;">Название поля</label>
-                <input type="text" class="auth-input" value="${cf.name}" onchange="currentCustomFields[${i}].name=this.value" style="margin:0; width:100%; box-sizing:border-box; font-size:13px; padding:6px 10px;" placeholder="Например, 'Регион'">
+        <div class="custom-field-row">
+            <div class="field-stack">
+                <label class="field-label">Название поля</label>
+                <input type="text" class="auth-input" value="${cf.name}" onchange="currentCustomFields[${i}].name=this.value" style="margin:0; width:100%; box-sizing:border-box; font-size:13px; padding:10px 12px;" placeholder="Например, Регион">
             </div>
-            <div style="flex:2;">
-                <label style="font-size:10px; color:var(--secondary); display:block; margin-bottom:4px;">Значение</label>
-                <input type="text" class="auth-input" value="${cf.value}" onchange="currentCustomFields[${i}].value=this.value" style="margin:0; width:100%; box-sizing:border-box; font-size:13px; padding:6px 10px;" placeholder="Ввод значения...">
+            <div class="field-stack">
+                <label class="field-label">Значение</label>
+                <input type="text" class="auth-input" value="${cf.value}" onchange="currentCustomFields[${i}].value=this.value" style="margin:0; width:100%; box-sizing:border-box; font-size:13px; padding:10px 12px;" placeholder="Ввод значения...">
             </div>
-            <div style="padding-top:18px;">
-                <button class="btn-danger" style="padding:8px; border-radius:6px; background:rgba(239,68,68,0.1); color:var(--danger); border:none;" onclick="currentCustomFields.splice(${i},1); renderCustomFields();" title="Удалить поле">
+            <div>
+                <button class="btn-danger" style="padding:10px; min-width:44px; border-radius:12px;" onclick="currentCustomFields.splice(${i},1); renderCustomFields();" title="Удалить поле">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
             </div>
@@ -427,18 +587,25 @@ function renderChat() {
         return parseT(a.timeStr) - parseT(b.timeStr);
     });
 
-    let h = ''; if (feedItems.length === 0) h = `<div style="text-align:center; color:var(--secondary); margin-top:50px; font-size:13px;">Лента пуста. Напишите первым!</div>`;
+    let h = ''; if (feedItems.length === 0) h = `<div class="project-empty-hint" style="margin-top: 16px;">Лента пока пуста. Здесь будут внутренние сообщения и официальный документооборот.</div>`;
     else feedItems.forEach(item => { 
         if (item.type === 'chat') {
             const m = item.data;
             const isMy = m.user === currentUser.name; 
             let roleColorClass = '';
-            switch(m.role) { case 'Директор': roleColorClass = 'role-director'; break; case 'Конструкторское бюро': roleColorClass = 'role-kb'; break; case 'Производство и ОТК': roleColorClass = 'role-prod'; break; case 'Менеджер': roleColorClass = 'role-manager'; break; case 'Бухгалтерия': roleColorClass = 'role-buh'; break; case 'Юрист': roleColorClass = 'role-law'; break; default: roleColorClass = ''; }
+            switch(m.role) { case 'Директор': roleColorClass = 'role-director'; break; case 'Конструкторское бюро': roleColorClass = 'role-kb'; break; case 'Производство и ОТК': roleColorClass = 'role-prod'; break; case 'Менеджер': roleColorClass = 'role-manager'; break; case 'Бухгалтерия': roleColorClass = 'role-buh'; break; case 'Юрист': roleColorClass = 'role-law'; break; case 'Секретарь / Канцелярия': roleColorClass = 'role-manager'; break; default: roleColorClass = ''; }
             h += `<div class="chat-msg ${isMy ? 'my-msg' : ''}"><div class="chat-msg-meta"><span class="role-name ${roleColorClass}">${m.user} (${m.role})</span><span>${m.time}</span></div><div class="chat-msg-bubble">${m.text}</div></div>`; 
         } else if (item.type === 'doc') {
             const d = item.data;
-            let tName = d.type === 'incoming' ? '📥 Входящее' : d.type === 'outgoing' ? '📤 Исходящее' : '📄 Внутренний акт';
-            h += `<div class="chat-msg" style="align-self: center; width: 95%; max-width: 400px; margin-top: 10px; margin-bottom: 10px;"><div class="chat-msg-meta" style="justify-content: center; color: var(--primary);"><b>Официальный документооборот</b></div><div class="chat-msg-bubble" style="background: var(--card-bg); border: 1px solid var(--primary); color: var(--text); border-radius: 8px;"><b>${tName} №${d.number}</b> от ${d.d_date}<br><span style="font-size:11px; color:var(--secondary); display:block; margin-top:4px;">${d.subject}</span><button class="btn-secondary" onclick="openPrintDoc(${d.id})" style="width:100%; margin-top:8px; font-size:11px; padding:6px; min-height:unset;">Открыть карточку</button></div></div>`;
+            let tName = d.type === 'incoming' ? 'Входящий документ' : d.type === 'outgoing' ? 'Исходящий документ' : 'Внутренний акт';
+            h += `<div class="chat-msg" style="align-self: center; width: 95%; max-width: 440px; margin-top: 10px; margin-bottom: 10px;">
+                    <div class="chat-msg-meta" style="justify-content: center; color: var(--primary);"><b>Официальный документооборот</b></div>
+                    <div class="chat-msg-bubble" style="background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(243,248,255,0.96)); border: 1px solid rgba(31, 79, 209, 0.16); color: var(--text); border-radius: 16px;">
+                        <b>${tName} №${d.number}</b> от ${d.d_date}
+                        <span style="font-size:11px; color:var(--secondary); display:block; margin-top:6px; line-height:1.5;">${d.subject}</span>
+                        <button class="btn-secondary" onclick="openPrintDoc(${d.id})" style="width:100%; margin-top:10px; font-size:11px; padding:8px; min-height:unset;">Открыть карточку</button>
+                    </div>
+                </div>`;
         }
     });
     
@@ -458,7 +625,7 @@ function renderFiles() {
     const c = document.getElementById('projectFilesList'); if(!c) return;
     c.innerHTML = '';
     
-    if(!p.files || p.files.length === 0) { c.innerHTML = '<span style="font-size:13px; color:var(--secondary);">Нет прикрепленных документов</span>'; return; }
+    if(!p.files || p.files.length === 0) { c.innerHTML = '<div class="project-empty-hint" style="width: 100%;">Нет прикрепленных документов</div>'; return; }
     
     const grouped = {};
     p.files.forEach(f => {
@@ -479,14 +646,14 @@ function renderFiles() {
 
         let lockHtml = ''; 
         if (isLocked) {
-            lockHtml = `<span style="font-size: 10px; background: rgba(239, 68, 68, 0.1); color: var(--danger); padding: 2px 6px; border-radius: 4px; margin-left: 8px; font-weight: 700; display:inline-flex; align-items:center; gap:4px;">🔒 Занят: ${latest.lockedBy}</span>`;
+            lockHtml = `<span style="font-size: 10px; background: rgba(239, 68, 68, 0.1); color: var(--danger); padding: 2px 6px; border-radius: 999px; margin-left: 8px; font-weight: 700; display:inline-flex; align-items:center; gap:4px;">Занят: ${latest.lockedBy}</span>`;
         }
         
         let lockBtn = ''; 
         if (!isLocked) { 
-            lockBtn = `<button class="btn-secondary" style="padding: 4px 8px; font-size: 10px; background: var(--card-bg); min-height:unset;" onclick="toggleLock('${safeBase}')">🔒 Захватить</button>`; 
+            lockBtn = `<button class="btn-secondary" style="padding: 4px 8px; font-size: 10px; background: var(--card-bg); min-height:unset;" onclick="toggleLock('${safeBase}')">Захватить</button>`; 
         } else if (lockedByMe || currentUser.role === 'Директор') { 
-            lockBtn = `<button class="btn-success" style="padding: 4px 8px; font-size: 10px; min-height:unset;" onclick="toggleLock('${safeBase}')">🔓 Освободить</button>`; 
+            lockBtn = `<button class="btn-success" style="padding: 4px 8px; font-size: 10px; min-height:unset;" onclick="toggleLock('${safeBase}')">Освободить</button>`; 
         }
         
         let deleteBtn = canEdit ? `<button class="file-delete-btn" onclick="deleteFile('${safeName}')" title="Удалить последнюю версию"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>` : '';
@@ -500,7 +667,7 @@ function renderFiles() {
             <a href="${latest.url}" target="_blank" style="display: flex; align-items: center; gap: 8px; text-decoration: none; color: inherit; flex: 1; overflow: hidden;">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${isLocked ? 'var(--danger)' : 'var(--primary)'}" stroke-width="1.5" flex-shrink="0"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg> 
                 <span style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${latest.name}</span>
-                <span style="background: var(--primary); color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 5px;">v.${latest.version || 1}</span>
+                <span style="background: var(--primary); color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 5px;">вер. ${latest.version || 1}</span>
                 ${lockHtml}
             </a>
             <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
@@ -592,6 +759,54 @@ async function deleteFile(fileName) {
 
 // === ФУНКЦИИ НОМЕНКЛАТУРЫ ===
 
+let specVersionsDB = [];
+
+async function loadSpecificationVersions() {
+    if (!currentProjectId) return;
+    const res = await apiCall(`/projects/${currentProjectId}/spec_versions`);
+    specVersionsDB = Array.isArray(res) ? res : [];
+}
+
+function renderSpecificationVersions() {
+    const container = document.getElementById('projectSpecVersions');
+    if (!container) return;
+    if (!specVersionsDB.length) {
+        container.innerHTML = '<div class="empty-state">Пока нет сохранённых версий спецификации.</div>';
+        return;
+    }
+    container.innerHTML = specVersionsDB.map(version => `
+        <div class="client360-item client360-item--stack">
+            <div class="client360-item-title">${version.label || 'Версия спецификации'}</div>
+            <div class="client360-item-meta">${version.comment || 'Без комментария'} · ${version.actor_name || version.actor_email || 'Система'}</div>
+            <div class="client360-item-meta">${new Date((version.created_at || 0) * 1000).toLocaleString('ru-RU')} · позиций: ${(version.snapshot || []).length}</div>
+        </div>
+    `).join('');
+}
+
+async function createSpecificationVersion(label = '', comment = '') {
+    if (!currentProjectId) return;
+    const p = projectsDB.find(x => x.id === currentProjectId);
+    if (!p) return;
+    const res = await apiCall(`/projects/${currentProjectId}/spec_versions`, 'POST', {
+        label: label || `Версия ${new Date().toLocaleString('ru-RU')}`,
+        comment: comment || '',
+        items: p.nomenclature || []
+    });
+    if (res && res.status === 'success') {
+        await loadSpecificationVersions();
+        renderSpecificationVersions();
+    }
+}
+
+async function createSpecificationVersionPrompt() {
+    const label = await customPrompt('Название версии спецификации', `Ручная версия ${new Date().toLocaleDateString('ru-RU')}`);
+    if (label === null) return;
+    const comment = await customPrompt('Комментарий к версии', '');
+    if (comment === null) return;
+    await createSpecificationVersion(label, comment);
+    showToast('Спецификация', 'Версия сохранена');
+}
+
 function openAddNomToProjectModal() {
     const sel = document.getElementById('projNomSelect');
     const unitDisp = document.getElementById('projNomUnitDisplay');
@@ -637,6 +852,7 @@ async function confirmAddNomToProject() {
     
     appendLog(`Добавил в спецификацию: ${item.name} (${qty} ${item.unit})`);
     await syncProject(p);
+    await createSpecificationVersion(`Добавлена позиция ${item.article || item.name}`, `${item.name} · ${qty} ${item.unit}`);
     
     document.getElementById('addNomToProjectModal').style.display = 'none';
     renderProjectNomenclature(); 
@@ -653,15 +869,16 @@ async function removeNomFromProject(index) {
     
     appendLog(`Удалил из спецификации: ${removedItem.name}`);
     await syncProject(p);
+    await createSpecificationVersion(`Удалена позиция ${removedItem.article || removedItem.name}`, `${removedItem.name}`);
     
     renderProjectNomenclature();
     calcMargin();
 }
 
 function renderProjectNomenclature() {
-    const p = projectsDB.find(x => x.id === currentProjectId);
+    const p = normalizeProjectPayload(projectsDB.find(x => x.id === currentProjectId));
     const container = document.getElementById('projNomenclatureTable');
-    if (!container) return;
+    if (!container || !p) return;
     
     if (!p.nomenclature || p.nomenclature.length === 0) {
         container.innerHTML = '<div style="color:var(--secondary); text-align:center; padding: 10px;">Спецификация пуста</div>';
@@ -672,11 +889,13 @@ function renderProjectNomenclature() {
                     <thead><tr><th>Наименование</th><th>Арт.</th><th>Кол-во</th><th>Сумма</th><th class="no-print" style="width:40px;"></th></tr></thead><tbody>`;
     
     p.nomenclature.forEach((n, idx) => {
-        const sum = n.price * n.qty;
+        const qty = Number.parseFloat(n.qty) || 0;
+        const price = Number.parseFloat(n.price) || 0;
+        const sum = price * qty;
         html += `<tr>
                     <td>${n.name}</td>
                     <td>${n.article}</td>
-                    <td><b>${n.qty}</b> <span style="color:var(--secondary); font-size:11px;">${n.unit}</span></td>
+                    <td><b>${qty}</b> <span style="color:var(--secondary); font-size:11px;">${n.unit}</span></td>
                     <td>${sum.toLocaleString('ru-RU')} ₽</td>
                     <td class="no-print" style="text-align:right;">
                         <button class="btn-danger" style="padding:4px 8px; font-size:10px; border-radius:6px;" onclick="removeNomFromProject(${idx})">✕</button>
@@ -686,3 +905,203 @@ function renderProjectNomenclature() {
     html += `</tbody></table>`;
     container.innerHTML = html;
 }
+
+// Enterprise file manager overrides
+window.projectFileHistoryExpanded = window.projectFileHistoryExpanded || new Set();
+
+function projectUiEscape(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+function projectUiJsString(value) {
+    return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, '\\n');
+}
+
+function projectUiVersionLabel(version) {
+    return `v${Number(version || 1).toFixed(1)}`;
+}
+
+function projectUiFileTone(status) {
+    if (status === 'locked') return 'ops-pill ops-pill--danger';
+    if (status === 'history') return 'ops-pill';
+    return 'ops-pill ops-pill--primary';
+}
+
+window.toggleProjectFileVersions = function(baseName) {
+    if (window.projectFileHistoryExpanded.has(baseName)) window.projectFileHistoryExpanded.delete(baseName);
+    else window.projectFileHistoryExpanded.add(baseName);
+    renderFiles();
+};
+
+renderFiles = function() {
+    const project = projectsDB.find(item => item.id === currentProjectId);
+    const container = document.getElementById('projectFilesList');
+    if (!container) return;
+
+    container.classList.add('krd-file-list');
+
+    if (!project || !Array.isArray(project.files) || !project.files.length) {
+        container.innerHTML = `
+            <div class="krd-empty">
+                <div class="krd-empty__title">Файлы проекта пока не загружены</div>
+                <div class="krd-empty__hint">Загрузите первый документ или сгенерируйте договор прямо из карточки проекта.</div>
+            </div>
+        `;
+        return;
+    }
+
+    const grouped = {};
+    project.files.forEach(file => {
+        const baseName = file.base_name || file.name;
+        if (!grouped[baseName]) grouped[baseName] = [];
+        grouped[baseName].push(file);
+    });
+
+    const userName = currentUser?.name || '';
+    const userRole = currentUser?.role || '';
+
+    container.innerHTML = Object.keys(grouped)
+        .sort((left, right) => left.localeCompare(right, 'ru'))
+        .map(baseName => {
+            const versions = grouped[baseName].sort((a, b) => Number(a.version || 1) - Number(b.version || 1));
+            const latest = versions[versions.length - 1];
+            const expanded = window.projectFileHistoryExpanded.has(baseName);
+            const isLocked = Boolean(latest.lockedBy);
+            const lockedByMe = latest.lockedBy === userName;
+            const canEdit = !isLocked || lockedByMe || userRole === 'Директор';
+            const safeBase = projectUiJsString(baseName);
+            const safeName = projectUiJsString(latest.name || '');
+            const rowState = isLocked && !lockedByMe ? 'locked' : 'current';
+            const lockBadge = isLocked
+                ? `<span class="${projectUiFileTone('locked')}">Занят: ${projectUiEscape(latest.lockedBy)}</span>`
+                : `<span class="${projectUiFileTone(rowState)}">${projectUiEscape(projectUiVersionLabel(latest.version))}</span>`;
+
+            const historyPanel = versions.length > 1 ? `
+                <div class="krd-file-history" style="${expanded ? 'display:block;' : ''}">
+                    <div class="krd-file-history__inner">
+                        <div class="krd-file-history__head">
+                            <div class="krd-file-history__title">История изменений документа</div>
+                            <button class="btn-secondary" onclick="openFileHistory('${safeBase}')">Открыть в окне</button>
+                        </div>
+                        <div class="krd-version-list">
+                            ${versions.slice().reverse().map((versionItem, index) => `
+                                <div class="krd-version ${index === 0 ? 'krd-version--active' : ''}">
+                                    <div class="krd-version__name">
+                                        <div class="krd-version__name-main">${projectUiEscape(versionItem.name)}</div>
+                                        <div class="krd-version__comment">${projectUiEscape(versionItem.comment || (index === 0 ? 'Актуальная версия документа' : 'Архивная версия'))}</div>
+                                    </div>
+                                    <div class="krd-version__meta">
+                                        <span>${projectUiEscape(projectUiVersionLabel(versionItem.version))}</span>
+                                        <span>${projectUiEscape(versionItem.time || 'Без даты')}</span>
+                                    </div>
+                                    <div class="krd-version__meta">
+                                        <span>${projectUiEscape(versionItem.user || 'Система')}</span>
+                                        <span>${index === 0 ? 'актуально' : 'архив'}</span>
+                                    </div>
+                                    <div class="krd-version__actions">
+                                        <a class="krd-inline-link" href="${projectUiEscape(versionItem.url || '#')}" target="_blank" rel="noopener noreferrer">Открыть</a>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            ` : '';
+
+            return `
+                <div class="krd-file-row ${expanded ? 'krd-file-row--expanded' : ''}" aria-expanded="${expanded ? 'true' : 'false'}">
+                    <button class="krd-file-row__expand" type="button" ${versions.length > 1 ? `onclick="toggleProjectFileVersions('${safeBase}')"` : 'disabled'} aria-label="Показать историю версий">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
+                    <div class="krd-file-row__name">
+                        <div class="krd-file-row__name-main">
+                            <span>${projectUiEscape(baseName)}</span>
+                            ${versions.length > 1 ? `<span class="${projectUiFileTone('history')}">${projectUiEscape(`${versions.length} версий`)}</span>` : ''}
+                        </div>
+                        <div class="krd-file-row__name-meta">
+                            <a class="krd-inline-link" href="${projectUiEscape(latest.url || '#')}" target="_blank" rel="noopener noreferrer">Открыть актуальную версию</a>
+                            <span>•</span>
+                            <span>${projectUiEscape(latest.comment || 'Без дополнительного комментария')}</span>
+                        </div>
+                    </div>
+                    <div class="krd-file-row__date">${projectUiEscape(latest.time || 'Без даты')}</div>
+                    <div class="krd-file-row__author">${projectUiEscape(latest.user || 'Система')}</div>
+                    <div class="krd-file-row__status">${lockBadge}</div>
+                    <div class="krd-file-row__actions">
+                        ${versions.length > 1 ? `<button class="btn-secondary" onclick="toggleProjectFileVersions('${safeBase}')">${expanded ? 'Свернуть' : 'Развернуть'}</button>` : ''}
+                        <button class="btn-secondary" onclick="openFileHistory('${safeBase}')">История</button>
+                        ${!isLocked ? `<button class="btn-secondary" onclick="toggleLock('${safeBase}')">Захватить</button>` : ''}
+                        ${(isLocked && (lockedByMe || userRole === 'Директор')) ? `<button class="btn-success" onclick="toggleLock('${safeBase}')">Освободить</button>` : ''}
+                        ${canEdit ? `<button class="btn-danger" onclick="deleteFile('${safeName}')">Удалить</button>` : ''}
+                    </div>
+                </div>
+                ${historyPanel}
+            `;
+        })
+        .join('');
+};
+
+openFileHistory = function(baseName) {
+    const project = projectsDB.find(item => item.id === currentProjectId);
+    const list = document.getElementById('fileHistoryList');
+    const modal = document.getElementById('fileHistoryModal');
+    if (!project || !list || !modal) return;
+
+    const versions = (project.files || [])
+        .filter(file => (file.base_name || file.name) === baseName)
+        .sort((a, b) => Number(b.version || 1) - Number(a.version || 1));
+
+    list.innerHTML = versions.length ? versions.map((versionItem, index) => `
+        <div class="krd-history-modal__row">
+            <div class="krd-history-modal__name">
+                <a class="krd-history-modal__link" href="${projectUiEscape(versionItem.url || '#')}" target="_blank" rel="noopener noreferrer">${projectUiEscape(versionItem.name)}</a>
+                <div class="krd-file-row__name-meta">
+                    <span class="${projectUiFileTone(index === 0 ? 'current' : 'history')}">${projectUiEscape(projectUiVersionLabel(versionItem.version))}</span>
+                    <span>${projectUiEscape(versionItem.comment || (index === 0 ? 'Текущая версия' : 'Архивная версия'))}</span>
+                </div>
+            </div>
+            <div class="krd-history-modal__meta">
+                <span>${projectUiEscape(versionItem.time || 'Без даты')}</span>
+                <span>Загрузил: ${projectUiEscape(versionItem.user || 'Система')}</span>
+            </div>
+        </div>
+    `).join('') : `
+        <div class="krd-empty">
+            <div class="krd-empty__title">История недоступна</div>
+            <div class="krd-empty__hint">У выбранного документа пока только одна версия.</div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+};
+
+uploadFile = async function(e) {
+    const file = e?.target?.files?.[0];
+    if (!file) return;
+
+    const list = document.getElementById('projectFilesList');
+    if (list) {
+        list.innerHTML = `
+            <div class="krd-empty">
+                <div class="krd-loading"><span class="krd-loading__spinner"></span> Загружаю документ и обновляю историю версий…</div>
+            </div>
+        `;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('user', currentUser?.name || '');
+
+    const result = await apiCall(`/projects/${currentProjectId}/upload`, 'POST', formData);
+    if (result && result.status === 'success') {
+        await loadProjects();
+        renderFiles();
+        e.target.value = '';
+        return;
+    }
+
+    e.target.value = '';
+    if (result?.detail) await customAlert(`Ошибка: ${result.detail}`);
+    else await customAlert('Произошла ошибка при загрузке файла');
+    renderFiles();
+};

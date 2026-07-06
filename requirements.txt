@@ -6,3 +6,5 @@ aiofiles
 jinja2
 qrcode[pil]
 websockets
+httpx
+psycopg[binary]

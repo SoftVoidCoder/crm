@@ -1,8 +1,34 @@
-<div id="dashboardView">
+<div id="dashboardView" class="view-page crm-page-shell">
+    <div id="dashboardFirstRunMount"></div>
+    <div id="dashboardHeroMount" class="dashboard-hero-shell"></div>
+    <div id="dashboardRoleWorkbenchMount"></div>
+    <div id="managerDealWorkbenchMount"></div>
+    <div id="dashboardTodayMount"></div>
+    <div id="dashboardQuickAccessMount"></div>
+    <div id="dashboardWorkbenchStrip" class="workbench-strip">
+        <div class="workbench-card">
+            <div class="workbench-card-title">С чего начать</div>
+            <div class="workbench-card-text">Открой активные проекты, выбери нужный и переходи в документы, деньги или производство уже из карточки.</div>
+        </div>
+        <div class="workbench-card">
+            <div class="workbench-card-title">Рабочий режим</div>
+            <div class="workbench-card-text">Для ежедневной работы лучше всего подходит `Список`. `Доска` и `Таймлайн` нужны для планёрок и контроля сроков.</div>
+        </div>
+        <div class="workbench-card">
+            <div class="workbench-card-title">Быстро</div>
+            <div class="workbench-card-actions">
+                <button class="btn-primary" onclick="createNewProject()">Новый проект</button>
+                <button class="btn-secondary" onclick="navigateAndFocus('documents', 'docCorrespondent')">Документ</button>
+                <button class="btn-secondary" onclick="navigateAndFocus('clients', 'addClientName')">Клиент</button>
+                <button class="btn-secondary" onclick="setViewMode('list')">Список</button>
+            </div>
+        </div>
+    </div>
     <div class="dashboard-toolbar">
         <h1 id="dashboardTitle" class="dashboard-title">ВСЕ ПРОЕКТЫ</h1>
         <div class="dashboard-actions">
-            <button class="btn-secondary" onclick="exportToExcel()">↓ EXCEL</button>
+        <button class="btn-secondary" onclick="exportToExcel()">↓ Экспорт</button>
+            <button class="btn-secondary" onclick="openTenderImportModal()">Создать из тендера</button>
             <button class="btn-primary" onclick="createNewProject()">+ Создать проект</button>
         </div>
     </div>
@@ -12,6 +38,7 @@
             <button class="tab" onclick="switchTab('archive')">Архив</button>
             <button class="tab" onclick="switchTab('canceled')">Отмененные</button>
         </div>
+        <div id="dashboardSavedFiltersMount" class="view-actions"></div>
         <div class="view-switcher">
             <button id="viewListBtn" class="btn-secondary view-switch-btn" style="background: var(--card-bg); color: var(--text);" onclick="setViewMode('list')">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg> Список

@@ -1,6 +1,12 @@
-<div id="analyticsView" style="display: none;">
-    <div style="background: var(--card-bg); padding: 32px; border-radius: 20px; border: 1px solid var(--border);">
-        <h2 style="margin-bottom: 32px;">Сводная статистика</h2>
+<div id="analyticsView" class="view-page" style="display: none;">
+    <div class="surface-card surface-card--padded">
+        <div class="view-header view-header--tight">
+            <div class="view-heading">
+                <span class="view-eyebrow">Аналитика</span>
+                <h1 class="view-title">Сводная статистика</h1>
+                <p class="view-subtitle">Ключевой срез по проектам, статусам и прогрессу активного портфеля.</p>
+            </div>
+        </div>
         <div style="display: flex; gap: 60px; flex-wrap: wrap; justify-content: center;">
             <div style="width: 280px; height: 280px;"><canvas id="statusChart"></canvas></div>
             <div style="width: 280px; height: 280px;"><canvas id="progressChart"></canvas></div>

@@ -1,15 +1,51 @@
-<div id="clientsView" style="display: none;">
-    <div style="background: var(--card-bg); border-radius: 20px; border: 1px solid var(--border); padding: 32px;">
-        <h2 style="margin-bottom: 24px;">База Контрагентов</h2>
+<div id="clientsView" class="view-page" style="display: none;">
+    <div class="surface-card surface-card--padded">
+        <div class="view-header view-header--tight">
+            <div class="view-heading">
+    <span class="view-eyebrow">Клиенты</span>
+                <h1 class="view-title">База контрагентов</h1>
+                <p class="view-subtitle">Единый каталог заказчиков и партнёров с быстрым доступом к досье по сделкам, претензиям и судам.</p>
+            </div>
+        </div>
+        <div class="workbench-strip">
+            <div class="workbench-card">
+                <div class="workbench-card-title">Основной сценарий</div>
+                <div class="workbench-card-text">Сначала найди или создай контрагента, потом сразу открой досье и уже оттуда переходи в договоры, документы и деньги.</div>
+            </div>
+            <div class="workbench-card">
+                <div class="workbench-card-title">Быстро</div>
+                <div class="workbench-card-actions">
+                    <button class="btn-primary" onclick="focusFieldById('addClientName')">Новый контрагент</button>
+                    <button class="btn-secondary" onclick="openFirstClientCard()">Открыть первое досье</button>
+                </div>
+            </div>
+        </div>
         <div class="client-form">
-            <div><label>Название (ООО/ИП)</label><input type="text" id="addClientName" class="auth-input" style="margin:0;"></div>
-            <div><label>ИНН</label><input type="text" id="addClientInn" class="auth-input" style="margin:0;"></div>
-            <div><label>Контакты (Тел/Email)</label><input type="text" id="addClientContact" class="auth-input" style="margin:0;"></div>
+            <div><label class="field-label">Название (ООО/ИП)</label><input type="text" id="addClientName" class="auth-input"></div>
+            <div>
+                <label class="field-label">ИНН</label>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <input type="text" id="addClientInn" data-field="addClientInn" class="auth-input">
+                    <button class="btn-secondary" type="button" style="height:46px; white-space:nowrap;" onclick="lookupClientInn()">Проверить ИНН</button>
+                </div>
+                <span class="form-error" data-error-for="addClientInn"></span>
+            </div>
+            <div><label class="field-label">КПП</label><input type="text" id="addClientKpp" class="auth-input"></div>
+            <div><label class="field-label">ОГРН</label><input type="text" id="addClientOgrn" class="auth-input"></div>
+            <div><label class="field-label">Юридический адрес</label><input type="text" id="addClientLegalAddress" class="auth-input"></div>
+            <div><label class="field-label">Контакты (телефон / почта)</label><input type="text" id="addClientContact" class="auth-input"></div>
             <button class="btn-primary" style="height: 46px;" onclick="addClient()">+ Добавить</button>
         </div>
-        <table class="admin-table">
-            <thead><tr><th>Название</th><th>ИНН</th><th>Контакты</th></tr></thead>
-            <tbody id="clientsListTable"></tbody>
-        </table>
+        <div class="finance-actions-row" style="margin-bottom:16px;">
+            <input id="clientsImportFile" type="file" accept=".csv,.json" class="auth-input" style="margin:0; max-width:320px;">
+        <button class="btn-secondary" onclick="importClientsFile()">Импорт данных</button>
+            <button class="btn-secondary" onclick="mergeClientsPrompt()">Слить дубли</button>
+        </div>
+        <div class="table-shell">
+            <table class="admin-table">
+                <thead><tr><th>Название</th><th>ИНН / КПП</th><th>ОГРН</th><th>Юридический адрес</th><th>Контакты</th></tr></thead>
+                <tbody id="clientsListTable"></tbody>
+            </table>
+        </div>
     </div>
 </div>

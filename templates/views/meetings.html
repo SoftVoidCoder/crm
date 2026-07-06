@@ -1,7 +1,127 @@
-<div id="meetingsView" style="display: none;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-        <h1 style="margin:0; font-size: 22px;">Календарь совещаний</h1>
-        <button class="btn-primary" onclick="openMeetingModal()">+ Назначить планерку</button>
+<div id="meetingsView" class="view-page" style="display: none;">
+    <div class="surface-card surface-card--padded calendar-shell">
+        <div class="view-header">
+            <div class="view-heading">
+                <span class="view-eyebrow">Календарь</span>
+                <h1 class="view-title">Календарный контур компании</h1>
+                <p class="view-subtitle">Личные и общие события, календари отделов, встречи, дедлайны задач и этапы проектов в одном рабочем экране.</p>
+            </div>
+            <div class="view-actions">
+                <button class="btn-secondary" onclick="openCalendarEventModal()">+ Событие</button>
+                <button class="btn-primary" onclick="openMeetingModal()">+ Совещание</button>
+            </div>
+        </div>
+
+        <div class="calendar-toolbar">
+            <div class="calendar-mode-switch">
+                <button id="calendarModeDay" class="btn-secondary" onclick="setCalendarMode('day')">День</button>
+                <button id="calendarModeWeek" class="btn-secondary" onclick="setCalendarMode('week')">Неделя</button>
+                <button id="calendarModeMonth" class="btn-secondary" onclick="setCalendarMode('month')">Месяц</button>
+                <button id="calendarModeSchedule" class="btn-secondary" onclick="setCalendarMode('schedule')">Расписание</button>
+            </div>
+            <div class="calendar-range-controls">
+                <button class="btn-secondary" onclick="shiftCalendarRange(-1)">←</button>
+                <div id="calendarRangeLabel" class="calendar-range-label">Календарь</div>
+                <button class="btn-secondary" onclick="shiftCalendarRange(1)">→</button>
+                <button class="btn-secondary" onclick="resetCalendarToday()">Сегодня</button>
+            </div>
+            <div class="calendar-filter-row">
+                <button id="calendarFilterAll" class="btn-secondary" onclick="setCalendarFilter('all')">Все</button>
+                <button id="calendarFilterPersonal" class="btn-secondary" onclick="setCalendarFilter('personal')">Личный</button>
+                <button id="calendarFilterShared" class="btn-secondary" onclick="setCalendarFilter('shared')">Общий</button>
+                <button id="calendarFilterDepartment" class="btn-secondary" onclick="setCalendarFilter('department')">Отдел</button>
+                <button id="calendarFilterMeetings" class="btn-secondary" onclick="setCalendarFilter('meetings')">Совещания</button>
+                <button id="calendarFilterTasks" class="btn-secondary" onclick="setCalendarFilter('tasks')">Поручения</button>
+                <button id="calendarFilterProjects" class="btn-secondary" onclick="setCalendarFilter('projects')">Этапы проектов</button>
+                <select id="calendarDepartmentFilter" class="auth-input calendar-department-filter" onchange="setCalendarDepartmentFilter(this.value)">
+                    <option value="">Все отделы</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="calendarSummaryStrip" class="calendar-summary-strip"></div>
+
+        <div class="calendar-workspace">
+            <section class="calendar-board surface-card surface-card--padded">
+                <div id="calendarBoardMount"></div>
+            </section>
+            <aside class="calendar-sidebar surface-card surface-card--padded">
+                <div class="section-header">
+                    <div>
+                        <h3 class="section-title">Ближайшие события</h3>
+                        <p class="section-subtitle">Операционный список по текущему диапазону.</p>
+                    </div>
+                </div>
+                <div id="calendarSidebarList" class="calendar-sidebar-list"></div>
+            </aside>
+        </div>
     </div>
-    <div id="meetingsListContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;"></div>
+
+    <div id="calendarEventModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content modal-content--wide">
+            <div class="modal-header">
+                <h3 id="calendarEventModalTitle">Новое событие</h3>
+                <button class="modal-close" onclick="closeCalendarEventModal()">×</button>
+            </div>
+            <div class="calendar-event-form">
+                <div>
+                    <label class="field-label">Название</label>
+                    <input id="calendarEventTitle" class="auth-input" type="text">
+                </div>
+                <div>
+                    <label class="field-label">Дата</label>
+                    <input id="calendarEventDate" class="auth-input" type="text" placeholder="дд.мм.гггг">
+                </div>
+                <div>
+                    <label class="field-label">Начало</label>
+                    <input id="calendarEventStartTime" class="auth-input" type="time">
+                </div>
+                <div>
+                    <label class="field-label">Окончание</label>
+                    <input id="calendarEventEndTime" class="auth-input" type="time">
+                </div>
+                <div>
+                    <label class="field-label">Календарь</label>
+                    <select id="calendarEventScope" class="auth-input">
+                        <option value="personal">Личный</option>
+                        <option value="shared">Общий</option>
+                        <option value="department">Календарь отдела</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">Отдел</label>
+                    <input id="calendarEventDepartment" class="auth-input" type="text" placeholder="Например, Менеджер">
+                </div>
+                <div>
+                    <label class="field-label">Связанный проект</label>
+                    <select id="calendarEventProject" class="auth-input"></select>
+                </div>
+                <div>
+                    <label class="field-label">Связанное совещание</label>
+                    <select id="calendarEventMeeting" class="auth-input"></select>
+                </div>
+                <div>
+                    <label class="field-label">Локация</label>
+                    <input id="calendarEventLocation" class="auth-input" type="text">
+                </div>
+                <div>
+                    <label class="field-label">Статус</label>
+                    <select id="calendarEventStatus" class="auth-input">
+                        <option value="planned">Запланировано</option>
+                        <option value="in_progress">В работе</option>
+                        <option value="completed">Завершено</option>
+                    </select>
+                </div>
+                <div class="calendar-event-form__full">
+                    <label class="field-label">Описание</label>
+                    <textarea id="calendarEventDescription" class="auth-input" rows="4"></textarea>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="calendarEventDeleteBtn" class="btn-danger" style="display:none;" onclick="deleteCalendarEvent()">Удалить</button>
+                <button class="btn-secondary" onclick="closeCalendarEventModal()">Отмена</button>
+                <button class="btn-primary" onclick="saveCalendarEvent()">Сохранить</button>
+            </div>
+        </div>
+    </div>
 </div>

@@ -1,50 +1,154 @@
 <div id="toastContainer" style="position: fixed; top: 20px; right: 20px; z-index: 99999; display: flex; flex-direction: column; gap: 10px;"></div>
 
 <div id="genericModal" class="modal-overlay" style="display: none; z-index: 99998;">
-    <div class="modal-card" style="max-width: 400px;">
+    <div class="modal-card" style="max-width: 420px;">
         <h2 id="genModalTitle" style="margin-top:0;"></h2>
         <div id="genModalBody" style="margin-bottom: 20px; font-size: 14px; line-height: 1.5;"></div>
         <div id="genModalFooter" style="display: flex; gap: 12px; justify-content: flex-end;"></div>
     </div>
 </div>
 
+<div id="workspaceConfigModal" class="modal-overlay" style="display: none; z-index: 99997;">
+    <div class="modal-card workspace-config-modal">
+        <div class="modal-header modal-header--stack">
+            <div>
+                <h2 class="modal-title">Конфиг интерфейса</h2>
+                <p class="modal-subtitle">Персонально настрой порядок и видимость разделов, не ломая базовую ролевую модель.</p>
+            </div>
+            <div class="workspace-config-header-actions">
+                <button class="btn-secondary" onclick="resetWorkspaceConfig()">Вернуть по умолчанию</button>
+                <button class="btn-secondary" onclick="closeWorkspaceConfigModal()">Закрыть</button>
+            </div>
+        </div>
+        <div id="workspaceConfigBody" class="workspace-config-body"></div>
+    </div>
+</div>
+
 <div id="createApprovalModal" class="modal-overlay" style="display: none;">
     <div class="modal-card">
-        <h2>Запуск согласования</h2>
-        <input type="text" id="apprTitle" class="auth-input" placeholder="Название документа или процесса *">
-        <input type="text" id="apprLink" class="auth-input" placeholder="Ссылка на файл (или номер документа)">
+        <div class="modal-header modal-header--stack">
+            <div>
+                <h2 class="modal-title">Запуск согласования</h2>
+                <p class="modal-subtitle">Соберите маршрут, выберите документ и сразу отправьте процесс по цепочке.</p>
+            </div>
+        </div>
+        <div id="approvalForm" class="form-grid-standard">
+            <label class="form-field form-field--full">
+                <span class="form-label">Название документа или процесса <span class="form-required">*</span></span>
+                <input type="text" id="apprTitle" data-field="apprTitle" class="auth-input" placeholder="Например, согласование договора поставки">
+                <span class="form-error" data-error-for="apprTitle"></span>
+            </label>
+            <label class="form-field form-field--full">
+                <span class="form-label">Ссылка или номер документа</span>
+                <input type="text" id="apprLink" data-field="apprLink" class="auth-input" placeholder="Например, ДГ-14/26 или ссылка на файл">
+                <span class="form-error" data-error-for="apprLink"></span>
+            </label>
+        </div>
         <label style="font-size: 12px; color: var(--secondary); margin-bottom: 8px; display: block; font-weight: 600;">КОНСТРУКТОР МАРШРУТА:</label>
         <div id="smartRouteContainer" style="margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); padding: 15px; border-radius: 12px; border: 1px solid var(--border);">
             <div style="text-align: center; color: var(--secondary); font-size: 12px; font-style: italic;" id="emptyRouteMsg">Маршрут пока пуст...</div>
         </div>
-        <button class="btn-secondary" style="width: 100%; margin-bottom: 10px; justify-content: center; font-size: 13px;" onclick="autoGenerateRoute()">🪄 Авто-маршрут (По сумме договора)</button>
+        <div class="form-error" data-error-for="smartRouteContainer" style="margin-bottom: 12px;"></div>
+        <button class="btn-secondary" style="width: 100%; margin-bottom: 10px; justify-content: center; font-size: 13px;" onclick="autoGenerateRoute()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.8 5.7-4.9-3.5-4.9 3.5 1.8-5.7L4 8.8h6.1L12 3z"></path></svg>
+            Авто-маршрут (По сумме договора)
+        </button>
         <button class="btn-secondary" style="width: 100%; margin-bottom: 20px; justify-content: center; font-size: 13px;" onclick="addSmartRouteStep()">+ Добавить этап (сотрудника)</button>
-        <div style="display: flex; gap: 12px;">
+        <div class="modal-actions form-actions">
             <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="document.getElementById('createApprovalModal').style.display='none'">Отмена</button>
-            <button class="btn-primary" style="flex:1; justify-content:center;" onclick="submitApproval()">Запустить</button>
+            <button class="btn-primary" style="flex:1; justify-content:center;" onclick="submitApproval()">Создать</button>
         </div>
     </div>
 </div>
 
 <div id="createDocModal" class="modal-overlay" style="display: none;">
     <div class="modal-card">
-        <h2>Регистрация документа</h2>
-        <select id="docType" class="auth-input" style="appearance: auto; cursor: pointer;">
-            <option value="incoming">Входящий документ</option>
-            <option value="outgoing">Исходящий документ</option>
-            <option value="internal_order">Внутренний: Приказ</option>
-            <option value="internal_memo">Внутренний: Служебная записка</option>
-            <option value="internal_reg">Внутренний: Регламент / Инструкция</option>
-        </select>
-        <div style="display: flex; gap: 10px;">
-            <div style="display: flex; flex: 1; gap: 4px;">
-                <input type="text" id="docNumber" class="auth-input" placeholder="Номер *" style="width: 100%;">
-                <button class="btn-secondary" style="padding: 0 10px; margin-bottom: 15px;" onclick="generateDocNumber()" title="Автонумератор 1С">🪄</button>
+        <div class="modal-header modal-header--stack">
+            <div>
+                <h2 class="modal-title">Регистрация документа</h2>
+                <p class="modal-subtitle">Заведите документ в реестр, свяжите его со сделкой и сохраните маршрут обработки.</p>
             </div>
-            <input type="text" id="docDate" class="date-picker auth-input" placeholder="Дата">
         </div>
-        <input type="text" id="docCorrespondent" class="auth-input" placeholder="От кого / Кому">
-        <textarea id="docSubject" class="auth-input" rows="2" placeholder="Краткое содержание (тема) *"></textarea>
+        <div id="documentForm" class="form-grid-standard">
+            <label class="form-field">
+                <span class="form-label">Тип документа</span>
+                <select id="docType" data-field="docType" class="auth-input" style="appearance: auto; cursor: pointer;">
+                    <option value="incoming">Входящий документ</option>
+                    <option value="outgoing">Исходящий документ</option>
+                    <option value="internal_order">Внутренний: Приказ</option>
+                    <option value="internal_memo">Внутренний: Служебная записка</option>
+                    <option value="internal_reg">Внутренний: Регламент / Инструкция</option>
+                </select>
+                <span class="form-error" data-error-for="docType"></span>
+            </label>
+            <label class="form-field">
+                <span class="form-label">Дата документа</span>
+                <input type="text" id="docDate" data-field="docDate" class="date-picker auth-input" placeholder="дд.мм.гггг">
+                <span class="form-error" data-error-for="docDate"></span>
+            </label>
+            <label class="form-field">
+                <span class="form-label">Номер <span class="form-required">*</span></span>
+                <div style="display: flex; gap: 6px;">
+                    <input type="text" id="docNumber" data-field="docNumber" class="auth-input" placeholder="Например, ДГ-14/26" style="width: 100%;">
+                    <button class="btn-secondary" type="button" style="padding: 0 10px;" onclick="generateDocNumber()" title="Автонумератор 1С">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.8 5.7-4.9-3.5-4.9 3.5 1.8-5.7L4 8.8h6.1L12 3z"></path></svg>
+                    </button>
+                </div>
+                <span class="form-error" data-error-for="docNumber"></span>
+            </label>
+            <label class="form-field">
+                <span class="form-label">Отправитель</span>
+                <input type="text" id="docSenderName" data-field="docSenderName" class="auth-input" placeholder="Организация или подразделение-отправитель">
+                <span class="form-error" data-error-for="docSenderName"></span>
+            </label>
+            <label class="form-field">
+                <span class="form-label">Адресат / Получатель</span>
+                <input type="text" id="docRecipientName" data-field="docRecipientName" class="auth-input" placeholder="Кому адресован документ">
+                <span class="form-error" data-error-for="docRecipientName"></span>
+            </label>
+            <label class="form-field">
+                <span class="form-label">Исходящий номер отправителя</span>
+                <input type="text" id="docSourceNumber" data-field="docSourceNumber" class="auth-input" placeholder="Если номер присвоен другой стороной">
+                <span class="form-error" data-error-for="docSourceNumber"></span>
+            </label>
+            <label class="form-field">
+                <span class="form-label">Дата исходящего документа</span>
+                <input type="text" id="docSourceDate" data-field="docSourceDate" class="date-picker auth-input" placeholder="дд.мм.гггг">
+                <span class="form-error" data-error-for="docSourceDate"></span>
+            </label>
+            <label class="form-field">
+                <span class="form-label">Способ доставки</span>
+                <select id="docDeliveryMethod" data-field="docDeliveryMethod" class="auth-input" style="appearance: auto; cursor: pointer;">
+                    <option value="">Не указан</option>
+                    <option value="email">Электронная почта</option>
+                    <option value="courier">Курьер</option>
+                    <option value="post">Почта России / служба доставки</option>
+                    <option value="edo">ЭДО / 1С-ЭДО</option>
+                    <option value="hand">Лично в руки</option>
+                </select>
+                <span class="form-error" data-error-for="docDeliveryMethod"></span>
+            </label>
+            <label class="form-field">
+                <span class="form-label">Подписант</span>
+                <input type="text" id="docSignerName" data-field="docSignerName" class="auth-input" placeholder="Кто подписал документ">
+                <span class="form-error" data-error-for="docSignerName"></span>
+            </label>
+            <label class="form-field">
+                <span class="form-label">Исполнитель</span>
+                <input type="text" id="docExecutorName" data-field="docExecutorName" class="auth-input" placeholder="Ответственный исполнитель">
+                <span class="form-error" data-error-for="docExecutorName"></span>
+            </label>
+            <label class="form-field">
+                <span class="form-label">Краткая связь / корреспондент</span>
+                <input type="text" id="docCorrespondent" data-field="docCorrespondent" class="auth-input" placeholder="Название организации или отдела">
+                <span class="form-error" data-error-for="docCorrespondent"></span>
+            </label>
+            <label class="form-field form-field--full">
+                <span class="form-label">Тема документа <span class="form-required">*</span></span>
+                <textarea id="docSubject" data-field="docSubject" class="auth-input" rows="2" placeholder="Коротко и по делу: о чём документ"></textarea>
+                <span class="form-error" data-error-for="docSubject"></span>
+            </label>
+        </div>
         
         <label style="font-size: 12px; color: var(--secondary); margin-bottom: 5px; display: block; font-weight: 600; margin-top: 10px;">ПРИВЯЗКА К СДЕЛКЕ (ОПЦИОНАЛЬНО):</label>
         <select id="docProjectId" class="auth-input" style="appearance: auto; cursor: pointer; margin-bottom: 10px;"></select>
@@ -53,17 +157,18 @@
         <select id="docParentId" class="auth-input" style="appearance: auto; cursor: pointer; margin-bottom: 10px;"></select>
 
         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: bold; color: var(--danger); margin-bottom: 10px; background: rgba(239, 68, 68, 0.05); padding: 8px; border-radius: 6px;">
-            <input type="checkbox" id="docPriority" style="margin: 0; width: 16px; height: 16px;"> 🔥 Отметить как особо важный (Приоритет)
+            <input type="checkbox" id="docPriority" style="margin: 0; width: 16px; height: 16px;">
+            Отметить как особо важный документ
         </label>
 
         <button class="btn-secondary" style="width: 100%; margin-top: 10px; justify-content: center;" onclick="startBatchScan()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
             Потоковое сканирование со сканера (Штрих-коды)
         </button>
-        <div style="display: flex; gap: 12px; margin-top: 20px;">
+        <div class="modal-actions form-actions">
             <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="document.getElementById('createDocModal').style.display='none'">Отмена</button>
-            <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="submitDocument('draft')">В черновики</button>
-            <button class="btn-primary" style="flex:1; justify-content:center;" onclick="submitDocument()">Зарегистрировать</button>
+            <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="submitDocument('draft')">Сохранить черновик</button>
+            <button class="btn-primary" style="flex:1; justify-content:center;" onclick="submitDocument()">Создать</button>
         </div>
     </div>
 </div>
@@ -162,9 +267,43 @@
     </div>
 </div>
 
+<div id="tenderImportModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card tender-import-modal">
+        <div class="project-create-header">
+            <div>
+                <h2 class="project-create-title">Создать из тендера</h2>
+    <p class="project-create-subtitle">Вставь ссылку, описание закупки или выдержку из ТЗ. Система соберет черновик проекта и предложит позиции из НСИ.</p>
+            </div>
+        </div>
+
+        <div class="project-create-grid">
+            <div class="project-create-field project-create-field--wide">
+                <label class="project-create-label" for="tenderSourceInput">Ссылка или источник</label>
+                <input type="text" id="tenderSourceInput" class="auth-input" placeholder="Ссылка на закупку, номер тендера или источник данных">
+            </div>
+            <div class="project-create-field project-create-field--wide">
+                <label class="project-create-label" for="tenderTextInput">Текст закупки / ТЗ</label>
+                <textarea id="tenderTextInput" class="auth-input smart-tool-textarea" rows="10" placeholder="Вставьте описание закупки, требования, спецификацию, выдержку из ТЗ"></textarea>
+            </div>
+        </div>
+
+        <div class="project-create-actions" style="margin-top: 8px;">
+            <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="closeTenderImportModal()">Отмена</button>
+            <button class="btn-primary" style="flex:1; justify-content:center;" onclick="parseTenderDraft()">Разобрать тендер</button>
+        </div>
+
+        <div id="tenderParseResult" class="smart-tool-result smart-tool-result--plain" style="margin-top: 18px;"></div>
+    </div>
+</div>
+
 <div id="meetingModal" class="modal-overlay" style="display: none;">
     <div class="modal-card">
-        <h2>Назначить планерку</h2>
+        <div class="modal-header modal-header--stack">
+            <div>
+                <h2 class="modal-title">Назначить планерку</h2>
+                <p class="modal-subtitle">Зафиксируйте тему, участников и повестку, чтобы совещание сразу вошло в рабочий ритм.</p>
+            </div>
+        </div>
         <input type="text" id="meetTitle" class="auth-input" placeholder="Тема совещания *">
         <div style="display: flex; gap: 10px;">
             <input type="text" id="meetDate" class="date-picker auth-input" placeholder="Дата">
@@ -174,7 +313,7 @@
         <div id="meetUsers" style="text-align: left; max-height: 150px; overflow-y: auto; background: var(--bg); padding: 10px; border-radius: 12px; border: 1px solid var(--border); font-size: 13px; margin-bottom: 15px;"></div>
         <label style="font-size: 12px; color: var(--secondary); margin-top: 10px; display: block; text-align: left; font-weight: 600;">ПОВЕСТКА:</label>
         <textarea id="meetAgenda" class="auth-input" rows="3" placeholder="Пункт 1, Пункт 2, Пункт 3..."></textarea>
-        <div style="display: flex; gap: 12px; margin-top: 20px;">
+        <div class="modal-actions">
             <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="document.getElementById('meetingModal').style.display='none'">Отмена</button>
             <button class="btn-primary" style="flex:1; justify-content:center;" onclick="submitMeeting()">Назначить</button>
         </div>
@@ -183,11 +322,16 @@
 
 <div id="createChatModal" class="modal-overlay" style="display: none;">
     <div class="modal-card">
-        <h2>Создать новый чат</h2>
+        <div class="modal-header modal-header--stack">
+            <div>
+                <h2 class="modal-title">Создать новый чат</h2>
+                <p class="modal-subtitle">Новая рабочая беседа для проекта, команды или отдельного потока коммуникации.</p>
+            </div>
+        </div>
         <input type="text" id="newChatName" class="auth-input" placeholder="Название беседы *">
         <label style="font-size: 12px; color: var(--secondary); margin-top: 10px; display: block; text-align: left; font-weight: 600;">ВЫБЕРИТЕ УЧАСТНИКОВ:</label>
         <div id="newChatUsers" style="text-align: left; max-height: 150px; overflow-y: auto; background: var(--bg); padding: 10px; border-radius: 12px; border: 1px solid var(--border); font-size: 13px; margin-bottom: 15px;"></div>
-        <div style="display: flex; gap: 12px; margin-top: 20px;">
+        <div class="modal-actions">
             <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="document.getElementById('createChatModal').style.display='none'">Отмена</button>
             <button class="btn-primary" style="flex:1; justify-content:center;" onclick="submitNewChat()">Создать чат</button>
         </div>
@@ -196,31 +340,60 @@
 
 <div id="protocolModal" class="modal-overlay" style="display: none;">
     <div class="modal-card" style="max-width: 600px;">
-        <h2 id="protTitle">Протокол совещания</h2>
+        <div class="modal-header modal-header--stack">
+            <div>
+                <h2 id="protTitle" class="modal-title">Протокол совещания</h2>
+                <p class="modal-subtitle">Решения, договоренности и действия по итогам встречи.</p>
+            </div>
+        </div>
         <div id="protAgendaList" style="max-height: 300px; overflow-y: auto; margin-bottom: 15px;"></div>
-        <div style="display: flex; gap: 12px; margin-top: 20px;">
+        <div class="modal-actions">
             <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="document.getElementById('protocolModal').style.display='none'">Закрыть</button>
             <button class="btn-primary" style="flex:1; justify-content:center;" onclick="saveProtocol()">💾 Сохранить решения</button>
-            <button class="btn-success" style="flex:1; justify-content:center;" onclick="generateProtocolPDF()">📄 Выгрузить PDF</button>
+            <button class="btn-success" style="flex:1; justify-content:center;" onclick="generateProtocolPDF()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15h6"></path><path d="M9 11h6"></path></svg>
+                Выгрузить PDF
+            </button>
         </div>
     </div>
 </div>
 
 <div id="createTaskModal" class="modal-overlay" style="display: none;">
     <div class="modal-card">
-        <h2>Новое поручение</h2>
-        <input type="text" id="taskTitle" class="auth-input" placeholder="Суть поручения (Кратко) *">
-        <textarea id="taskDesc" class="auth-input" rows="3" placeholder="Подробное описание..."></textarea>
-        <div style="display: flex; gap: 10px; margin-bottom: 16px;">
-            <select id="taskExecutor" class="auth-input" style="margin:0; cursor:pointer; flex: 1;"></select>
-            <input type="text" id="taskDeadline" class="date-picker auth-input" placeholder="Дедлайн" style="margin:0; width: 150px;">
+        <div class="modal-header modal-header--stack">
+            <div>
+                <h2 class="modal-title">Новое поручение</h2>
+                <p class="modal-subtitle">Поставьте задачу, задайте дедлайн, регулярность и приоритет в одном окне.</p>
+            </div>
+        </div>
+        <div id="taskForm" class="form-grid-standard">
+            <label class="form-field form-field--full">
+                <span class="form-label">Суть поручения <span class="form-required">*</span></span>
+                <input type="text" id="taskTitle" data-field="taskTitle" class="auth-input" placeholder="Например, проверить договор и дать замечания">
+                <span class="form-error" data-error-for="taskTitle"></span>
+            </label>
+            <label class="form-field form-field--full">
+                <span class="form-label">Описание</span>
+                <textarea id="taskDesc" data-field="taskDesc" class="auth-input" rows="3" placeholder="Коротко опишите результат, а не только тему"></textarea>
+                <span class="form-error" data-error-for="taskDesc"></span>
+            </label>
+            <label class="form-field">
+                <span class="form-label">Исполнитель <span class="form-required">*</span></span>
+                <select id="taskExecutor" data-field="taskExecutor" class="auth-input" style="cursor:pointer;"></select>
+                <span class="form-error" data-error-for="taskExecutor"></span>
+            </label>
+            <label class="form-field">
+                <span class="form-label">Дедлайн <span class="form-required">*</span></span>
+                <input type="text" id="taskDeadline" data-field="taskDeadline" class="date-picker auth-input" placeholder="дд.мм.гггг">
+                <span class="form-error" data-error-for="taskDeadline"></span>
+            </label>
         </div>
         
         <label style="font-size: 12px; color: var(--secondary); margin-bottom: 5px; display: block; font-weight: 600;">ПРИВЯЗКА К СДЕЛКЕ (ОПЦИОНАЛЬНО):</label>
         <select id="taskProjectId" class="auth-input" style="appearance: auto; cursor: pointer; margin-bottom: 10px;"></select>
         
         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: bold; color: var(--danger); margin-bottom: 16px; background: rgba(239, 68, 68, 0.05); padding: 8px; border-radius: 6px;">
-            <input type="checkbox" id="taskPriority" style="margin: 0; width: 16px; height: 16px;"> 🔥 Высокий приоритет задачи
+            <input type="checkbox" id="taskPriority" style="margin: 0; width: 16px; height: 16px;"> Высокий приоритет задачи
         </label>
 
         <div style="margin-bottom: 16px;">
@@ -232,48 +405,41 @@
                 <option value="monthly_15">Каждое 15-е число месяца</option>
             </select>
         </div>
-        <div style="display: flex; gap: 12px;">
+        <div class="modal-actions form-actions">
             <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="document.getElementById('createTaskModal').style.display='none'">Отмена</button>
-            <button class="btn-primary" style="flex:1; justify-content:center;" onclick="submitTask()">Назначить</button>
+            <button class="btn-primary" style="flex:1; justify-content:center;" onclick="submitTask()">Создать</button>
         </div>
-    </div>
-    <script>
-        window.submitTask = async function() {
-            const title = document.getElementById('taskTitle').value.trim();
-            const desc = document.getElementById('taskDesc').value.trim();
-            const exec = document.getElementById('taskExecutor').value;
-            const dl = document.getElementById('taskDeadline').value;
-            const rec = document.getElementById('taskRecurrence') ? document.getElementById('taskRecurrence').value : 'none';
-            if(!title || !exec) return customAlert("Заполните суть и исполнителя");
-            const res = await apiCall('/tasks', 'POST', { title: title, description: desc, author: currentUser.name, executor: exec, deadline: dl, recurrence: rec });
-            if(res && res.status === 'success') {
-                document.getElementById('createTaskModal').style.display = 'none';
-                document.getElementById('taskTitle').value = '';
-                document.getElementById('taskDesc').value = '';
-                showToast("Поручения", "Задача успешно назначена");
-                if(typeof loadTasks === 'function') { await loadTasks(); if(typeof renderTasks === 'function') renderTasks(); }
-            }
-        };
-    </script>
     </div>
 </div>
 
 <div id="createKnowledgeModal" class="modal-overlay" style="display: none;">
     <div class="modal-card">
-        <h2>Новый регламент</h2>
+        <div class="modal-header modal-header--stack">
+            <div>
+                <h2 class="modal-title">Новый регламент</h2>
+                <p class="modal-subtitle">Опубликуйте внутренний стандарт и сразу задайте, кто должен с ним ознакомиться.</p>
+            </div>
+        </div>
         <input type="text" id="knowTitle" class="auth-input" placeholder="Название *">
         <textarea id="knowContent" class="auth-input" rows="6" placeholder="Текст..."></textarea>
         <div id="knowRoles" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;"></div>
-        <button class="btn-primary" onclick="submitKnowledge()">Опубликовать</button>
-        <button class="btn-secondary" onclick="document.getElementById('createKnowledgeModal').style.display='none'">Отмена</button>
+        <div class="modal-actions">
+            <button class="btn-secondary" onclick="document.getElementById('createKnowledgeModal').style.display='none'">Отмена</button>
+            <button class="btn-primary" onclick="submitKnowledge()">Опубликовать</button>
+        </div>
     </div>
 </div>
 
 <div id="readKnowledgeModal" class="modal-overlay" style="display: none;">
     <div class="modal-card" style="max-width: 600px; max-height: 80vh; display: flex; flex-direction: column;">
-        <h2 id="readKnowTitle"></h2>
+        <div class="modal-header modal-header--stack">
+            <div>
+                <h2 id="readKnowTitle" class="modal-title"></h2>
+                <p class="modal-subtitle">Ознакомьтесь с содержимым и подтвердите прочтение, если это обязательный документ.</p>
+            </div>
+        </div>
         <div id="readKnowContent" style="flex:1; overflow-y:auto; background: var(--bg); padding: 15px; border-radius: 12px; border: 1px solid var(--border); font-size: 14px; line-height: 1.5; white-space: pre-wrap; margin-bottom: 20px;"></div>
-        <div style="display: flex; gap: 12px;">
+        <div class="modal-actions">
             <button class="btn-secondary" onclick="document.getElementById('readKnowledgeModal').style.display='none'">Закрыть</button>
             <button id="btnMarkRead" class="btn-success" style="display:none;" onclick="markKnowledgeRead()">ОЗНАКОМЛЕН(А)</button>
         </div>
@@ -293,7 +459,7 @@
 <div id="diffModal" class="modal-overlay" style="display: none; z-index: 10001;">
     <div class="modal-card" style="max-width: 800px; width: 90%;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h2 style="margin: 0; font-size: 18px;">Сравнение версий (Diff)</h2>
+    <h2 style="margin: 0; font-size: 18px;">Сравнение версий</h2>
             <button class="btn-danger" onclick="document.getElementById('diffModal').style.display='none'">✕</button>
         </div>
         <div id="diffContent" style="background: var(--bg); padding: 15px; border-radius: 8px; font-family: monospace; white-space: pre-wrap; max-height: 500px; overflow-y: auto; font-size: 13px; line-height: 1.6;"></div>
@@ -329,18 +495,32 @@
                 <p style="color: var(--secondary); font-size: 14px; margin: 0;"><b>Дата регистрации:</b> <span id="printDocDate"></span></p>
                 <p style="color: var(--secondary); font-size: 14px; margin: 5px 0 0 0;"><b>От кого / Кому:</b> <span id="printDocCorr"></span></p>
             </div>
-            <img id="printDocQr" src="" alt="QR Code" style="width: 120px; height: 120px; border: 1px solid var(--border); border-radius: 8px; padding: 5px; background: white;">
+            <img id="printDocQr" src="" alt="QR-код" style="width: 120px; height: 120px; border: 1px solid var(--border); border-radius: 8px; padding: 5px; background: white;">
         </div>
         
         <div style="background: var(--bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border); font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
             <b>Краткое содержание (Тема):</b><br>
             <span id="printDocSubj"></span>
         </div>
+
+        <div id="printDocResolutionBlock" style="display:none; background: rgba(39, 93, 246, 0.05); padding: 20px; border-radius: 12px; border: 1px solid rgba(39, 93, 246, 0.18); font-size: 14px; line-height: 1.6; margin-bottom: 20px;">
+            <div style="font-weight:700; margin-bottom:8px;">Резолюция</div>
+            <div style="color: var(--secondary); font-size: 12px; margin-bottom: 10px;">
+                Автор: <span id="printDocResolutionAuthor">—</span> · Исполнитель: <span id="printDocResolutionAssignee">—</span> · Срок: <span id="printDocResolutionDeadline">—</span>
+            </div>
+            <div id="printDocResolutionTaskWrap" style="display:none; color: var(--primary); font-size: 12px; margin-bottom: 10px; font-weight: 600;">
+                Поручение: <span id="printDocResolutionTask">—</span>
+            </div>
+            <div id="printDocResolutionText"></div>
+        </div>
         
         <div class="no-print" style="display: flex; gap: 12px; margin-top: 20px;">
             <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="document.getElementById('printDocModal').style.display='none'">Закрыть</button>
             <button class="btn-success" style="flex:1; justify-content:center;" onclick="openDocResolution()">📝 Резолюция</button>
-            <button class="btn-primary" style="flex:1; justify-content:center;" onclick="window.print()">🖨️ Распечатать карточку</button>
+            <button class="btn-primary" style="flex:1; justify-content:center;" onclick="window.print()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                Распечатать карточку
+            </button>
         </div>
     </div>
 </div>
@@ -405,21 +585,5 @@
             });
         }
 
-            // Перехватываем функцию submitDocument для передачи project_id (Патч)
-            window.submitDocument = async function() {
-                const type = document.getElementById('docType').value;
-                const num = document.getElementById('docNumber').value;
-                const dDate = document.getElementById('docDate').value;
-                const corr = document.getElementById('docCorrespondent').value;
-                const subj = document.getElementById('docSubject').value;
-                const projId = document.getElementById('docProjectId') ? (parseInt(document.getElementById('docProjectId').value) || 0) : 0;
-                
-                if (!num || !subj) return customAlert("Заполните номер и тему");
-                const res = await apiCall('/documents', 'POST', { type: type, number: num, d_date: dDate, correspondent: corr, subject: subj, status: 'Зарегистрирован', project_id: projId });
-                if(res && res.status === 'success') {
-                    document.getElementById('createDocModal').style.display = 'none';
-                    showToast("Журнал 1С", "Документ официально зарегистрирован");
-                }
-            };
         });
     </script>

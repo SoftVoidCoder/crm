@@ -1,0 +1,2333 @@
+/* Workspace refinement layer: ERP refreshes, dense layout passes, containment fixes. */
+
+    margin: 0 8px 8px;
+    font-size: 9px;
+}
+
+.nav-item {
+    padding: 9px 11px;
+    gap: 10px;
+    border-radius: 12px;
+    font-size: 13px;
+    margin-bottom: 2px;
+}
+
+.topbar {
+    min-height: 64px;
+    padding: 10px 14px;
+    margin: 12px 14px 0;
+    border-radius: 16px;
+    gap: 14px;
+    box-shadow: 0 10px 24px rgba(15, 30, 60, 0.06);
+}
+
+.search-bar {
+    max-width: 500px;
+}
+
+.search-bar input {
+    min-height: 40px;
+    padding: 10px 14px 10px 40px;
+    border-radius: 12px;
+    font-size: 12.5px;
+}
+
+.topbar-search-icon,
+.search-bar svg {
+    left: 14px;
+}
+
+.topbar-actions,
+.view-actions,
+.dashboard-actions,
+.project-section-actions,
+.project-toolbar-group,
+.finance-actions-row,
+.smart-tool-actions {
+    gap: 8px;
+}
+
+.topbar-task-control,
+.user-profile {
+    min-height: 36px;
+    height: 36px;
+    border-radius: 12px;
+}
+
+.topbar-task-control {
+    padding: 0 12px;
+}
+
+.user-profile {
+    padding: 6px 8px 6px 10px;
+    font-size: 13px;
+}
+
+.topbar-user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    font-size: 13px;
+}
+
+.notif-bell,
+.icon-btn {
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
+    border-radius: 10px;
+}
+
+.main-content {
+    padding: 18px 18px 44px;
+}
+
+.view-page {
+    gap: 20px;
+    width: min(100%, 1420px);
+}
+
+.view-header {
+    gap: 12px;
+}
+
+.view-heading {
+    gap: 6px;
+}
+
+.view-eyebrow {
+    padding: 5px 10px;
+    font-size: 10px;
+}
+
+.view-title,
+.dashboard-title {
+    font-size: clamp(22px, 2vw, 30px);
+    line-height: 1.05;
+}
+
+.view-subtitle,
+.section-subtitle,
+.smart-summary-text,
+.smart-result-sub,
+.smart-source-preview {
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+.surface-card--padded,
+.project-panel,
+.approval-card,
+.task-card,
+.kpi-card,
+.smart-tool-card,
+.contract-meta-card {
+    padding: 18px;
+}
+
+.surface-card,
+.project-card,
+.project-panel,
+.approval-card,
+.task-card,
+.kpi-card,
+.smart-tool-card,
+.table-shell,
+.metric-card,
+.client360-item,
+.contract360-registry-item {
+    border-radius: 16px;
+}
+
+.section-stack,
+.client360-content,
+.contract360-layout {
+    gap: 18px;
+}
+
+.section-header,
+.project-section-header,
+.dashboard-toolbar,
+.dashboard-subbar,
+.project-header-actions,
+.project-toolbar-shell {
+    margin-bottom: 14px;
+}
+
+.dashboard-subbar {
+    padding: 10px 0 12px;
+}
+
+.metrics-grid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+}
+
+.metric-card {
+    padding: 18px;
+    gap: 6px;
+}
+
+.metric-title {
+    font-size: 10px;
+}
+
+.metric-value {
+    font-size: 22px;
+    line-height: 1.05;
+}
+
+.project-shell {
+    padding: 4px 0 16px;
+}
+
+.project-toolbar {
+    padding: 10px;
+    border-radius: 14px;
+}
+
+.project-toolbar-group--status .btn-prolong,
+.project-toolbar-group--status .btn-terminate {
+    min-width: 0;
+}
+
+.project-metrics-strip {
+    gap: 12px;
+}
+
+.project-metric {
+    min-height: 88px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    gap: 6px;
+}
+
+.project-metric-label,
+.field-label {
+    font-size: 10px;
+}
+
+.project-metric-value {
+    font-size: clamp(18px, 1.9vw, 28px);
+}
+
+button {
+    min-height: 34px;
+    padding: 6px 12px;
+    border-radius: 10px;
+    font-size: 12px;
+    box-shadow: none;
+}
+
+button.btn-primary {
+    box-shadow: 0 8px 16px rgba(23, 73, 190, 0.18);
+}
+
+button.btn-danger {
+    box-shadow: 0 8px 16px rgba(217, 59, 69, 0.16);
+}
+
+.status-badge,
+.smart-tool-badge {
+    padding: 4px 9px;
+    height: 22px;
+    font-size: 9px;
+}
+
+.tabs {
+    gap: 6px;
+}
+
+.tab {
+    padding: 6px 12px;
+    height: 34px;
+    border-radius: 10px;
+    font-size: 12px;
+}
+
+.form-grid,
+.finance-form-grid,
+.contract360-form-grid,
+.email-account-form-grid {
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.finance-layout,
+.client360-grid,
+.contract360-master-grid,
+.email-workspace {
+    gap: 18px;
+}
+
+.auth-input,
+select.auth-input,
+textarea.auth-input {
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 12.5px;
+}
+
+textarea.auth-input,
+.smart-tool-textarea {
+    min-height: 96px;
+}
+
+.empty-state,
+.project-empty-hint,
+.smart-tool-empty,
+.legal-empty-state,
+.approval-empty,
+.task-empty,
+.email-empty {
+    padding: 16px;
+    border-radius: 14px;
+    font-size: 12.5px;
+}
+
+.table-shell table th,
+.table-shell table td,
+table th,
+table td {
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+/* Weekend UX pass: calmer employee-facing workspace */
+.view-header {
+    align-items: flex-start;
+    gap: 12px;
+}
+.view-heading {
+    gap: 6px;
+}
+.view-eyebrow {
+    padding: 5px 10px;
+    font-size: 10px;
+}
+.view-title,
+.dashboard-title {
+    font-size: clamp(22px, 2vw, 30px);
+    line-height: 1.05;
+    letter-spacing: -0.04em;
+}
+.view-subtitle,
+.section-subtitle {
+    font-size: 12.5px;
+    line-height: 1.45;
+    max-width: 680px;
+}
+.view-header-note {
+    margin: 2px 0 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--secondary);
+}
+.surface-card--padded,
+.project-panel,
+.approval-card,
+.task-card,
+.kpi-card,
+.smart-tool-card,
+.contract-meta-card {
+    padding: 18px;
+}
+.surface-card,
+.project-card,
+.project-panel,
+.approval-card,
+.task-card,
+.kpi-card,
+.smart-tool-card,
+.table-shell,
+.metric-card,
+.client360-item,
+.contract360-registry-item {
+    border-radius: 16px;
+}
+.section-stack,
+.client360-content,
+.contract360-layout {
+    gap: 18px;
+}
+.section-header,
+.project-section-header,
+.dashboard-toolbar,
+.dashboard-subbar,
+.project-header-actions,
+.project-toolbar-shell {
+    margin-bottom: 14px;
+}
+.section-title {
+    font-size: 16px;
+}
+.main-content {
+    padding: 18px 18px 44px;
+}
+.view-page {
+    gap: 20px;
+    width: min(100%, 1420px);
+}
+.dashboard-subbar {
+    padding: 10px 0 12px;
+}
+.metrics-grid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+}
+.metric-card {
+    padding: 18px;
+    gap: 6px;
+}
+.tab {
+    padding: 6px 14px;
+    height: 34px;
+    border-radius: 10px;
+}
+button {
+    min-height: 36px;
+    padding: 7px 14px;
+    border-radius: 10px;
+}
+.ops-overview-card {
+    gap: 16px;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+    border-radius: 18px;
+    background:
+        radial-gradient(circle at top right, rgba(63, 113, 255, 0.08), transparent 24%),
+        linear-gradient(180deg, rgba(255,255,255,0.98), rgba(246,249,255,0.98));
+    box-shadow: 0 16px 30px rgba(15, 32, 68, 0.05);
+}
+.ops-overview-card--compact {
+    padding: 14px 16px;
+    margin-bottom: 14px;
+}
+.ops-overview-title {
+    font-size: 15px;
+}
+.ops-overview-text {
+    margin-top: 6px;
+    max-width: 680px;
+    font-size: 12px;
+    line-height: 1.55;
+}
+.ops-pill,
+.ops-section-chip {
+    min-height: 28px;
+    padding: 0 10px;
+    font-size: 10px;
+}
+.finance-layout,
+.client360-grid,
+.erp-cockpit-grid {
+    gap: 18px;
+}
+.secondary-zone {
+    opacity: 0.96;
+}
+.secondary-zone .surface-card {
+    box-shadow: 0 14px 28px rgba(15, 30, 60, 0.05);
+}
+.workbench-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: -4px;
+}
+.workbench-card {
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(23, 59, 115, 0.08);
+    background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(245,248,253,0.98));
+    box-shadow: 0 12px 22px rgba(15, 30, 60, 0.04);
+}
+.workbench-card-title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--secondary);
+    margin-bottom: 8px;
+}
+.workbench-card-text {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--primary-strong);
+}
+.workbench-card-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+.workflow-row-highlight {
+    animation: workflowRowPulse 2.2s ease-out;
+    position: relative;
+    outline: 2px solid rgba(39, 93, 246, 0.34);
+    outline-offset: -2px;
+    border-color: rgba(39, 93, 246, 0.28) !important;
+}
+
+.workflow-row-highlight td,
+.workflow-row-highlight .client360-item,
+.workflow-row-highlight {
+    background: linear-gradient(180deg, rgba(39, 93, 246, 0.08), rgba(39, 93, 246, 0.02));
+}
+
+@keyframes workflowRowPulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(39, 93, 246, 0.22);
+    }
+    100% {
+        box-shadow: 0 0 0 14px rgba(39, 93, 246, 0);
+    }
+}
+
+.workflow-empty-note {
+    font-size: 12px;
+    color: var(--secondary);
+}
+@media (max-width: 1100px) {
+    .workbench-strip {
+        grid-template-columns: 1fr;
+    }
+}
+[data-theme="dark"] .workbench-card {
+    background: linear-gradient(180deg, rgba(18, 31, 48, 0.98), rgba(14, 25, 39, 0.98));
+    border-color: rgba(127, 165, 220, 0.14);
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
+}
+[data-theme="dark"] .workbench-card-title {
+    color: #9fb2c9;
+}
+[data-theme="dark"] .workbench-card-text {
+    color: #edf3fb;
+}
+
+[data-theme="dark"] .workflow-row-highlight td,
+[data-theme="dark"] .workflow-row-highlight .client360-item,
+[data-theme="dark"] .workflow-row-highlight {
+    background: linear-gradient(180deg, rgba(79, 139, 255, 0.16), rgba(79, 139, 255, 0.05));
+}
+
+[data-theme="dark"] .workflow-row-highlight {
+    outline-color: rgba(127, 165, 220, 0.4);
+    border-color: rgba(127, 165, 220, 0.3) !important;
+}
+
+[data-theme="dark"] .view-page,
+[data-theme="dark"] #documentsView,
+[data-theme="dark"] #docflowPlusMount,
+[data-theme="dark"] .timeline-board,
+[data-theme="dark"] .timeline-card,
+[data-theme="dark"] .timeline-item,
+[data-theme="dark"] .timeline-axis,
+[data-theme="dark"] .timeline-empty,
+[data-theme="dark"] .smart-tool-panel,
+[data-theme="dark"] .smart-tool-result,
+[data-theme="dark"] .smart-tool-empty,
+[data-theme="dark"] .project-empty-hint,
+[data-theme="dark"] .form-input-custom,
+[data-theme="dark"] .card-archive-info,
+[data-theme="dark"] .project-archive-box,
+[data-theme="dark"] .proj-doc-bubble,
+[data-theme="dark"] .file-item-row,
+[data-theme="dark"] .file-item-row.locked-other,
+[data-theme="dark"] .meeting-card,
+[data-theme="dark"] .ops-pill,
+[data-theme="dark"] .email-account-select,
+[data-theme="dark"] .legal-select,
+[data-theme="dark"] .kanban-col-custom {
+    color: var(--text);
+}
+
+[data-theme="dark"] .section-title,
+[data-theme="dark"] .section-subtitle,
+[data-theme="dark"] .view-title,
+[data-theme="dark"] .view-subtitle,
+[data-theme="dark"] .view-title-row,
+[data-theme="dark"] .doc-number,
+[data-theme="dark"] .archive-title,
+[data-theme="dark"] .timeline-item-title,
+[data-theme="dark"] .timeline-item strong,
+[data-theme="dark"] .timeline-item b,
+[data-theme="dark"] .smart-tool-title,
+[data-theme="dark"] .ops-overview-title,
+[data-theme="dark"] .client360-item-title,
+[data-theme="dark"] .metric-label,
+[data-theme="dark"] .metric-value {
+    color: #edf3fb;
+}
+
+[data-theme="dark"] .section-subtitle,
+[data-theme="dark"] .view-subtitle,
+[data-theme="dark"] .client360-item-meta,
+[data-theme="dark"] .doc-sub-label.secondary,
+[data-theme="dark"] .timeline-item-meta,
+[data-theme="dark"] .timeline-empty,
+[data-theme="dark"] .project-empty-hint,
+[data-theme="dark"] .smart-tool-empty,
+[data-theme="dark"] .legal-empty-state,
+[data-theme="dark"] .archive-subtitle,
+[data-theme="dark"] .card-archive-info,
+[data-theme="dark"] .proj-doc-meta,
+[data-theme="dark"] .meeting-card.completed,
+[data-theme="dark"] .ops-pill small {
+    color: #9fb2c9;
+}
+
+[data-theme="dark"] .tabs,
+[data-theme="dark"] .section-content.active,
+[data-theme="dark"] .table-shell,
+[data-theme="dark"] .surface-card,
+[data-theme="dark"] .surface-card--padded,
+[data-theme="dark"] .surface-card--soft,
+[data-theme="dark"] .timeline-card,
+[data-theme="dark"] .timeline-item,
+[data-theme="dark"] .smart-tool-panel,
+[data-theme="dark"] .smart-tool-result,
+[data-theme="dark"] .project-archive-box,
+[data-theme="dark"] .card-archive-info,
+[data-theme="dark"] .proj-doc-bubble,
+[data-theme="dark"] .meeting-card,
+[data-theme="dark"] .ops-pill,
+[data-theme="dark"] .legal-select,
+[data-theme="dark"] .file-item-row,
+[data-theme="dark"] .kanban-col-custom,
+[data-theme="dark"] .doc-file-link {
+    background: linear-gradient(180deg, rgba(14, 24, 39, 0.98), rgba(10, 19, 31, 0.98));
+    border-color: rgba(127, 165, 220, 0.16);
+    box-shadow: none;
+}
+
+[data-theme="dark"] .tabs {
+    border-bottom-color: rgba(127, 165, 220, 0.12) !important;
+}
+
+[data-theme="dark"] .tab {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(127, 165, 220, 0.12);
+    color: #d9e8fb;
+}
+
+[data-theme="dark"] .tab.active {
+    background: rgba(127, 165, 220, 0.14);
+    border-color: rgba(127, 165, 220, 0.26);
+    color: #ffffff;
+}
+
+[data-theme="dark"] .auth-input,
+[data-theme="dark"] select.auth-input,
+[data-theme="dark"] textarea.auth-input,
+[data-theme="dark"] .form-input-custom,
+[data-theme="dark"] .smart-tool-textarea,
+[data-theme="dark"] .project-metric-input,
+[data-theme="dark"] .project-create-select,
+[data-theme="dark"] .project-chat-input,
+[data-theme="dark"] .chk-date-input,
+[data-theme="dark"] .chk-comment-input,
+[data-theme="dark"] .ops-pill input,
+[data-theme="dark"] .admin-table select,
+[data-theme="dark"] input[type="text"],
+[data-theme="dark"] input[type="date"],
+[data-theme="dark"] input[type="number"],
+[data-theme="dark"] input[type="email"],
+[data-theme="dark"] input[type="password"],
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+    background: #112032;
+    color: #edf3fb;
+    border: 1px solid #28415f;
+}
+
+[data-theme="dark"] .auth-input:focus,
+[data-theme="dark"] select.auth-input:focus,
+[data-theme="dark"] textarea.auth-input:focus,
+[data-theme="dark"] .form-input-custom:focus,
+[data-theme="dark"] .smart-tool-textarea:focus,
+[data-theme="dark"] .project-metric-input:focus,
+[data-theme="dark"] .project-create-select:focus,
+[data-theme="dark"] .project-chat-input:focus,
+[data-theme="dark"] .chk-date-input:focus,
+[data-theme="dark"] .chk-comment-input:focus,
+[data-theme="dark"] .ops-pill input:focus,
+[data-theme="dark"] .admin-table select:focus,
+[data-theme="dark"] input[type="text"]:focus,
+[data-theme="dark"] input[type="date"]:focus,
+[data-theme="dark"] input[type="number"]:focus,
+[data-theme="dark"] input[type="email"]:focus,
+[data-theme="dark"] input[type="password"]:focus,
+[data-theme="dark"] select:focus,
+[data-theme="dark"] textarea:focus {
+    background: #16283d;
+    border-color: rgba(127, 165, 220, 0.42);
+    box-shadow: 0 0 0 4px rgba(127, 165, 220, 0.12);
+}
+
+[data-theme="dark"] .auth-input::placeholder,
+[data-theme="dark"] textarea::placeholder,
+[data-theme="dark"] input::placeholder {
+    color: #8ea4c1;
+}
+
+.role-workbench {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(220px, .7fr);
+    gap: 18px;
+    margin: 0 0 22px;
+    border: 1px solid var(--surface-line);
+}
+
+.role-workbench--compact {
+    grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr);
+}
+
+.role-workbench--minimal {
+    grid-template-columns: 1fr;
+}
+
+.role-workbench-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.role-workbench-stats {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.role-workbench-stat {
+    min-width: 150px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: var(--surface-muted);
+    border: 1px solid var(--surface-line);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.role-workbench-stat span {
+    font-size: 12px;
+    color: var(--secondary);
+}
+
+.role-workbench-stat strong {
+    font-size: 20px;
+    color: var(--text);
+}
+
+.role-workbench-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-content: flex-start;
+}
+
+body[data-role-slug="manager"] #dashboardView > .workbench-strip,
+body[data-role-slug="employee"] #dashboardView > .workbench-strip,
+body[data-role-slug="accounting"] #dashboardView > .workbench-strip,
+body[data-role-slug="legal"] #dashboardView > .workbench-strip,
+body[data-role-slug="accounting"] #financeView .ops-overview-card,
+body[data-role-slug="accounting"] #financeView .workbench-strip,
+body[data-role-slug="warehouse"] #supplyView .ops-overview-card,
+body[data-role-slug="warehouse"] #supplyView .workbench-strip,
+body[data-role-slug="production"] #productionView .ops-overview-card,
+body[data-role-slug="production"] #productionView .workbench-strip,
+body[data-role-slug="legal"] #approvalsView .workbench-strip {
+    display: none;
+}
+
+body[data-role-slug="employee"] #dashboardHeroMount {
+    margin-bottom: 0;
+}
+
+body[data-role-slug="employee"] .dashboard-hero-card {
+    padding: 24px 26px;
+}
+
+body[data-role-slug="employee"] .dashboard-hero-side,
+body[data-role-slug="employee"] .dashboard-hero-grid,
+body[data-role-slug="employee"] .dashboard-hero-callout {
+    display: none;
+}
+
+body[data-role-slug="director"] #executiveView .view-header,
+body[data-role-slug="director"] #operationsView .view-header {
+    margin-bottom: 12px;
+}
+
+body[data-role-slug="director"] #executiveView .ops-overview-card,
+body[data-role-slug="director"] #operationsView .ops-overview-card,
+body[data-role-slug="director"] #executiveView .workbench-strip,
+body[data-role-slug="director"] #operationsView .workbench-strip {
+    display: none;
+}
+
+#productionView.production-operational-mode .secondary-zone {
+    display: none;
+}
+
+[data-theme="dark"] .role-workbench-stat {
+    background: linear-gradient(180deg, rgba(19, 35, 56, 0.98), rgba(14, 27, 43, 0.98));
+    border-color: rgba(127, 165, 220, 0.14);
+}
+
+@media (max-width: 1100px) {
+    .role-workbench,
+    .role-workbench--compact {
+        grid-template-columns: 1fr;
+    }
+}
+
+[data-theme="dark"] select option {
+    background: #112032;
+    color: #edf3fb;
+}
+
+[data-theme="dark"] button.btn-secondary,
+[data-theme="dark"] .btn-secondary,
+[data-theme="dark"] .btn-secondary:visited {
+    background: rgba(255, 255, 255, 0.05) !important;
+    color: #edf3fb !important;
+    border-color: rgba(127, 165, 220, 0.16) !important;
+}
+
+[data-theme="dark"] button.btn-secondary:hover,
+[data-theme="dark"] .btn-secondary:hover {
+    background: rgba(127, 165, 220, 0.14) !important;
+    border-color: rgba(127, 165, 220, 0.3) !important;
+}
+
+[data-theme="dark"] button:disabled,
+[data-theme="dark"] .btn-secondary:disabled,
+[data-theme="dark"] .btn-primary:disabled,
+[data-theme="dark"] .btn-danger:disabled {
+    background: rgba(255, 255, 255, 0.04) !important;
+    color: rgba(237, 243, 251, 0.42) !important;
+    border-color: rgba(127, 165, 220, 0.08) !important;
+    opacity: 1;
+    cursor: not-allowed;
+}
+
+[data-theme="dark"] .table-shell table thead,
+[data-theme="dark"] .admin-table thead,
+[data-theme="dark"] table thead {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .table-shell table th,
+[data-theme="dark"] .table-shell table td,
+[data-theme="dark"] table th,
+[data-theme="dark"] table td,
+[data-theme="dark"] .admin-table th,
+[data-theme="dark"] .admin-table td {
+    color: #dce8f8;
+    border-color: rgba(127, 165, 220, 0.1);
+}
+
+[data-theme="dark"] .table-shell input[type="checkbox"],
+[data-theme="dark"] .task input[type="checkbox"] {
+    background: #132338;
+    border-color: rgba(127, 165, 220, 0.22);
+    box-shadow: none;
+}
+
+[data-theme="dark"] .doc-file-link,
+[data-theme="dark"] .file-version-badge,
+[data-theme="dark"] .status-badge,
+[data-theme="dark"] .smart-tool-badge {
+    box-shadow: none;
+}
+
+[data-theme="dark"] .doc-file-link {
+    color: #d9e8fb;
+}
+
+[data-theme="dark"] .file-item-row.locked-other {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="dark"] .pwd-blur {
+    background: #15263a;
+    text-shadow: 0 0 8px rgba(0, 0, 0, 0.65);
+}
+
+/* Weekend UX pass v2: stronger hierarchy and cleaner spacing */
+.main-content {
+    padding: 22px 24px 56px;
+}
+
+.view-page {
+    gap: 26px;
+    width: min(100%, 1280px);
+}
+
+.view-header {
+    gap: 10px;
+    margin-bottom: 2px;
+}
+
+.view-title,
+.dashboard-title {
+    font-size: clamp(22px, 1.9vw, 32px);
+}
+
+.view-subtitle,
+.view-header-note,
+.section-subtitle,
+.ops-overview-text {
+    max-width: 760px;
+}
+
+.view-header-note {
+    display: none;
+}
+
+.ops-overview-pills {
+    display: none;
+}
+
+.topbar-context-badge {
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: 11px;
+}
+
+.dashboard-hero-eyebrow {
+    display: none;
+}
+
+.dashboard-hero-text {
+    max-width: 620px;
+}
+
+.dashboard-hero-callout-title {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.dashboard-hero-actions .btn-secondary,
+.view-actions .btn-secondary {
+    background: rgba(255,255,255,0.72);
+}
+
+.ops-overview-card {
+    margin-bottom: 0;
+    padding: 14px 18px;
+    border-radius: 20px;
+}
+
+.ops-overview-card--compact {
+    padding: 13px 16px;
+}
+
+.workbench-strip {
+    display: flex;
+    gap: 0;
+    margin-top: 8px;
+    margin-bottom: 2px;
+    border: 1px solid rgba(23, 59, 115, 0.08);
+    border-radius: 20px;
+    overflow: hidden;
+    background: linear-gradient(180deg, rgba(255,255,255,0.97), rgba(246,249,254,0.98));
+    box-shadow: 0 14px 28px rgba(15, 30, 60, 0.045);
+}
+
+.workbench-card {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 14px 18px;
+    border: none;
+    border-right: 1px solid rgba(23, 59, 115, 0.08);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.workbench-card:last-child {
+    border-right: none;
+}
+
+.workbench-card-title {
+    margin-bottom: 6px;
+    font-size: 10px;
+    letter-spacing: 0.09em;
+}
+
+.workbench-card-text {
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+.workbench-card-actions {
+    margin-top: 10px;
+}
+
+.workbench-strip + .tabs,
+.workbench-strip + .metrics-grid,
+.workbench-strip + .surface-card,
+.workbench-strip + .table-shell,
+.workbench-strip + .finance-layout,
+.workbench-strip + .client360-grid,
+.workbench-strip + .erp-cockpit-grid,
+.workbench-strip + #financeMetricsGrid,
+.workbench-strip + #supplyMetricsGrid,
+.workbench-strip + #productionMetricsGrid,
+.workbench-strip + #executiveBoardroomBrief,
+.workbench-strip + #operationsCockpitMount {
+    margin-top: 18px;
+}
+
+#documentsView .tabs,
+#tasksView .tabs,
+#approvalsView .tabs {
+    margin-top: 2px;
+    margin-bottom: 24px !important;
+    padding-bottom: 12px !important;
+}
+
+.metrics-grid {
+    gap: 12px;
+}
+
+.metric-card {
+    padding: 16px 18px;
+}
+
+.erp-cockpit-grid {
+    gap: 16px;
+}
+
+.erp-cockpit-card {
+    border-radius: 18px;
+    box-shadow: none;
+}
+
+.erp-cockpit-stat,
+.erp-cockpit-highlight {
+    border-radius: 12px;
+}
+
+.table-shell {
+    padding: 18px;
+}
+
+.admin-table thead th {
+    padding: 14px 16px;
+}
+
+.admin-table td {
+    padding: 16px;
+}
+
+.finance-layout,
+.client360-grid,
+.contract360-master-grid,
+.email-workspace {
+    gap: 22px;
+}
+
+.metrics-grid + .finance-layout,
+.metrics-grid + .client360-grid,
+.metrics-grid + .project-ops-grid,
+.metrics-grid + .ops-summary-grid,
+.metrics-grid + .usage-guide,
+.surface-card + .metrics-grid,
+.surface-card + .finance-layout,
+#financeMetricsGrid + #financeCockpitMount,
+#supplyMetricsGrid + #supplyCockpitMount,
+#productionMetricsGrid + #productionCockpitMount,
+#executiveMetricsGrid + .client360-grid,
+#operationsCockpitMount + .client360-grid {
+    margin-top: 22px;
+}
+
+.secondary-zone {
+    opacity: 1;
+    margin-top: 26px;
+}
+
+.secondary-zone .surface-card {
+    box-shadow: none;
+    background: linear-gradient(180deg, rgba(252, 253, 255, 0.96), rgba(246, 249, 253, 0.96));
+}
+
+#docflowPlusMount {
+    margin-top: 30px !important;
+}
+
+.empty-state,
+.project-empty-hint,
+.smart-tool-empty,
+.legal-empty-state,
+.approval-empty,
+.task-empty,
+.email-empty {
+    padding: 22px 18px;
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(252,253,255,0.96), rgba(247,250,255,0.96));
+    border: 1px dashed rgba(23, 59, 115, 0.12);
+}
+
+@media (max-width: 1100px) {
+    .main-content {
+        padding: 18px 16px 42px;
+    }
+
+    .view-page {
+        width: 100%;
+        gap: 22px;
+    }
+
+    .workbench-strip {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .workbench-card {
+        border-right: none;
+        border-bottom: 1px solid rgba(23, 59, 115, 0.08);
+    }
+
+    .workbench-card:last-child {
+        border-bottom: none;
+    }
+}
+
+[data-theme="dark"] .workbench-strip {
+    background: linear-gradient(180deg, rgba(17, 29, 45, 0.98), rgba(13, 23, 36, 0.98));
+    border-color: rgba(127, 165, 220, 0.14);
+    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.22);
+}
+
+[data-theme="dark"] .workbench-card {
+    border-right-color: rgba(127, 165, 220, 0.12);
+}
+
+[data-theme="dark"] .secondary-zone .surface-card {
+    background: linear-gradient(180deg, rgba(16, 27, 41, 0.96), rgba(12, 22, 34, 0.96));
+}
+
+[data-theme="dark"] .empty-state,
+[data-theme="dark"] .project-empty-hint,
+[data-theme="dark"] .smart-tool-empty,
+[data-theme="dark"] .legal-empty-state,
+[data-theme="dark"] .approval-empty,
+[data-theme="dark"] .task-empty,
+[data-theme="dark"] .email-empty {
+    background: linear-gradient(180deg, rgba(18, 30, 46, 0.96), rgba(14, 24, 38, 0.96));
+    border-color: rgba(127, 165, 220, 0.18);
+}
+
+.toolbar-strip {
+    border-radius: 14px;
+    box-shadow: none !important;
+    background: linear-gradient(180deg, rgba(250, 252, 255, 0.96), rgba(246, 249, 253, 0.96));
+    border: 1px solid rgba(23, 59, 115, 0.08);
+}
+
+.usage-guide {
+    margin-top: 30px;
+    box-shadow: none;
+    background: linear-gradient(180deg, rgba(252, 253, 255, 0.97), rgba(247, 250, 254, 0.97));
+    border: 1px solid rgba(23, 59, 115, 0.08);
+}
+
+.usage-guide::before {
+    height: 3px;
+    opacity: 0.8;
+}
+
+.usage-guide-grid {
+    gap: 14px;
+    margin-top: 16px;
+}
+
+.usage-guide-item {
+    padding: 16px;
+    border-radius: 15px;
+    background: rgba(255, 255, 255, 0.72);
+}
+
+[data-theme="dark"] .toolbar-strip {
+    background: linear-gradient(180deg, rgba(17, 29, 45, 0.92), rgba(13, 23, 36, 0.92));
+    border-color: rgba(127, 165, 220, 0.14);
+}
+
+[data-theme="dark"] .usage-guide {
+    background: linear-gradient(180deg, rgba(18, 29, 45, 0.96), rgba(14, 24, 36, 0.96));
+    border-color: rgba(127, 165, 220, 0.14);
+}
+
+[data-theme="dark"] .usage-guide-item {
+    background: rgba(255, 255, 255, 0.035);
+    border-color: rgba(127, 165, 220, 0.1);
+}
+
+/* Compact enterprise workspace: stack heavy blocks vertically to avoid empty side areas */
+#financeView .finance-layout,
+#productionView .finance-layout,
+#accountingView .finance-layout,
+#expensesView .finance-layout,
+#requestsView .finance-layout,
+#resourcesView .finance-layout,
+#salesView .finance-layout,
+#serviceView .finance-layout,
+#supplyView .finance-layout,
+#client360View .client360-grid,
+#contract360View .client360-grid,
+#executiveView .client360-grid,
+#operationsView .client360-grid,
+#projectView .client360-grid,
+#productionView .client360-grid,
+#requestsView .client360-grid,
+#financeView .erp-cockpit-grid,
+#operationsView .erp-cockpit-grid,
+#productionView .erp-cockpit-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    align-items: stretch;
+}
+
+#financeView .finance-layout,
+#productionView .finance-layout,
+#accountingView .finance-layout,
+#expensesView .finance-layout,
+#requestsView .finance-layout,
+#resourcesView .finance-layout,
+#salesView .finance-layout,
+#serviceView .finance-layout,
+#supplyView .finance-layout,
+#client360View .client360-grid,
+#contract360View .client360-grid,
+#executiveView .client360-grid,
+#operationsView .client360-grid,
+#projectView .client360-grid,
+#productionView .client360-grid,
+#requestsView .client360-grid,
+#financeView .erp-cockpit-grid,
+#operationsView .erp-cockpit-grid,
+#productionView .erp-cockpit-grid,
+#financeView .project-ops-grid,
+#operationsView .project-ops-grid,
+#productionView .project-ops-grid,
+#executiveView .ops-summary-grid,
+#operationsView .ops-summary-grid,
+#productionView .ops-summary-grid {
+    gap: 16px !important;
+}
+
+#financeView .surface-card,
+#productionView .surface-card,
+#accountingView .surface-card,
+#expensesView .surface-card,
+#requestsView .surface-card,
+#resourcesView .surface-card,
+#salesView .surface-card,
+#serviceView .surface-card,
+#supplyView .surface-card,
+#client360View .surface-card,
+#contract360View .surface-card,
+#executiveView .surface-card,
+#operationsView .surface-card,
+#projectView .surface-card {
+    width: 100%;
+    min-width: 0;
+}
+
+#financeView .secondary-zone,
+#productionView .secondary-zone,
+#executiveView .secondary-zone,
+#operationsView .secondary-zone {
+    margin-top: 18px;
+}
+
+#financeView .finance-form-grid,
+#productionView .finance-form-grid,
+#accountingView .finance-form-grid,
+#expensesView .finance-form-grid,
+#requestsView .finance-form-grid,
+#resourcesView .finance-form-grid,
+#salesView .finance-form-grid,
+#serviceView .finance-form-grid,
+#supplyView .finance-form-grid,
+#financeView .form-grid-standard,
+#productionView .form-grid-standard,
+#accountingView .form-grid-standard,
+#expensesView .form-grid-standard,
+#requestsView .form-grid-standard,
+#resourcesView .form-grid-standard,
+#salesView .form-grid-standard,
+#serviceView .form-grid-standard,
+#supplyView .form-grid-standard {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px 14px;
+}
+
+#financeView .ops-form-card,
+#productionView .ops-form-card,
+#accountingView .ops-form-card,
+#expensesView .ops-form-card,
+#requestsView .ops-form-card,
+#resourcesView .ops-form-card,
+#salesView .ops-form-card,
+#serviceView .ops-form-card,
+#supplyView .ops-form-card,
+#financeView .ops-list-card,
+#productionView .ops-list-card,
+#accountingView .ops-list-card,
+#expensesView .ops-list-card,
+#requestsView .ops-list-card,
+#resourcesView .ops-list-card,
+#salesView .ops-list-card,
+#serviceView .ops-list-card,
+#supplyView .ops-list-card {
+    min-height: 0;
+}
+
+#financeView .section-header,
+#productionView .section-header,
+#accountingView .section-header,
+#expensesView .section-header,
+#requestsView .section-header,
+#resourcesView .section-header,
+#salesView .section-header,
+#serviceView .section-header,
+#supplyView .section-header,
+#executiveView .section-header,
+#operationsView .section-header {
+    gap: 10px;
+}
+
+@media (min-width: 1280px) {
+    #financeView .workbench-strip,
+    #productionView .workbench-strip,
+    #executiveView .workbench-strip,
+    #operationsView .workbench-strip {
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+}
+
+.app-language-switcher {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    height: 34px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--secondary);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.app-language-select {
+    height: 34px;
+    min-width: 56px;
+    border: 1px solid var(--border);
+    outline: 0;
+    border-radius: 6px;
+    background: var(--card-bg);
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0 8px;
+}
+
+#nomenclatureView .nsi-page-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+}
+
+#nomenclatureView .surface-card {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+#nomenclatureView .client-form,
+#nomenclatureView .finance-form-grid,
+#nomenclatureView .form-grid-standard {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+    gap: 12px 14px !important;
+    align-items: end;
+}
+
+#nomenclatureView .client-form > *,
+#nomenclatureView .finance-form-grid > *,
+#nomenclatureView .form-grid-standard > * {
+    min-width: 0 !important;
+}
+
+#nomenclatureView .ops-grid-two,
+#nomenclatureView .system-ops-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+    align-items: start;
+}
+
+#nomenclatureView .nsi-master-summary-grid,
+#nomenclatureView .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+}
+
+#nomenclatureView .client360-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+}
+
+#nomenclatureView .client360-item {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+#nomenclatureView .client360-item--stack {
+    align-items: stretch;
+}
+
+#nomenclatureView .client360-item > div:first-child {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+#nomenclatureView #nsiMasterDataLists {
+    width: 100%;
+    gap: 14px;
+}
+
+#nomenclatureView #nsiMasterDataLists > .client360-item--stack {
+    width: 100%;
+    padding: 18px 20px;
+}
+
+#nomenclatureView #nsiMasterDataLists .nsi-directory-header {
+    width: 100%;
+    align-items: center;
+}
+
+#nomenclatureView #nsiMasterDataLists > .client360-item--stack > .client360-list {
+    width: 100%;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#nomenclatureView #nsiMasterDataLists > .client360-item--stack > .client360-list > .client360-item {
+    width: 100%;
+    min-height: 0;
+    align-items: center;
+}
+
+#nomenclatureView #nsiMasterDataLists .nsi-master-actions {
+    flex: 0 0 auto;
+    min-width: 220px;
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+#nomenclatureView #nsiMasterDataLists .nsi-master-actions .btn-secondary {
+    min-height: 34px;
+    white-space: nowrap;
+}
+
+#nomenclatureView .finance-actions-row,
+#nomenclatureView .view-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+#nomenclatureView .admin-table {
+    width: 100%;
+    table-layout: fixed;
+}
+
+#nomenclatureView .admin-table th,
+#nomenclatureView .admin-table td {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+#nomenclatureView .nsi-hero {
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card-bg);
+    box-shadow: var(--shadow-card);
+}
+
+#nomenclatureView .nsi-quick-guide {
+    border-radius: 8px;
+    background: #1e3a8a;
+    color: #fff;
+}
+
+#nomenclatureView .nsi-quick-guide .ops-overview-title,
+#nomenclatureView .nsi-quick-guide .ops-overview-text {
+    color: #fff;
+}
+
+#nomenclatureView .nsi-quick-guide .ops-pill {
+    background: rgba(255,255,255,0.14);
+    border-color: rgba(255,255,255,0.24);
+    color: #fff;
+}
+
+#nomenclatureView .nsi-entry-card,
+#nomenclatureView .nsi-products-section {
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    box-shadow: var(--shadow-card);
+}
+
+#nomenclatureView .nsi-file-actions,
+#nomenclatureView .nsi-filter-row {
+    padding: 10px;
+    border-radius: 6px;
+    background: var(--surface-muted);
+    border: 1px solid var(--border);
+}
+
+#nomenclatureView .nsi-work-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 0 0 18px;
+    padding: 8px;
+    border-radius: 22px;
+    border: 1px solid rgba(44, 87, 189, 0.1);
+    background: rgba(248, 250, 255, 0.98);
+    box-shadow: 0 10px 24px rgba(29, 57, 112, 0.06);
+}
+
+#nomenclatureView .nsi-work-tab {
+    min-height: 38px;
+    padding: 8px 14px;
+    border-radius: 16px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--secondary);
+    font-weight: 900;
+    cursor: pointer;
+    transition: 0.18s ease;
+}
+
+#nomenclatureView .nsi-work-tab:hover {
+    color: var(--primary-strong);
+    background: rgba(235, 241, 255, 0.9);
+}
+
+#nomenclatureView .nsi-work-tab.is-active {
+    color: #fff;
+    background: linear-gradient(135deg, #2f63d8, #1d4ed8);
+    box-shadow: 0 10px 22px rgba(47, 99, 216, 0.2);
+}
+
+#nomenclatureView .nsi-work-panel:not(.is-active),
+#nomenclatureView .nsi-panel-group:not(.is-active) {
+    display: none !important;
+}
+
+#nomenclatureView .nsi-integrity-brief {
+    margin: -4px 0 14px;
+}
+
+#nomenclatureView .nsi-integrity-card {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-radius: 18px;
+    border: 1px solid rgba(22, 163, 74, 0.16);
+    background: linear-gradient(135deg, rgba(236, 253, 245, 0.9), rgba(248, 250, 252, 0.96));
+}
+
+#nomenclatureView .nsi-integrity-card--warn {
+    border-color: rgba(245, 158, 11, 0.2);
+    background: linear-gradient(135deg, rgba(255, 251, 235, 0.95), rgba(248, 250, 252, 0.98));
+}
+
+#nomenclatureView .nsi-integrity-title {
+    color: var(--primary-strong);
+    font-weight: 900;
+}
+
+#nomenclatureView .nsi-integrity-text {
+    margin-top: 3px;
+    color: var(--secondary);
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+#nomenclatureView .nsi-integrity-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    justify-content: flex-end;
+}
+
+#nomenclatureView .nsi-product-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+#nomenclatureView .nsi-product-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(220px, 0.45fr) minmax(360px, 0.6fr);
+    gap: 12px;
+    align-items: center;
+    padding: 14px 16px;
+    border: 1px solid rgba(44, 87, 189, 0.1);
+    border-radius: 18px;
+    background:
+        linear-gradient(180deg, rgba(255,255,255,0.99), rgba(242,247,255,0.98));
+    box-shadow: 0 8px 20px rgba(25, 53, 105, 0.045);
+}
+
+#nomenclatureView .nsi-product-main {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+#nomenclatureView .nsi-product-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    color: #fff;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    background: linear-gradient(135deg, #2f63d8, #13a37b);
+    box-shadow: 0 10px 18px rgba(47, 99, 216, 0.18);
+}
+
+#nomenclatureView .nsi-product-copy {
+    min-width: 0;
+}
+
+#nomenclatureView .nsi-product-copy h4 {
+    margin: 0 0 6px;
+    font-size: 16px;
+    color: var(--primary-strong);
+}
+
+#nomenclatureView .nsi-product-tags,
+#nomenclatureView .nsi-row-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+#nomenclatureView .nsi-product-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+#nomenclatureView .nsi-product-facts > div {
+    padding: 9px 10px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.72);
+    border: 1px solid rgba(44, 87, 189, 0.08);
+}
+
+#nomenclatureView .nsi-product-facts span {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--secondary);
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+#nomenclatureView .nsi-product-facts strong {
+    color: var(--text);
+    font-size: 14px;
+}
+
+#nomenclatureView .nsi-stock-ok {
+    color: var(--success) !important;
+}
+
+#nomenclatureView .nsi-stock-warn {
+    color: var(--danger) !important;
+}
+
+#nomenclatureView .nsi-product-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+    padding-top: 0;
+}
+
+#nomenclatureView .nsi-product-actions button {
+    min-height: 36px;
+    padding: 7px 13px;
+}
+
+#nomenclatureView .nsi-code-chip,
+#nomenclatureView .nsi-status-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1.2;
+    border: 1px solid rgba(44, 87, 189, 0.1);
+    background: rgba(235, 241, 255, 0.95);
+    color: var(--primary-strong);
+}
+
+#nomenclatureView .nsi-code-chip--empty {
+    color: var(--secondary);
+    background: rgba(148, 163, 184, 0.1);
+}
+
+#nomenclatureView .nsi-status-pill--ok {
+    color: #0f7a52;
+    background: rgba(22, 163, 74, 0.1);
+    border-color: rgba(22, 163, 74, 0.14);
+}
+
+#nomenclatureView .nsi-status-pill--warn {
+    color: #a15c00;
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.18);
+}
+
+#nomenclatureView .nsi-status-pill--danger {
+    color: var(--danger);
+    background: rgba(214, 66, 66, 0.1);
+    border-color: rgba(214, 66, 66, 0.18);
+}
+
+#nomenclatureView .nsi-status-pill--muted {
+    color: var(--secondary);
+    background: rgba(148, 163, 184, 0.1);
+}
+
+#nomenclatureView .nsi-directory-card {
+    border-radius: 8px;
+    background: var(--card-bg);
+}
+
+#nomenclatureView .nsi-master-row {
+    border-radius: 6px;
+    background: var(--surface-muted);
+}
+
+#nomenclatureView .nsi-product-empty {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 1180px) {
+    #nomenclatureView .nsi-product-card {
+        grid-template-columns: 1fr;
+    }
+
+    #nomenclatureView .nsi-integrity-card {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    #nomenclatureView .nsi-integrity-pills {
+        justify-content: flex-start;
+    }
+
+    #nomenclatureView .nsi-product-actions {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 760px) {
+    #nomenclatureView .nsi-work-tabs {
+        border-radius: 18px;
+    }
+
+    #nomenclatureView .nsi-work-tab {
+        flex: 1 1 150px;
+    }
+}
+
+/* Operations center: make the page read as a clean command center instead of scattered cards */
+#operationsView {
+    --ops-card-gap: 16px;
+}
+
+#operationsView .view-header,
+#operationsView .ops-overview-card,
+#operationsView .workbench-strip,
+#operationsView #operationsRoleWorkbenchMount,
+#operationsView #operationsCockpitMount,
+#operationsView .secondary-zone,
+#operationsView #integrationPlusMount {
+    width: 100%;
+    max-width: 100%;
+}
+
+#operationsView #operationsCockpitMount {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: var(--ops-card-gap);
+    margin: 14px 0 16px !important;
+}
+
+#operationsView .erp-cockpit-card {
+    width: 100%;
+}
+
+#operationsView .erp-cockpit-heading,
+#operationsView .section-header {
+    align-items: flex-start;
+    gap: 14px;
+}
+
+#operationsView .erp-cockpit-stats {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+#operationsView .secondary-zone {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: var(--ops-card-gap) !important;
+    align-items: start;
+    margin-top: 16px !important;
+}
+
+#operationsView .secondary-zone > .surface-card:nth-child(1),
+#operationsView .secondary-zone > .surface-card:nth-child(2) {
+    grid-column: 1 / -1;
+}
+
+#operationsView .surface-card--padded {
+    padding: 22px !important;
+}
+
+#operationsView .surface-card {
+    min-width: 0;
+    overflow: hidden;
+}
+
+#operationsView .section-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+#operationsView .section-header > div:first-child {
+    min-width: 0;
+    flex: 1 1 360px;
+}
+
+#operationsView .section-header .view-actions {
+    flex: 0 1 auto;
+    justify-content: flex-end;
+}
+
+#operationsView .client360-list {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#operationsView .client360-item {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+#operationsView .client360-item--stack {
+    align-items: stretch;
+}
+
+#operationsView .client360-item > div:first-child {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+#operationsView .client360-item-side,
+#operationsView .view-actions {
+    flex-shrink: 0;
+}
+
+#operationsView .finance-form-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+    gap: 12px !important;
+}
+
+#operationsView .finance-form-grid > textarea {
+    grid-column: 1 / -1;
+}
+
+#operationsView #integrationPlusMount {
+    margin-top: 16px !important;
+}
+
+#operationsView #integrationPlusMount > .surface-card,
+#operationsView #integrationPlusMount .surface-card {
+    width: 100%;
+    min-width: 0;
+}
+
+#operationsView #integrationPlusMount .system-ops-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: var(--ops-card-gap) !important;
+    align-items: start;
+}
+
+#operationsView #integrationPlusMount .system-ops-grid > .surface-card:nth-child(1),
+#operationsView #integrationPlusMount .system-ops-grid > .surface-card:nth-child(2) {
+    grid-column: 1 / -1;
+}
+
+#operationsView #integrationPlusMount .client360-list,
+#operationsView #integrationPlusMount .client360-item {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#operationsView #integrationPlusMount .client360-item--stack {
+    align-items: stretch;
+}
+
+#operationsView #integrationPlusMount .metrics-grid {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+#operationsView .secondary-zone > .surface-card,
+#operationsView #integrationPlusMount .system-ops-grid > .surface-card {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+}
+
+#operationsView .secondary-zone > .surface-card > .client360-list,
+#operationsView #integrationPlusMount .surface-card > .client360-list {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+    align-items: stretch;
+}
+
+#operationsView .secondary-zone > .surface-card > .client360-list > .client360-item,
+#operationsView #integrationPlusMount .surface-card > .client360-list > .client360-item {
+    width: 100% !important;
+    min-width: 0 !important;
+}
+
+#operationsView .secondary-zone .surface-card--padded,
+#operationsView #integrationPlusMount .surface-card--padded {
+    min-height: 0 !important;
+}
+
+@media (max-width: 1180px) {
+    #operationsView .secondary-zone,
+    #operationsView #integrationPlusMount .system-ops-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    #operationsView .section-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #operationsView .section-header .view-actions {
+        flex-basis: auto;
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 980px) {
+    .app-language-switcher span {
+        display: none;
+    }
+
+    .app-language-select {
+        min-width: 84px;
+    }
+
+    #nomenclatureView .client-form,
+    #nomenclatureView .finance-form-grid,
+    #nomenclatureView .form-grid-standard {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* Final workspace layout: wide stacked cards, no scattered narrow columns */
+.main-content .view-page {
+    width: 100% !important;
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}
+
+.main-content .view-page[style*="display: block"] {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 18px !important;
+}
+
+#profileView,
+#documentsView,
+#financeView,
+#operationsView,
+#nomenclatureView,
+#executiveView,
+#productionView,
+#supplyView,
+#salesView,
+#accountingView {
+    align-items: stretch !important;
+}
+
+#profileView .surface-card,
+#documentsView .surface-card,
+#financeView .surface-card,
+#operationsView .surface-card,
+#nomenclatureView .surface-card,
+#executiveView .surface-card,
+#productionView .surface-card,
+#supplyView .surface-card,
+#salesView .surface-card,
+#accountingView .surface-card,
+#profileView #securityPlusMount,
+#documentsView #docflowPlusMount,
+#financeView #financeDeepMount,
+#operationsView #integrationPlusMount,
+#productionView #productionDeepMount {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+}
+
+#profileView .system-ops-grid,
+#profileView #securityPlusMount .system-ops-grid,
+#documentsView #docflowPlusMount .system-ops-grid,
+#financeView .finance-layout,
+#financeView .secondary-zone,
+#financeView #financeDeepMount .system-ops-grid,
+#operationsView .secondary-zone,
+#operationsView #integrationPlusMount .system-ops-grid,
+#nomenclatureView .ops-grid-two,
+#nomenclatureView .system-ops-grid,
+#executiveView .secondary-zone,
+#executiveView .ops-summary-grid,
+#productionView .secondary-zone,
+#productionView .finance-layout,
+#productionView #productionDeepMount,
+#productionView #productionDeepMount .system-ops-grid,
+#supplyView .finance-layout,
+#salesView .finance-layout,
+#accountingView .finance-layout {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 16px !important;
+    align-items: stretch !important;
+    width: 100% !important;
+}
+
+#profileView .profile-hero-card,
+#profileView .metrics-grid,
+#profileView .profile-hero-side {
+    grid-template-columns: minmax(0, 1fr) !important;
+    width: 100% !important;
+}
+
+#profileView .client360-list,
+#profileView .audit-log-list,
+#profileView #securityPlusMount .client360-list,
+#documentsView #docflowPlusMount .client360-list,
+#financeView .client360-list,
+#operationsView .client360-list,
+#operationsView #integrationPlusMount .client360-list,
+#nomenclatureView .client360-list,
+#executiveView .client360-list,
+#productionView .client360-list,
+#supplyView .client360-list,
+#salesView .client360-list,
+#accountingView .client360-list {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    align-items: stretch !important;
+}
+
+#profileView .client360-item,
+#profileView .audit-log-list > *,
+#profileView #securityPlusMount .client360-item,
+#documentsView #docflowPlusMount .client360-item,
+#financeView .client360-item,
+#operationsView .client360-item,
+#operationsView #integrationPlusMount .client360-item,
+#nomenclatureView .client360-item,
+#executiveView .client360-item,
+#productionView .client360-item,
+#supplyView .client360-item,
+#salesView .client360-item,
+#accountingView .client360-item {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+}
+
+#profileView .client360-item--stack,
+#profileView #securityPlusMount .client360-item--stack,
+#documentsView #docflowPlusMount .client360-item--stack,
+#financeView .client360-item--stack,
+#operationsView .client360-item--stack,
+#operationsView #integrationPlusMount .client360-item--stack,
+#nomenclatureView .client360-item--stack,
+#executiveView .client360-item--stack,
+#productionView .client360-item--stack,
+#supplyView .client360-item--stack,
+#salesView .client360-item--stack,
+#accountingView .client360-item--stack {
+    align-items: stretch !important;
+}
+
+#nomenclatureView #nsiMasterDataLists > .client360-item--stack,
+#nomenclatureView #nsiMasterDataLists > .client360-item--stack > .client360-list,
+#nomenclatureView #nsiMasterDataLists .nsi-directory-header {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+#nomenclatureView #nsiMasterDataLists .nsi-master-actions {
+    flex: 0 0 auto !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    justify-content: flex-end !important;
+    gap: 8px !important;
+    min-width: 0 !important;
+}
+
+#profileView .section-header,
+#documentsView #docflowPlusMount .section-header,
+#financeView .section-header,
+#operationsView .section-header,
+#operationsView #integrationPlusMount .section-header,
+#nomenclatureView .section-header,
+#executiveView .section-header,
+#productionView .section-header {
+    align-items: flex-start !important;
+    gap: 14px !important;
+}
+
+#profileView .view-actions,
+#documentsView #docflowPlusMount .view-actions,
+#financeView .view-actions,
+#operationsView .view-actions,
+#operationsView #integrationPlusMount .view-actions,
+#nomenclatureView .view-actions,
+#executiveView .view-actions,
+#productionView .view-actions {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    align-items: center !important;
+}
+
+#profileView .finance-form-grid,
+#profileView #securityPlusMount .finance-form-grid,
+#documentsView #docflowPlusMount .finance-form-grid,
+#operationsView #integrationPlusMount .finance-form-grid,
+#financeView .finance-form-grid,
+#nomenclatureView .finance-form-grid,
+#productionView .finance-form-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)) !important;
+    gap: 12px !important;
+    width: 100% !important;
+}
+
+#profileView textarea,
+#documentsView #docflowPlusMount textarea,
+#operationsView #integrationPlusMount textarea,
+#financeView textarea,
+#nomenclatureView textarea,
+#productionView textarea {
+    grid-column: 1 / -1 !important;
+}
+
+/* Global anti-empty-space pass: every heavy workspace grid becomes a wide vertical stack */
+.main-content .view-page .finance-layout,
+.main-content .view-page .client360-grid,
+.main-content .view-page .system-ops-grid,
+.main-content .view-page .ops-grid-two,
+.main-content .view-page .secondary-zone,
+.main-content .view-page .project-ops-grid,
+.main-content .view-page .ops-summary-grid,
+.main-content .view-page .erp-cockpit-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    gap: 16px !important;
+}
+
+.main-content .view-page .surface-card,
+.main-content .view-page .client360-list,
+.main-content .view-page .client360-item,
+.main-content .view-page .metric-card,
+.main-content .view-page .table-shell {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+}
+
+.main-content .view-page .client360-list {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+}
+
+.bulk-actions-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-muted, var(--card-bg));
+}
+
+.bulk-actions-bar:not(.is-active) {
+    opacity: 0.82;
+}
+
+.bulk-actions-count {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    min-width: 92px;
+}
+
+.bulk-actions-select {
+    width: auto;
+    min-width: 150px;
+    margin: 0 !important;
+}
+
+.bulk-actions-input {
+    width: 210px;
+    margin: 0 !important;
+}
+
+.bulk-select-col {
+    width: 38px;
+    text-align: center;
+}
+
+.bulk-row-checkbox {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--primary);
+}
+
+.bulk-list-select {
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+    padding-right: 4px;
+}
+
+.entity-watch-btn.is-active {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-soft);
+}
+
+#documentsView #docflowPlusMount .docflow-clean-panel {
+    margin-top: 0;
+}
+
+#documentsView #docflowPlusMount .docflow-clean-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+}
+
+#documentsView #docflowPlusMount .metric-caption {
+    margin-top: 6px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+#documentsView #docflowPlusMount .docflow-clean-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+#documentsView #docflowPlusMount .docflow-clean-section {
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card-bg);
+}
+
+#documentsView #docflowPlusMount .docflow-admin-actions {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+#documentsView #docflowPlusMount .docflow-admin-actions summary {
+    cursor: pointer;
+    color: var(--text);
+    font-weight: 800;
+}
+
+@media (max-width: 980px) {
+    #documentsView #docflowPlusMount .docflow-clean-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+

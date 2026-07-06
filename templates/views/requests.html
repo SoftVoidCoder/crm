@@ -1,0 +1,197 @@
+<div id="requestsView" class="view-page krd-process-shell" style="display: none;">
+    <!-- Page header -->
+    <header class="view-header">
+        <div class="view-heading">
+            <span class="view-eyebrow">Внутренние заявки</span>
+            <h1 class="view-title">Внутренние заявки</h1>
+            <p class="view-subtitle">Запросы на закупку, юристов, бухгалтерию, производство и менеджмент в одном управляемом потоке.</p>
+        </div>
+    </header>
+
+    <!-- Context overview -->
+    <div class="ops-overview-card">
+        <div>
+            <div class="ops-overview-title">Единый маршрут внутренних запросов</div>
+            <div class="ops-overview-text">Внутренние заявки позволяют запускать рабочие запросы без потери контекста проекта: что нужно, кому, к какому сроку и в каком статусе.</div>
+        </div>
+        <div class="ops-overview-pills">
+            <span class="ops-pill">Закупка</span>
+            <span class="ops-pill">Юристы</span>
+            <span class="ops-pill">Бухгалтерия</span>
+        </div>
+    </div>
+
+    <!-- Process constructor -->
+    <div class="tw-grid tw-gap-5 xl:tw-grid-cols-12 tw-mb-6">
+        <section class="surface-card surface-card--padded tw-col-span-12 xl:tw-col-span-7">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Сквозной маршрут</h3>
+                    <p class="section-subtitle">Один запуск связывает заявку, согласование, резерв, закупку, производство, отгрузку и оплату.</p>
+                </div>
+                <span class="ops-section-chip">Поток компании</span>
+            </div>
+
+            <div class="finance-form-grid">
+                <select id="erpProcessProjectId" class="auth-input"><option value="0">Без проекта</option></select>
+                <select id="erpProcessClientId" class="auth-input"><option value="0">Без контрагента</option></select>
+                <input id="erpProcessTitle" class="auth-input" placeholder="Название процесса">
+                <select id="erpProcessType" class="auth-input">
+                    <option value="purchase">Закупка и поставка</option>
+                    <option value="production">Производство и отгрузка</option>
+                    <option value="sales">Продажа и оплата</option>
+                    <option value="service">Сервисный цикл</option>
+                </select>
+                <input id="erpProcessAmount" class="auth-input" placeholder="Сумма процесса">
+                <input id="erpProcessDeadline" class="auth-input" placeholder="Срок">
+                <input id="erpProcessAssignee" class="auth-input" placeholder="Исполнитель">
+                <input id="erpProcessApprover" class="auth-input" placeholder="Согласующий">
+                <input id="erpProcessItemArticle" class="auth-input" placeholder="Артикул">
+                <input id="erpProcessItemName" class="auth-input" placeholder="Позиция / материал">
+                <input id="erpProcessQty" class="auth-input" placeholder="Кол-во">
+                <input id="erpProcessSupplier" class="auth-input" placeholder="Поставщик / получатель">
+                <textarea id="erpProcessComment" class="auth-input krd-input-span-full" placeholder="Что нужно сделать, по какому проекту, какие условия и откуда брать данные"></textarea>
+            </div>
+
+            <div class="krd-policy-switch-grid">
+                <label class="krd-toggle">
+                    <input id="erpScenarioApproval" class="krd-toggle__input" type="checkbox" checked>
+                    <span class="krd-toggle__track"></span>
+                    <span>Согласование</span>
+                </label>
+                <label class="krd-toggle">
+                    <input id="erpScenarioReserve" class="krd-toggle__input" type="checkbox">
+                    <span class="krd-toggle__track"></span>
+                    <span>Резерв</span>
+                </label>
+                <label class="krd-toggle">
+                    <input id="erpScenarioPurchase" class="krd-toggle__input" type="checkbox" checked>
+                    <span class="krd-toggle__track"></span>
+                    <span>Закупка</span>
+                </label>
+                <label class="krd-toggle">
+                    <input id="erpScenarioProduction" class="krd-toggle__input" type="checkbox">
+                    <span class="krd-toggle__track"></span>
+                    <span>Производство</span>
+                </label>
+                <label class="krd-toggle">
+                    <input id="erpScenarioShipment" class="krd-toggle__input" type="checkbox" checked>
+                    <span class="krd-toggle__track"></span>
+                    <span>Отгрузка</span>
+                </label>
+                <label class="krd-toggle">
+                    <input id="erpScenarioPayment" class="krd-toggle__input" type="checkbox" checked>
+                    <span class="krd-toggle__track"></span>
+                    <span>Оплата</span>
+                </label>
+            </div>
+
+            <div class="finance-actions-row">
+                <button class="btn-secondary" onclick="resetERPProcessForm()">Очистить маршрут</button>
+                <button class="btn-secondary" onclick="exportERPProcessSnapshot()">Экспорт маршрута</button>
+                <button class="btn-primary" onclick="saveERPProcess()">Запустить процесс</button>
+            </div>
+        </section>
+
+        <section class="surface-card surface-card--padded tw-col-span-12 xl:tw-col-span-5">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Общая сводка</h3>
+                    <p class="section-subtitle">Система должна быть источником правды: где застряли этапы, где проблемы в справочниках и где требуется действие.</p>
+                </div>
+            </div>
+
+            <div id="erpSummaryMetricsGrid" class="metrics-grid metrics-grid--info-rail"></div>
+
+            <div class="tw-grid tw-gap-4 tw-mt-4 lg:tw-grid-cols-2">
+                <div class="krd-process-lane">
+                    <div class="krd-process-lane__head">
+                        <span class="krd-process-lane__title">Этапы потока</span>
+                    </div>
+                    <div id="erpStageBreakdown" class="client360-list"></div>
+                </div>
+                <div class="krd-process-lane">
+                    <div class="krd-process-lane__head">
+                        <span class="krd-process-lane__title">Качество данных</span>
+                    </div>
+                    <div id="erpDataQualityList" class="client360-list"></div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div id="requestsMetricsGrid" class="metrics-grid metrics-grid--info-rail"></div>
+
+    <!-- Request workspace -->
+    <div class="finance-layout">
+        <section class="surface-card surface-card--padded ops-form-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Новая внутренняя заявка</h3>
+                    <p class="section-subtitle">Создай запрос в нужный отдел, задай приоритет и дедлайн.</p>
+                </div>
+                <span class="ops-section-chip">Рабочее место заявок</span>
+            </div>
+
+            <div class="finance-form-grid">
+                <select id="internalProjectId" class="auth-input"><option value="0">Без проекта</option></select>
+                <input id="internalTitle" class="auth-input" placeholder="Название заявки">
+                <select id="internalType" class="auth-input">
+                    <option value="purchase">Закупка</option>
+                    <option value="production">Производство</option>
+                    <option value="legal">Юристы</option>
+                    <option value="finance">Бухгалтерия</option>
+                    <option value="discount">Согласование скидки</option>
+                </select>
+                <select id="internalTargetRole" class="auth-input">
+                    <option value="Менеджер">Менеджер</option>
+                    <option value="Конструкторское бюро">Конструкторское бюро</option>
+                    <option value="Производство и ОТК">Производство и ОТК</option>
+                    <option value="Бухгалтерия">Бухгалтерия</option>
+                    <option value="Юрист">Юрист</option>
+                </select>
+                <input id="internalAssigneeName" class="auth-input" placeholder="Исполнитель по имени">
+                <input id="internalDeadline" class="auth-input" placeholder="Дедлайн">
+                <select id="internalPriority" class="auth-input">
+                    <option value="normal">Обычный</option>
+                    <option value="high">Высокий</option>
+                    <option value="critical">Критичный</option>
+                </select>
+                <select id="internalStatus" class="auth-input">
+                    <option value="new">Новая</option>
+                    <option value="in_work">В работе</option>
+                    <option value="done">Завершена</option>
+                    <option value="cancelled">Отменена</option>
+                </select>
+                <textarea id="internalComment" class="auth-input krd-input-span-full" placeholder="Что нужно сделать и какой ожидается результат"></textarea>
+            </div>
+
+            <div class="finance-actions-row">
+                <button class="btn-secondary" onclick="resetInternalRequestForm()">Очистить</button>
+                <button class="btn-primary" onclick="saveInternalRequest()">Сохранить заявку</button>
+            </div>
+        </section>
+
+        <section class="surface-card surface-card--padded ops-list-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Активные заявки</h3>
+                    <p class="section-subtitle">Живая очередь запросов между отделами.</p>
+                </div>
+            </div>
+
+            <div id="internalBulkActionsMount"></div>
+            <div id="internalRequestsList" class="client360-list"></div>
+
+            <div class="ops-inline-section">
+                <div class="section-header">
+                    <div>
+                        <h4 class="section-title">Сквозные процессы</h4>
+                        <p class="section-subtitle">Шаблоны маршрутов и их текущее состояние по отделам.</p>
+                    </div>
+                </div>
+                <div id="erpProcessesList" class="client360-list"></div>
+            </div>
+        </section>
+    </div>
+</div>

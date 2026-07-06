@@ -1,6 +1,15 @@
-<div id="profileView" style="display: none;">
-    <h2 style="margin-bottom: 24px; font-size: 22px;">ЛИЧНЫЙ КАБИНЕТ</h2>
-    <div class="metrics-grid">
+<div id="profileView" class="view-page krd-profile-shell" style="display: none;">
+    <div class="view-header">
+        <div class="view-heading">
+            <span class="view-eyebrow">Профиль</span>
+            <h1 class="view-title">Личный кабинет</h1>
+            <p class="view-subtitle">Личная статистика, подпись, делегирование и директорский контур безопасности в одном рабочем пространстве.</p>
+        </div>
+    </div>
+
+    <div id="profileHeroMount" class="profile-hero-shell"></div>
+
+    <div class="metrics-grid metrics-grid--info-rail krd-profile-metrics">
         <div class="metric-card">
             <div class="metric-title">Задач выполнено</div>
             <div class="metric-value" id="profCompletedTasks">0</div>
@@ -10,75 +19,277 @@
             <div class="metric-value" id="profUpcomingDeadlines">0</div>
         </div>
     </div>
-    
-    <div style="background: var(--card-bg); padding: 32px; border-radius: 20px; border: 1px solid var(--border); margin-top: 24px;">
-        <h3 style="margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-            Электронная подпись (ЭЦП)
-        </h3>
-        <p style="font-size: 13px; color: var(--secondary); margin-bottom: 20px;">Нарисуйте вашу подпись мышкой или пальцем.</p>
-        <canvas id="sigCanvas" width="400" height="150" style="border: 2px dashed var(--border); border-radius: 12px; background: var(--bg); cursor: crosshair; touch-action: none; max-width: 100%;"></canvas>
-        <div style="margin-top: 16px; display: flex; gap: 10px;">
-            <button class="btn-secondary" onclick="clearSignature()">Очистить</button>
-            <button class="btn-primary" onclick="saveSignature()">Сохранить подпись</button>
-        </div>
-    </div>
-    
-    <div style="background: var(--card-bg); padding: 32px; border-radius: 20px; border: 1px solid var(--border); margin-top: 24px;">
-        <h3 style="margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-            Учет отсутствий и Делегирование
-        </h3>
-        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 10px;">
-            <select id="absType" class="auth-input" style="width:160px; margin:0; cursor:pointer;">
-                <option value="Отпуск">Отпуск</option>
-                <option value="Больничный">Больничный</option>
-                <option value="Командировка">Командировка</option>
-                <option value="Другое">Другое</option>
-            </select>
-            <input type="text" id="absStart" class="date-picker auth-input" placeholder="Начало (С)" style="width:130px; margin:0;">
-            <input type="text" id="absEnd" class="date-picker auth-input" placeholder="Конец (По)" style="width:130px; margin:0;">
-            <select id="vacationDeputy" class="auth-input" style="width:200px; margin:0; cursor:pointer;"><option value="">Без заместителя</option></select>
-        </div>
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <input type="text" id="absReason" class="auth-input" placeholder="Причина..." style="flex:1; margin:0;">
-            <button class="btn-primary" onclick="saveVacation()">Сохранить</button>
-            <button class="btn-secondary" onclick="clearVacation()" style="color: var(--danger); border-color: var(--danger);">Сбросить</button>
-        </div>
-    </div>
 
-    <div id="directorUsersBlock" style="display: none; background: var(--card-bg); border-radius: 20px; border: 1px solid var(--border); overflow: hidden; padding: 24px; margin-top: 24px;">
-        
-        <h3 style="margin-top:0; margin-bottom:20px; display: flex; align-items: center; gap: 8px;">
-            Управление сотрудниками (Всего: <span id="totalUsersCount">0</span>)
-        </h3>
+    <div id="employeeSelfServiceMount"></div>
 
-        <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
-            <button id="tabActiveUsers" class="tab active" onclick="switchUsersTab('active')" style="padding: 6px 12px; border:none; background:none; cursor:pointer; font-weight:bold;">Активные</button>
-            <button id="tabBannedUsers" class="tab" onclick="switchUsersTab('banned')" style="padding: 6px 12px; border:none; background:none; cursor:pointer; font-weight:bold; color:var(--danger);">Заблокированные</button>
+    <section id="directorProfileTabsBlock" class="surface-card surface-card--padded krd-profile-section krd-profile-director-shell krd-is-hidden">
+        <div class="section-header">
+            <div>
+                <h3 class="section-title">Директорский контур</h3>
+                <p class="section-subtitle">Сессии, сотрудники, аудит, матрица прав и системный контур в отдельных рабочих вкладках.</p>
+            </div>
+            <div class="view-actions">
+                <button id="directorProfileCollapseBtn" class="btn-secondary" type="button" onclick="collapseDirectorProfilePanels()">Свернуть</button>
+            </div>
         </div>
 
-        <div style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
-            <button class="btn-secondary user-filter-btn active" onclick="filterUsersByRole('')">Все</button>
-            <button class="btn-secondary user-filter-btn" onclick="filterUsersByRole('Менеджер')">Менеджеры</button>
-            <button class="btn-secondary user-filter-btn" onclick="filterUsersByRole('Конструкторское бюро')">КБ</button>
-            <button class="btn-secondary user-filter-btn" onclick="filterUsersByRole('Производство и ОТК')">Производство</button>
-            <button class="btn-secondary user-filter-btn" onclick="filterUsersByRole('Бухгалтерия')">Бухгалтерия</button>
-            <button class="btn-secondary user-filter-btn" onclick="filterUsersByRole('Юрист')">Юристы</button>
+        <div class="krd-tablist krd-profile-tablist" aria-label="Директорские разделы">
+            <button id="directorProfileTabSecurity" class="krd-tab" type="button">Сессии и история по полям</button>
+            <button id="directorProfileTabUsers" class="krd-tab" type="button">Управление сотрудниками</button>
+            <button id="directorProfileTabAudit" class="krd-tab" type="button">Журнал аудита</button>
+            <button id="directorProfileTabFieldSecurity" class="krd-tab" type="button">Права по полям и статусные правила</button>
+            <button id="directorProfileTabSystem" class="krd-tab" type="button">Система и резервные копии</button>
         </div>
 
-        <table class="admin-table">
-            <thead>
-                <tr>
-                    <th>Сотрудник</th>
-                    <th>Логин (Email)</th>
-                    <th>Пароль</th>
-                    <th>Отдел / Роль</th>
-                    <th>Статус</th>
-                    <th>Действия</th>
-                </tr>
-            </thead>
-            <tbody id="allUsersListTable"></tbody>
-        </table>
+        <div id="directorProfileCanvas" class="krd-profile-director-canvas">
+            <div id="profileSecurityGrid" class="krd-profile-director-pane krd-profile-director-pane--security">
+                <section id="directorSecurityBlock" class="surface-card surface-card--padded krd-profile-section krd-is-hidden">
+                    <div class="section-header">
+                        <div>
+                            <h3 class="section-title">Сессии и история по полям</h3>
+                            <p class="section-subtitle">Контроль активных сессий и точечной истории изменений пользователей.</p>
+                        </div>
+                        <div class="view-actions">
+                            <button class="btn-secondary" onclick="reloadSecurityOps()">Обновить</button>
+                        </div>
+                    </div>
+
+                    <div class="krd-security-grid">
+                        <div class="surface-card surface-card--soft surface-card--padded">
+                            <h4 class="section-title krd-security-card__title">Активные сессии</h4>
+                            <div id="userSessionsList" class="audit-log-list"></div>
+                        </div>
+                        <div class="surface-card surface-card--soft surface-card--padded">
+                            <h4 class="section-title krd-security-card__title">История изменений полей</h4>
+                            <div id="fieldChangesList" class="audit-log-list"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <div id="securityPlusMount" class="krd-profile-security-plus"></div>
+            </div>
+
+            <section id="directorUsersBlock" class="surface-card surface-card--padded krd-profile-section krd-is-hidden">
+                <div class="section-header">
+                    <div>
+                        <h3 class="section-title">Управление сотрудниками</h3>
+                        <p class="section-subtitle">Всего сотрудников: <span id="totalUsersCount">0</span>. Быстрый доступ к роли, безопасности и статусу.</p>
+                    </div>
+                    <span class="ops-section-chip">Сотрудники</span>
+                </div>
+
+                <div class="krd-tablist" aria-label="Состояние сотрудников">
+                    <button id="tabActiveUsers" class="krd-tab tab active" onclick="switchUsersTab('active')">Активные</button>
+                    <button id="tabBannedUsers" class="krd-tab tab" onclick="switchUsersTab('banned')">Заблокированные</button>
+                </div>
+
+                <div class="krd-toolbar">
+                    <div class="krd-toolbar__info">Фильтры ролей помогают быстро сужать матрицу сотрудников.</div>
+                    <div class="krd-toolbar__actions">
+                        <button class="btn-secondary user-filter-btn active" onclick="filterUsersByRole('')">Все</button>
+                        <button class="btn-secondary user-filter-btn" onclick="filterUsersByRole('Менеджер')">Менеджеры</button>
+                        <button class="btn-secondary user-filter-btn" onclick="filterUsersByRole('Конструкторское бюро')">КБ</button>
+                        <button class="btn-secondary user-filter-btn" onclick="filterUsersByRole('Производство и ОТК')">Производство</button>
+                        <button class="btn-secondary user-filter-btn" onclick="filterUsersByRole('Бухгалтерия')">Бухгалтерия</button>
+                        <button class="btn-secondary user-filter-btn" onclick="filterUsersByRole('Юрист')">Юристы</button>
+                    </div>
+                </div>
+
+                <div class="table-shell">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Сотрудник</th>
+                                <th>Логин (эл. почта)</th>
+                                <th>Безопасность</th>
+                                <th>Отдел / Роль</th>
+                                <th>Статус</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="allUsersListTable"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <div id="profileAuditGrid" class="krd-profile-director-pane krd-profile-director-pane--audit">
+                <section id="directorAuditBlock" class="surface-card surface-card--padded krd-profile-section krd-is-hidden">
+                    <div class="section-header">
+                        <div>
+                            <h3 class="section-title">Журнал аудита</h3>
+                            <p class="section-subtitle">Ключевые действия по входу, ролям, доступам и настройкам системы.</p>
+                        </div>
+                        <div class="view-actions">
+                            <button class="btn-secondary" onclick="setAuditFilter('all')">Все</button>
+                            <button class="btn-secondary" onclick="setAuditFilter('auth')">Вход</button>
+                            <button class="btn-secondary" onclick="setAuditFilter('users')">Пользователи</button>
+                            <button class="btn-secondary" onclick="reloadAuditLogs()">Обновить</button>
+                        </div>
+                    </div>
+
+                    <div class="audit-toolbar">
+                        <input id="auditSearchInput" class="auth-input" placeholder="Поиск по email, действию, сущности..." oninput="handleAuditSearch(this.value)">
+                    </div>
+
+                    <div id="auditLogList" class="audit-log-list"></div>
+                </section>
+
+                <section id="directorFieldSecurityBlock" class="surface-card surface-card--padded krd-profile-section krd-is-hidden">
+                    <div class="section-header">
+                        <div>
+                            <h3 class="section-title">Права по полям и статусные правила</h3>
+                            <p class="section-subtitle">Компактная RLS-матрица: кто видит поле, кто редактирует и в каких статусах правило действует.</p>
+                        </div>
+                        <div class="view-actions">
+                            <button class="btn-secondary" onclick="reloadFieldSecurityRules()">Обновить</button>
+                        </div>
+                    </div>
+
+                    <div class="krd-rls-workspace">
+                        <div class="krd-rls-form">
+                            <div class="krd-form-grid-4">
+                                <input id="fieldRuleRole" class="auth-input" placeholder="Роль, например Бухгалтерия">
+                                <input id="fieldRuleModule" class="auth-input" placeholder="Модуль, например finance">
+                                <input id="fieldRuleEntity" class="auth-input" placeholder="Сущность, например finance_payment">
+                                <input id="fieldRuleField" class="auth-input" placeholder="Поле, например amount / status">
+                            </div>
+
+                            <div class="krd-rls-toggles">
+                                <label class="krd-toggle">
+                                    <input id="fieldRuleCanView" class="krd-toggle__input" type="checkbox" checked>
+                                    <span class="krd-toggle__track"></span>
+                                    <span>Поле видно</span>
+                                </label>
+                                <label class="krd-toggle">
+                                    <input id="fieldRuleCanEdit" class="krd-toggle__input" type="checkbox">
+                                    <span class="krd-toggle__track"></span>
+                                    <span>Разрешить редактирование</span>
+                                </label>
+                            </div>
+
+                            <input id="fieldRuleAllowedStatuses" class="auth-input" placeholder="Допустимые статусы через запятую, например planned,issued,paid">
+
+                            <div class="finance-actions-row">
+                                <button class="btn-primary" onclick="saveFieldSecurityRule()">Сохранить правило</button>
+                            </div>
+                        </div>
+
+                        <div id="fieldSecurityRulesList" class="audit-log-list krd-rls-list"></div>
+                    </div>
+                </section>
+            </div>
+
+            <section id="directorSystemBlock" class="surface-card surface-card--padded krd-profile-section krd-is-hidden">
+                <div class="section-header">
+                    <div>
+                        <h3 class="section-title">Система и резервные копии</h3>
+                        <p class="section-subtitle">Ошибки сервера, состояние системы и резервные копии в одном директорском контуре.</p>
+                    </div>
+                    <div class="view-actions">
+                        <button class="btn-primary" onclick="createSystemBackup()">Создать резервную копию</button>
+                        <button class="btn-secondary" onclick="document.getElementById('systemRestoreFile').click()">Загрузить резервную копию</button>
+                        <button class="btn-secondary" onclick="reloadSystemOps()">Обновить</button>
+                    </div>
+                </div>
+
+                <input id="systemRestoreFile" type="file" accept=".db" class="krd-file-input" onchange="uploadAndRestoreBackup(this.files && this.files[0])">
+                <div id="systemHealthSummary" class="surface-card surface-card--soft surface-card--padded"></div>
+
+                <div class="system-ops-grid">
+                    <div class="surface-card surface-card--soft surface-card--padded">
+                        <h4 class="section-title krd-security-card__title">Последние ошибки</h4>
+                        <div id="systemErrorsList" class="audit-log-list"></div>
+                    </div>
+                    <div class="surface-card surface-card--soft surface-card--padded">
+                        <h4 class="section-title krd-security-card__title">Резервные копии</h4>
+                        <div id="systemBackupsList" class="audit-log-list"></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </section>
+
+    <div class="krd-profile-personal-grid tw-grid tw-gap-5 xl:tw-grid-cols-12">
+        <section class="surface-card surface-card--padded tw-col-span-12 xl:tw-col-span-7 krd-profile-section">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Электронная подпись (ЭЦП)</h3>
+                    <p class="section-subtitle">Нарисуйте подпись мышкой или пальцем и сохраните её для договорного и согласовательного контура.</p>
+                </div>
+                <span class="ops-section-chip ops-section-chip--primary">Цифровая подпись</span>
+            </div>
+
+            <div class="krd-canvas-shell">
+                <canvas id="sigCanvas" width="400" height="150"></canvas>
+            </div>
+
+            <div class="finance-actions-row">
+                <button class="btn-secondary" onclick="clearSignature()">Очистить</button>
+                <button class="btn-primary" onclick="saveSignature()">Сохранить подпись</button>
+            </div>
+        </section>
+
+        <section class="surface-card surface-card--padded tw-col-span-12 xl:tw-col-span-5 krd-profile-section">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Отсутствия и делегирование</h3>
+                    <p class="section-subtitle">Настройте отпуск, командировку или больничный и сразу назначьте заместителя.</p>
+                </div>
+                <span class="ops-section-chip">Замещение</span>
+            </div>
+
+            <div class="krd-form-grid-3">
+                <select id="absType" class="auth-input">
+                    <option value="Отпуск">Отпуск</option>
+                    <option value="Больничный">Больничный</option>
+                    <option value="Командировка">Командировка</option>
+                    <option value="Другое">Другое</option>
+                </select>
+                <input type="text" id="absStart" class="date-picker auth-input" placeholder="Начало">
+                <input type="text" id="absEnd" class="date-picker auth-input" placeholder="Конец">
+            </div>
+
+            <div class="krd-form-grid-2">
+                <select id="vacationDeputy" class="auth-input">
+                    <option value="">Без заместителя</option>
+                </select>
+                <input type="text" id="absReason" class="auth-input" placeholder="Причина отсутствия">
+            </div>
+
+            <div class="finance-actions-row">
+                <button class="btn-primary" onclick="saveVacation()">Сохранить</button>
+                <button class="btn-secondary krd-btn-danger-outline" onclick="clearVacation()">Сбросить</button>
+            </div>
+        </section>
+
+        <section class="surface-card surface-card--padded tw-col-span-12 krd-profile-section">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Двухфакторная защита</h3>
+                    <p class="section-subtitle">Подключите приложение-аутентификатор и переведите вход на одноразовые коды.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary" onclick="prepareCurrentUser2FA()">Подготовить</button>
+                    <button class="btn-primary" onclick="enableCurrentUser2FA()">Включить</button>
+                    <button class="btn-danger" onclick="disableCurrentUser2FA()">Выключить</button>
+                </div>
+            </div>
+
+            <div class="krd-security-grid">
+                <div class="surface-card surface-card--soft surface-card--padded">
+                    <h4 class="section-title krd-security-card__title">Секрет и статус</h4>
+                    <div id="currentUser2faState" class="audit-log-list"></div>
+                </div>
+                <div class="surface-card surface-card--soft surface-card--padded">
+                    <h4 class="section-title krd-security-card__title">Подтверждение кода</h4>
+                    <input id="currentUser2faCode" class="auth-input" placeholder="6-значный код из приложения">
+                    <div id="currentUser2faSecret" class="empty-state krd-security-card__hint">Сначала нажмите «Подготовить», затем введите код из приложения-аутентификатора.</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="surface-card surface-card--padded tw-col-span-12 krd-profile-section">
+            <div id="profileWorkspacePrefsMount"></div>
+        </section>
     </div>
 </div>

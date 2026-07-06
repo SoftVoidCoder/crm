@@ -1,16 +1,28 @@
-const API_URL = '/api';
-let currentUser = JSON.parse(localStorage.getItem('korda_session'));
+window.API_URL = window.API_URL || '/api';
+const API_URL = window.API_URL;
+let currentUser = null;
 let projectsDB = [];
 let clientsDB = [];
 let allUsersDB = []; 
 let meetingsDB = []; 
+let calendarEventsDB = [];
 let emailsDB = [];   
+let emailAccountsDB = [];
 let documentsDB = []; 
+let documentPackagesDB = [];
 let tasksDB = [];      
 let knowledgeDB = [];  
 let approvalsDB = []; 
+let workflowDefinitionsDB = [];
+let workflowInstancesDB = [];
 let claimsDB = [];
 let courtCasesDB = [];
+let crmLeadsDB = [];
+let crmDealsDB = [];
+let auditLogsDB = [];
+let notificationsDB = [];
+let currentPermissions = {};
+window.currentPermissionMeta = window.currentPermissionMeta || { field_permissions: [], field_policy_map: {}, scope: { legal_entities: [], business_units: [] }, two_factor_enabled: 0 };
 
 let currentTab = 'active';
 let currentProjectId = null;
@@ -24,10 +36,834 @@ let isChatVisible = localStorage.getItem('korda_chat_visible') !== 'false';
 let isFirstLoad = true;
 let seenToastIds = new Set();
 let canvas, ctx, isDrawing = false;
+window.__formPolicyCache = window.__formPolicyCache || {};
 
-const availableRoles = ['Конструкторское бюро', 'Производство и ОТК', 'Менеджер', 'Бухгалтерия', 'Юрист', 'Директор'];
+const availableRoles = ['Конструкторское бюро', 'Производство и ОТК', 'Склад', 'Менеджер', 'Бухгалтерия', 'Юрист', 'Секретарь / Канцелярия', 'Сотрудник', 'Директор'];
 
 window.exchangeRates = { RUB: 1, USD: 90, EUR: 100, CNY: 12 };
+
+function permissionRulesFor(module, entityType) {
+    const policyMap = window.currentPermissionMeta?.field_policy_map || {};
+    const directMap = policyMap?.[module || '']?.[entityType || ''];
+    if (directMap && typeof directMap === 'object') {
+        return Object.entries(directMap).map(([field_name, meta]) => ({
+            module,
+            entity_type: entityType,
+            field_name,
+            ...meta
+        }));
+    }
+    const rules = Array.isArray(window.currentPermissionMeta?.field_permissions)
+        ? window.currentPermissionMeta.field_permissions
+        : [];
+    return rules.filter(rule =>
+        (rule.module || '') === (module || '')
+        && (rule.entity_type || '') === (entityType || '')
+        && Number(rule.is_active || 0) === 1
+    );
+}
+
+function getFieldPermissionRule(module, entityType, fieldName) {
+    return permissionRulesFor(module, entityType).find(rule => (rule.field_name || '') === (fieldName || '')) || null;
+}
+
+function canViewField(module, entityType, fieldName) {
+    const rule = getFieldPermissionRule(module, entityType, fieldName);
+    if (!rule) return true;
+    return Number(rule.can_view || 0) === 1;
+}
+
+function canEditField(module, entityType, fieldName) {
+    const rule = getFieldPermissionRule(module, entityType, fieldName);
+    if (!rule) return true;
+    return Number(rule.can_edit || 0) === 1;
+}
+
+function allowedFieldStatuses(module, entityType, fieldName = 'status') {
+    const rule = getFieldPermissionRule(module, entityType, fieldName);
+    return Array.isArray(rule?.allowed_statuses) ? rule.allowed_statuses.map(String).filter(Boolean) : [];
+}
+
+function findFieldWrapper(el) {
+    if (!el || !el.parentElement) return null;
+    return el.closest('.field-permission-wrapper')
+        || el.closest('.form-field')
+        || el.closest('.input-group')
+        || el.closest('label')
+        || el;
+}
+
+function setFieldVisibility(el, visible) {
+    const wrapper = findFieldWrapper(el);
+    if (wrapper) wrapper.style.display = visible ? '' : 'none';
+    else el.style.display = visible ? '' : 'none';
+}
+
+function setFieldReadOnly(el, disabled) {
+    if (!el) return;
+    if ('disabled' in el) el.disabled = !!disabled;
+    if ('readOnly' in el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+        el.readOnly = !!disabled;
+    }
+    el.dataset.permissionReadonly = disabled ? '1' : '0';
+    if (disabled) {
+        el.classList.add('is-readonly-field');
+        if (!el.title) el.title = 'Поле доступно только для просмотра';
+    } else {
+        el.classList.remove('is-readonly-field');
+        if (el.title === 'Поле доступно только для просмотра') el.title = '';
+    }
+}
+
+function upsertFieldPermissionNote(el, message) {
+    const wrapper = findFieldWrapper(el);
+    if (!wrapper || wrapper === el) return;
+    let note = wrapper.querySelector('.field-permission-note');
+    if (!message) {
+        if (note) note.remove();
+        return;
+    }
+    if (!note) {
+        note = document.createElement('div');
+        note.className = 'field-permission-note';
+        wrapper.appendChild(note);
+    }
+    note.innerText = message;
+}
+
+function buildFieldPermissionMessage(module, entityType, fieldName, canEdit, statuses = []) {
+    const rule = getFieldPermissionRule(module, entityType, fieldName);
+    if (!rule) return '';
+    const parts = [];
+    if (!canEdit) parts.push('Поле доступно только для просмотра');
+    if (Array.isArray(statuses) && statuses.length) {
+        parts.push(`Разрешённые статусы: ${statuses.join(', ')}`);
+    }
+    return parts.join('. ');
+}
+
+function applyStatusRestrictions(el, statuses = []) {
+    if (!el || el.tagName !== 'SELECT') return;
+    const allowed = new Set((statuses || []).map(String));
+    Array.from(el.options).forEach(option => {
+        option.hidden = allowed.size > 0 && !allowed.has(option.value);
+        option.disabled = allowed.size > 0 && !allowed.has(option.value);
+    });
+    if (allowed.size > 0 && !allowed.has(el.value)) {
+        const fallback = Array.from(el.options).find(option => !option.disabled && !option.hidden);
+        if (fallback) el.value = fallback.value;
+    }
+}
+
+function applyFieldPermissionsToForm(module, entityType, fieldMap = {}) {
+    Object.entries(fieldMap).forEach(([fieldName, target]) => {
+        const config = typeof target === 'string' ? { id: target } : (target || {});
+        const el = document.getElementById(config.id);
+        if (!el) return;
+        const canView = canViewField(module, entityType, fieldName);
+        const canEdit = canEditField(module, entityType, fieldName);
+        const statuses = (config.statusField || fieldName === 'status' || fieldName === 'payment_status' || fieldName === 'sent_status' || fieldName === 'stage')
+            ? allowedFieldStatuses(module, entityType, fieldName)
+            : [];
+        setFieldVisibility(el, canView);
+        if (!canView) {
+            upsertFieldPermissionNote(el, '');
+            return;
+        }
+        setFieldReadOnly(el, !canEdit);
+        if (config.statusField || fieldName === 'status' || fieldName === 'payment_status' || fieldName === 'sent_status' || fieldName === 'stage') {
+            applyStatusRestrictions(el, statuses);
+        }
+        const message = buildFieldPermissionMessage(module, entityType, fieldName, canEdit, statuses);
+        upsertFieldPermissionNote(el, message);
+        if (message) el.title = message;
+    });
+}
+
+window.getFieldPermissionRule = getFieldPermissionRule;
+window.canViewField = canViewField;
+window.canEditField = canEditField;
+window.allowedFieldStatuses = allowedFieldStatuses;
+window.applyFieldPermissionsToForm = applyFieldPermissionsToForm;
+
+function resolveFormRoot(formRootIdOrEl) {
+    if (!formRootIdOrEl) return document;
+    if (typeof formRootIdOrEl === 'string') return document.getElementById(formRootIdOrEl) || document;
+    return formRootIdOrEl;
+}
+
+function clearSingleFormError(fieldName, formRootIdOrEl) {
+    if (!fieldName) return;
+    const root = resolveFormRoot(formRootIdOrEl);
+    const selector = `[data-field="${fieldName}"]`;
+    const errorSelector = `[data-error-for="${fieldName}"]`;
+    const input = root.querySelector(selector) || document.querySelector(selector);
+    const error = root.querySelector(errorSelector) || document.querySelector(errorSelector);
+    if (input) {
+        input.classList.remove('is-invalid');
+        input.removeAttribute('aria-invalid');
+    }
+    if (error) {
+        error.textContent = '';
+        error.classList.remove('is-hint', 'is-warning', 'is-error');
+    }
+}
+
+window.clearFormErrors = function(formRootIdOrEl) {
+    const root = resolveFormRoot(formRootIdOrEl);
+    root.querySelectorAll('.is-invalid').forEach(el => {
+        el.classList.remove('is-invalid');
+        el.removeAttribute('aria-invalid');
+    });
+    root.querySelectorAll('.form-error').forEach(el => {
+        el.textContent = '';
+        el.classList.remove('is-hint', 'is-warning', 'is-error');
+    });
+};
+
+window.showFormErrors = function(errors = [], formRootIdOrEl) {
+    const root = resolveFormRoot(formRootIdOrEl);
+    errors.forEach(error => {
+        const field = error?.field || '';
+        const message = error?.message || '';
+        if (!field || !message) return;
+        const selector = `[data-field="${field}"]`;
+        const errorSelector = `[data-error-for="${field}"]`;
+        const input = root.querySelector(selector) || document.querySelector(selector);
+        const errorNode = root.querySelector(errorSelector) || document.querySelector(errorSelector);
+        if (input) {
+            input.classList.add('is-invalid');
+            input.setAttribute('aria-invalid', 'true');
+        }
+        if (errorNode) {
+            errorNode.textContent = message;
+        }
+    });
+};
+
+window.bindFormFieldErrorCleanup = function(formRootIdOrEl) {
+    const root = resolveFormRoot(formRootIdOrEl);
+    if (!root || root.dataset.formErrorsBound === '1') return;
+    root.dataset.formErrorsBound = '1';
+    root.addEventListener('input', event => {
+        const field = event.target?.dataset?.field;
+        if (field) clearSingleFormError(field, root);
+    });
+    root.addEventListener('change', event => {
+        const field = event.target?.dataset?.field;
+        if (field) clearSingleFormError(field, root);
+    });
+};
+
+window.setSmartFieldHint = function(fieldId, message = '', tone = 'hint', formRootIdOrEl = document) {
+    const root = resolveFormRoot(formRootIdOrEl);
+    const input = root.querySelector(`[data-field="${fieldId}"]`) || document.getElementById(fieldId);
+    const hint = root.querySelector(`[data-error-for="${fieldId}"]`) || document.querySelector(`[data-error-for="${fieldId}"]`);
+    if (!hint) return;
+    hint.textContent = message || '';
+    hint.classList.toggle('is-hint', !!message && tone === 'hint');
+    hint.classList.toggle('is-warning', !!message && tone === 'warning');
+    hint.classList.toggle('is-error', !!message && tone === 'error');
+    if (input) {
+        const invalid = !!message && tone === 'error';
+        input.classList.toggle('is-invalid', invalid);
+        if (invalid) input.setAttribute('aria-invalid', 'true');
+        else input.removeAttribute('aria-invalid');
+    }
+};
+
+window.clearSmartFieldHint = function(fieldId, formRootIdOrEl = document) {
+    window.setSmartFieldHint(fieldId, '', 'hint', formRootIdOrEl);
+};
+
+window.isValidRuDate = function(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return true;
+    const match = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (!match) return false;
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
+    const date = new Date(year, month - 1, day);
+    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+};
+
+window.isValidInnValue = function(value) {
+    const digits = String(value || '').replace(/\D/g, '');
+    return !digits || digits.length === 10 || digits.length === 12;
+};
+
+window.bindSmartFieldHints = function(formRootIdOrEl, rules = []) {
+    const root = resolveFormRoot(formRootIdOrEl);
+    if (!root || !Array.isArray(rules)) return;
+    rules.forEach(rule => {
+        const fieldId = rule.field || rule.id;
+        const input = root.querySelector(`[data-field="${fieldId}"]`) || document.getElementById(fieldId);
+        if (!input || input.dataset.smartHintBound === '1') return;
+        input.dataset.smartHintBound = '1';
+        const run = () => {
+            const result = typeof rule.validate === 'function' ? rule.validate(input.value, input) : null;
+            if (!result || !result.message) {
+                window.clearSmartFieldHint(fieldId, root);
+                return;
+            }
+            window.setSmartFieldHint(fieldId, result.message, result.tone || 'hint', root);
+        };
+        input.addEventListener('input', run);
+        input.addEventListener('change', run);
+        run();
+    });
+};
+
+function ensureUnifiedFieldHint(input, fieldId, root) {
+    if (!input || !fieldId) return null;
+    let hint = root.querySelector(`[data-error-for="${fieldId}"]`) || document.querySelector(`[data-error-for="${fieldId}"]`);
+    if (hint) return hint;
+    hint = document.createElement('div');
+    hint.className = 'form-error';
+    hint.dataset.errorFor = fieldId;
+    const wrapper = input.closest('.form-group, .field, label') || input.parentElement;
+    if (wrapper && wrapper !== document.body) wrapper.appendChild(hint);
+    else input.insertAdjacentElement('afterend', hint);
+    return hint;
+}
+
+function unifiedFieldText(input) {
+    return [
+        input.id,
+        input.name,
+        input.dataset?.field,
+        input.dataset?.validation,
+        input.placeholder,
+        input.getAttribute('aria-label'),
+        input.closest('label')?.textContent,
+    ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function parseUnifiedNumber(value) {
+    const raw = String(value || '').trim().replace(/\s+/g, '').replace(',', '.');
+    if (!raw) return null;
+    if (!/^-?\d+(\.\d+)?$/.test(raw)) return NaN;
+    return Number(raw);
+}
+
+function isValidUnifiedDate(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return true;
+    if (window.isValidRuDate(raw)) return true;
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return false;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(year, month - 1, day);
+    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+function validateUnifiedField(input) {
+    if (!input || input.disabled || input.readOnly) return null;
+    const value = String(input.value ?? '').trim();
+    if (!value) return null;
+    const text = unifiedFieldText(input);
+    const type = String(input.type || '').toLowerCase();
+
+    if (type === 'email' || /\bemail\b|почт/.test(text)) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? null : { tone: 'error', message: 'Email нужен в формате name@company.ru.' };
+    }
+    if (/\binn\b|инн/.test(text)) {
+        return window.isValidInnValue(value) ? null : { tone: 'error', message: 'ИНН должен быть из 10 или 12 цифр.' };
+    }
+    if (/\bkpp\b|кпп/.test(text)) {
+        return /^\d{9}$/.test(value.replace(/\D/g, '')) ? null : { tone: 'error', message: 'КПП должен быть из 9 цифр.' };
+    }
+    if (/\bbik\b|бик/.test(text)) {
+        return /^\d{9}$/.test(value.replace(/\D/g, '')) ? null : { tone: 'error', message: 'БИК должен быть из 9 цифр.' };
+    }
+    if (type === 'date' || /\bdate\b|дата|deadline|due|valid_until|finish|start|issued|issue/.test(text)) {
+        return isValidUnifiedDate(value) ? null : { tone: 'error', message: 'Дата нужна в формате дд.мм.гггг или гггг-мм-дд.' };
+    }
+    if (/vat|ндс/.test(text)) {
+        const number = parseUnifiedNumber(value);
+        if (Number.isNaN(number) || number < 0 || number > 100) return { tone: 'error', message: 'Ставка НДС должна быть числом от 0 до 100.' };
+        return { tone: 'hint', message: number === 0 ? 'НДС 0%: проверь основание в документе.' : 'Проверь, сумма введена с НДС или без НДС.' };
+    }
+    if (/amount|sum|price|cost|qty|quantity|hours|rate|budget|limit|stock|fuel|odometer|progress|percent|сумм|цен|стоим|колич|час|процент|остат/.test(text)) {
+        const number = parseUnifiedNumber(value);
+        if (Number.isNaN(number)) return { tone: 'error', message: 'Значение должно быть числом. Можно использовать запятую или точку.' };
+        if (/amount|sum|price|cost|qty|quantity|сумм|цен|стоим|колич/.test(text) && number <= 0) return { tone: 'error', message: 'Значение должно быть больше нуля.' };
+        if (/progress|percent|процент/.test(text) && (number < 0 || number > 100)) return { tone: 'error', message: 'Процент должен быть от 0 до 100.' };
+        if (number < 0) return { tone: 'error', message: 'Значение не может быть отрицательным.' };
+        return null;
+    }
+    if (/article|артикул/.test(text) && value.length < 2) {
+        return { tone: 'warning', message: 'Артикул слишком короткий. Проверь, что это не черновое значение.' };
+    }
+    if (/bin|cell|ячейк|складск/.test(text) && /\s/.test(value)) {
+        return { tone: 'warning', message: 'В коде складской ячейки обычно не должно быть пробелов.' };
+    }
+    return null;
+}
+
+window.validateUnifiedForm = function(formRootIdOrEl = document) {
+    const root = resolveFormRoot(formRootIdOrEl);
+    const errors = [];
+    root.querySelectorAll('input, select, textarea').forEach(input => {
+        const fieldId = input.dataset?.field || input.id || input.name;
+        if (!fieldId) return;
+        const result = validateUnifiedField(input);
+        if (!result || !result.message) {
+            window.clearSmartFieldHint(fieldId, root);
+            return;
+        }
+        ensureUnifiedFieldHint(input, fieldId, root);
+        window.setSmartFieldHint(fieldId, result.message, result.tone || 'hint', root);
+        if ((result.tone || 'hint') === 'error') errors.push({ field: fieldId, message: result.message });
+    });
+    return { ok: errors.length === 0, errors };
+};
+
+window.bindUnifiedFieldValidation = function(formRootIdOrEl = document) {
+    const root = resolveFormRoot(formRootIdOrEl);
+    if (!root) return;
+    root.querySelectorAll('input, select, textarea').forEach(input => {
+        const fieldId = input.dataset?.field || input.id || input.name;
+        if (!fieldId || input.dataset.unifiedValidationBound === '1') return;
+        input.dataset.unifiedValidationBound = '1';
+        const run = () => {
+            const result = validateUnifiedField(input);
+            if (!result || !result.message) {
+                window.clearSmartFieldHint(fieldId, root);
+                return;
+            }
+            ensureUnifiedFieldHint(input, fieldId, root);
+            window.setSmartFieldHint(fieldId, result.message, result.tone || 'hint', root);
+        };
+        input.addEventListener('blur', run);
+        input.addEventListener('change', run);
+        input.addEventListener('input', () => {
+            if (input.classList.contains('is-invalid')) run();
+        });
+    });
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => window.bindUnifiedFieldValidation(document), 0);
+});
+
+window.__workflowFocusState = window.__workflowFocusState || {};
+
+window.markWorkflowFocus = function(key, id) {
+    if (!key || !id) return;
+    window.__workflowFocusState[key] = {
+        id: Number(id),
+        ts: Date.now(),
+    };
+};
+
+window.isWorkflowFocused = function(key, id, ttlMs = 300000) {
+    const state = window.__workflowFocusState?.[key];
+    if (!state || !state.id) return false;
+    if (Date.now() - Number(state.ts || 0) > ttlMs) return false;
+    return Number(state.id) === Number(id);
+};
+
+window.clearWorkflowFocus = function(key) {
+    if (!key) return;
+    delete window.__workflowFocusState[key];
+};
+
+window.scrollToWorkflowTarget = function(target, options = {}) {
+    const el = typeof target === 'string' ? document.querySelector(target) : target;
+    if (!el) return;
+    const behavior = options.behavior || 'smooth';
+    const block = options.block || 'start';
+    requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior, block });
+    });
+};
+
+window.focusFieldById = function(fieldId, delay = 80) {
+    if (!fieldId) return;
+    window.setTimeout(() => {
+        const el = document.getElementById(fieldId);
+        if (!el) return;
+        if (typeof el.focus === 'function') el.focus();
+        if (typeof el.select === 'function' && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+            el.select();
+        }
+    }, delay);
+};
+
+window.navigateAndFocus = function(viewName, fieldId, delay = 140) {
+    if (typeof navigateTo === 'function' && viewName) navigateTo(viewName);
+    if (fieldId) window.focusFieldById(fieldId, delay);
+};
+
+function normalizeRoleName(roleName = '') {
+    return String(roleName || '').trim();
+}
+
+function getRoleSlug(roleName = '') {
+    const role = normalizeRoleName(roleName);
+    if (role === 'Директор') return 'director';
+    if (role === 'Менеджер') return 'manager';
+    if (role === 'Бухгалтерия') return 'accounting';
+    if (role === 'Склад') return 'warehouse';
+    if (role === 'Юрист') return 'legal';
+    if (role === 'Секретарь / Канцелярия') return 'office';
+    if (role === 'Сотрудник') return 'employee';
+    if (role === 'Производство и ОТК' || role === 'Конструкторское бюро') return 'production';
+    return 'default';
+}
+
+function getRoleUiConfig(roleName = '') {
+    const role = normalizeRoleName(roleName || currentUser?.role || '');
+    const common = {
+        showDeptFilters: false,
+        searchPlaceholder: 'Глобальный поиск (Сделки, Документы, Поручения)...',
+        quickTaskLabel: 'Поручение',
+        showScanner: true,
+        visibleNav: ['navDashboard', 'navProfile'],
+    };
+    if (role === 'Директор') {
+        return {
+            ...common,
+            slug: 'director',
+            showDeptFilters: true,
+            visibleNav: [
+                'navDashboard', 'navDocuments', 'navTasks', 'navApprovals', 'navClaims', 'navFinance', 'navAccounting', 'navIntegrations',
+                'navSupply', 'navSales', 'navProspecting', 'navLeads', 'navDeals', 'navProduction', 'navRequests', 'navService', 'navExecutive',
+                'navOperations', 'navClients', 'navClient360', 'navContract360', 'navKnowledge', 'navMessenger',
+                'navEmails', 'navMeetings', 'navNomenclature', 'navContacts', 'navAnalytics',
+                'navKpi', 'navProfile', 'adminBtn'
+            ],
+        };
+    }
+    if (role === 'Менеджер') {
+        return {
+            ...common,
+            slug: 'manager',
+            quickTaskLabel: 'Задача',
+            visibleNav: [
+                'navDashboard', 'navDocuments', 'navTasks', 'navApprovals', 'navClaims', 'navFinance', 'navIntegrations',
+                'navSupply', 'navSales', 'navProspecting', 'navLeads', 'navDeals', 'navExpenses', 'navRequests', 'navResources', 'navService', 'navContract360',
+                'navClients', 'navClient360', 'navKnowledge', 'navMessenger', 'navEmails', 'navMeetings', 'navProfile'
+            ],
+        };
+    }
+    if (role === 'Бухгалтерия') {
+        return {
+            ...common,
+            slug: 'accounting',
+            quickTaskLabel: 'Платёж / задача',
+            visibleNav: [
+                'navFinance', 'navAccounting', 'navIntegrations', 'navDocuments', 'navApprovals', 'navExpenses', 'navDeals',
+                'navRequests', 'navClients', 'navClient360', 'navContract360', 'navDashboard', 'navMessenger', 'navEmails', 'navMeetings', 'navProfile'
+            ],
+        };
+    }
+    if (role === 'Склад') {
+        return {
+            ...common,
+            slug: 'warehouse',
+            quickTaskLabel: 'Задача склада',
+            visibleNav: [
+                'navSupply', 'navNomenclature', 'navIntegrations', 'navDocuments', 'navTasks', 'navApprovals',
+                'navRequests', 'navService', 'navDashboard', 'navMessenger', 'navMeetings', 'navProfile'
+            ],
+        };
+    }
+    if (role === 'Производство и ОТК' || role === 'Конструкторское бюро') {
+        return {
+            ...common,
+            slug: 'production',
+            quickTaskLabel: 'Задача цеха',
+            visibleNav: [
+                'navProduction', 'navSupply', 'navIntegrations', 'navDocuments', 'navTasks', 'navApprovals',
+                'navRequests', 'navResources', 'navService', 'navDashboard', 'navMessenger', 'navMeetings', 'navProfile'
+            ],
+        };
+    }
+    if (role === 'Юрист') {
+        return {
+            ...common,
+            slug: 'legal',
+            quickTaskLabel: 'Юр. поручение',
+            visibleNav: [
+                'navApprovals', 'navClaims', 'navDocuments', 'navIntegrations', 'navService', 'navKnowledge', 'navDashboard', 'navClient360', 'navContract360',
+                'navClients', 'navProspecting', 'navLeads', 'navDeals', 'navMessenger', 'navEmails', 'navMeetings', 'navProfile'
+            ],
+        };
+    }
+    if (role === 'Секретарь / Канцелярия') {
+        return {
+            ...common,
+            slug: 'office',
+            quickTaskLabel: 'Регистрация / поручение',
+            visibleNav: [
+                'navDocuments', 'navTasks', 'navApprovals', 'navClients', 'navProspecting', 'navLeads', 'navDeals', 'navClient360', 'navEmails',
+                'navMeetings', 'navKnowledge', 'navMessenger', 'navDashboard', 'navProfile'
+            ],
+        };
+    }
+    if (role === 'Сотрудник') {
+        return {
+            ...common,
+            slug: 'employee',
+            quickTaskLabel: 'Поручение',
+            showScanner: false,
+            visibleNav: [
+                'navTasks', 'navDocuments', 'navIntegrations', 'navExpenses', 'navRequests', 'navKnowledge', 'navMessenger', 'navMeetings', 'navProfile'
+            ],
+        };
+    }
+    return { ...common, slug: 'default' };
+}
+
+function setRoleShellAttributes(roleName = '') {
+    const slug = getRoleSlug(roleName);
+    document.body.dataset.roleSlug = slug;
+    document.body.dataset.roleName = normalizeRoleName(roleName);
+    const appLayout = document.getElementById('appLayout');
+    if (appLayout) {
+        appLayout.dataset.roleSlug = slug;
+        appLayout.dataset.roleName = normalizeRoleName(roleName);
+    }
+}
+
+function setNavVisibility(navId, isVisible) {
+    const el = document.getElementById(navId);
+    if (!el) return;
+    el.style.display = isVisible ? 'flex' : 'none';
+}
+
+function refreshSidebarGroupsVisibility() {
+    document.querySelectorAll('.nav-group[data-nav-group]').forEach(group => {
+        const visibleItems = Array.from(group.querySelectorAll('.nav-item')).filter(item => item.style.display !== 'none');
+        group.style.display = visibleItems.length ? '' : 'none';
+    });
+}
+
+window.applyRoleShell = function() {
+    const config = getRoleUiConfig();
+    setRoleShellAttributes(currentUser?.role || '');
+    const allNavIds = [
+        'navDashboard', 'navApprovals', 'navTasks', 'navKnowledge', 'navDocuments', 'navMessenger',
+        'navEmails', 'navMeetings', 'navFinance', 'navAccounting', 'navIntegrations', 'navSupply', 'navSales', 'navProspecting', 'navLeads', 'navDeals',
+        'navProduction', 'navExpenses', 'navRequests', 'navResources', 'navService', 'navExecutive',
+        'navOperations', 'navClients', 'navClient360', 'navClaims', 'navNomenclature', 'navContacts', 'navAnalytics',
+        'navContract360', 'navKpi', 'navProfile', 'adminBtn'
+    ];
+    allNavIds.forEach(id => {
+        const alwaysVisible = id === 'navProfile';
+        setNavVisibility(id, alwaysVisible || config.visibleNav.includes(id));
+    });
+    refreshSidebarGroupsVisibility();
+    const deptLabel = document.querySelector('.krd-shell-sidebar__footer .nav-label');
+    if (deptLabel) deptLabel.style.display = config.showDeptFilters ? '' : 'none';
+    document.querySelectorAll('.dept-item').forEach(el => {
+        el.style.display = config.showDeptFilters ? 'flex' : 'none';
+    });
+    const deptGroup = document.querySelector('.krd-shell-sidebar__footer');
+    if (deptGroup) deptGroup.style.display = config.showDeptFilters ? '' : 'none';
+    const taskBtn = document.getElementById('topbarQuickTaskBtn');
+    if (taskBtn) {
+        const label = document.getElementById('topbarQuickTaskLabel');
+        if (label) label.textContent = config.quickTaskLabel;
+    }
+    const scanBtn = document.getElementById('topbarQuickScanBtn');
+    if (scanBtn) scanBtn.style.display = config.showScanner ? 'inline-flex' : 'none';
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) searchInput.placeholder = config.searchPlaceholder;
+    if (typeof applyWorkspaceConfig === 'function') applyWorkspaceConfig();
+};
+
+window.getRoleUiConfig = getRoleUiConfig;
+window.getRoleSlug = getRoleSlug;
+
+window.getRoleLandingView = function() {
+    const role = String(currentUser?.role || '').trim();
+    if (role === 'Директор') return 'executive';
+    if (role === 'Бухгалтерия') return 'finance';
+    if (role === 'Склад') return 'supply';
+    if (role === 'Производство и ОТК' || role === 'Конструкторское бюро') return 'production';
+    if (role === 'Юрист') return 'approvals';
+    if (role === 'Секретарь / Канцелярия') return 'documents';
+    if (role === 'Менеджер') return 'dashboard';
+    if (role === 'Сотрудник') return 'tasks';
+    return 'dashboard';
+};
+
+window.renderTableLoadingRow = function(colspan = 1, message = 'Загрузка данных...') {
+    return `<tr><td colspan="${Number(colspan || 1)}" class="table-loading-cell">${message}</td></tr>`;
+};
+
+window.renderTableEmptyRow = function(colspan = 1, title = 'Список пока пуст.', text = '', actionsHtml = '') {
+    return `
+        <tr>
+            <td colspan="${Number(colspan || 1)}" class="table-empty-cell">
+                <div class="empty-state empty-state--table">
+                    <div class="empty-state-premium-title">${title}</div>
+                    ${text ? `<div class="empty-state-premium-text">${text}</div>` : ''}
+                    ${actionsHtml ? `<div class="empty-state-actions">${actionsHtml}</div>` : ''}
+                </div>
+            </td>
+        </tr>
+    `;
+};
+
+window.renderInlineEmptyState = function(title, text = '', actionsHtml = '') {
+    return `
+        <div class="empty-state empty-state--premium">
+            <div class="empty-state-premium-title">${title}</div>
+            ${text ? `<div class="empty-state-premium-text">${text}</div>` : ''}
+            ${actionsHtml ? `<div class="empty-state-actions">${actionsHtml}</div>` : ''}
+        </div>
+    `;
+};
+
+window.renderOnboardingEmptyState = function(kind = 'default', overrides = {}) {
+    const presets = {
+        project: ['Создай первый проект.', 'После этого появятся этапы, документы, финансы и задачи по реальному объекту.', `<button class="btn-primary" onclick="createNewProject()">Создать проект</button>`],
+        one_c: ['Подключи 1С.', 'Боевой обмен ещё не настроен: укажи коннектор в админке, чтобы выгружать документы и оплаты без тестового режима.', `<button class="btn-secondary" onclick="navigateTo('users')">Открыть админку</button>`],
+        file: ['Загрузи первый файл.', 'Файлы попадут в версии, поиск по содержимому и юридически значимые карточки документов.', `<button class="btn-secondary" onclick="navigateTo('documents')">Открыть документы</button>`],
+        forbidden: ['Нет доступа к разделу.', 'Обратись к директору или администратору, чтобы выдали права на юрлицо, подразделение или модуль.', `<button class="btn-secondary" onclick="navigateTo('profile')">Мой профиль</button>`],
+        default: ['Здесь пока пусто.', 'Создай первую запись или смени фильтр, чтобы начать рабочий поток.', ''],
+    };
+    const [title, text, actions] = presets[kind] || presets.default;
+    return window.renderInlineEmptyState(overrides.title || title, overrides.text || text, overrides.actionsHtml ?? actions);
+};
+
+window.renderDeferredHtml = function(container, htmlProducer, options = {}) {
+    if (!container) return;
+    const threshold = Number(options.threshold || 60);
+    const size = Number(options.size || 0);
+    if (size < threshold) {
+        container.innerHTML = htmlProducer();
+        return;
+    }
+    if (container.tagName === 'TBODY') {
+        container.innerHTML = window.renderTableLoadingRow(
+            Number(options.colspan || 1),
+            options.loadingMessage || 'Загружаю записи...'
+        );
+    } else {
+        container.innerHTML = `<div class="empty-state empty-state--loading">${options.loadingMessage || 'Загружаю данные...'}</div>`;
+    }
+    requestAnimationFrame(() => {
+        container.innerHTML = htmlProducer();
+    });
+};
+
+function renderFormPolicyBanner(bannerId, payload) {
+    const el = typeof bannerId === 'string' ? document.getElementById(bannerId) : null;
+    if (!el) return;
+    const hidden = Array.isArray(payload?.hidden_fields) ? payload.hidden_fields : [];
+    const readonly = Array.isArray(payload?.readonly_fields) ? payload.readonly_fields : [];
+    const restrictedEntries = Object.entries(payload?.restricted_status_fields || {});
+    const statusFields = Array.isArray(payload?.status_fields) ? payload.status_fields : [];
+    const parts = [];
+    if (hidden.length) {
+        parts.push(`Скрыто полей: ${hidden.length}`);
+    }
+    if (readonly.length) {
+        parts.push(`Только просмотр: ${readonly.length}`);
+    }
+    if (restrictedEntries.length) {
+        parts.push(`Ограничения по статусам: ${restrictedEntries.length}`);
+    }
+    if (!parts.length) {
+        el.style.display = 'none';
+        el.innerHTML = '';
+        return;
+    }
+    el.style.display = '';
+    el.innerHTML = `
+        <div class="form-policy-banner-title">Политика доступа формы</div>
+        <div class="form-policy-banner-summary">${parts.join(' · ')}</div>
+        <div class="form-policy-banner-chips">
+            ${hidden.map(field => `<span class="form-policy-chip">Скрыто: ${field}</span>`).join('')}
+            ${readonly.map(field => `<span class="form-policy-chip">Только чтение: ${field}</span>`).join('')}
+            ${restrictedEntries.map(([field, statuses]) => `<span class="form-policy-chip">${field}: ${statuses.join(', ')}</span>`).join('')}
+            ${statusFields.filter(field => !restrictedEntries.some(([name]) => name === field)).map(field => `<span class="form-policy-chip">Политика статуса: ${field}</span>`).join('')}
+        </div>
+    `;
+}
+
+async function applyFieldPermissionsWithFeedback(module, entityType, fieldMap = {}, bannerId = '') {
+    applyFieldPermissionsToForm(module, entityType, fieldMap);
+    const cacheKey = `${module}::${entityType}`;
+    if (!window.__formPolicyCache[cacheKey]) {
+        window.__formPolicyCache[cacheKey] = await fetchFormPolicy(module, entityType);
+    }
+    renderFormPolicyBanner(bannerId, window.__formPolicyCache[cacheKey]);
+}
+
+window.applyFieldPermissionsWithFeedback = applyFieldPermissionsWithFeedback;
+
+async function fetchFormPolicy(module, entityType) {
+    if (!module || !entityType) return null;
+    try {
+        return await apiCall(`/permissions/forms/${encodeURIComponent(module)}/${encodeURIComponent(entityType)}`);
+    } catch (_err) {
+        return null;
+    }
+}
+
+window.fetchFormPolicy = fetchFormPolicy;
+
+function explainApiPolicyError(payload = {}) {
+    const errorCode = String(payload?.error || '').trim();
+    if (errorCode === 'forbidden_field') {
+        return `Поле «${payload.field || 'поле'}» нельзя менять по текущей политике.`;
+    }
+    if (errorCode === 'forbidden_status') {
+        const allowed = Array.isArray(payload.allowed_statuses) ? payload.allowed_statuses.filter(Boolean) : [];
+        return `Статус для «${payload.field || 'поля'}» запрещён.${allowed.length ? ` Разрешено: ${allowed.join(', ')}.` : ''}`;
+    }
+    if (errorCode === 'policy_blocked') return payload.message || 'Действие запрещено уровнем политик.';
+    if (errorCode === 'danger_blocked') return payload.message || 'Опасная операция заблокирована для этой роли.';
+if (errorCode === 'two_factor_required') return payload.message || 'Для этого действия нужно включить двухфакторную защиту.';
+    if (errorCode === 'reason_required') return payload.message || 'Для этого действия нужно указать причину.';
+    return payload?.message || payload?.error || 'Операция заблокирована политикой безопасности.';
+}
+
+async function securityGuardCheck(moduleName, entityType, actionName, statusName = '', reason = '') {
+    if (!currentUser || currentUser.status !== 'approved') {
+        return { error: 'forbidden', message: 'Нужна активная сессия.' };
+    }
+    return await apiCall('/security/guard/check', 'POST', {
+        module_name: moduleName || '',
+        entity_type: entityType || '',
+        action_name: actionName || '',
+        status_name: statusName || '',
+        reason: reason || '',
+    });
+}
+
+async function guardDangerousAction(moduleName, entityType, actionName, options = {}) {
+    let reason = String(options.reason || '').trim();
+    const statusName = String(options.statusName || '').trim();
+    let probe = await securityGuardCheck(moduleName, entityType, actionName, statusName, reason);
+    if (!probe || probe.error === 'forbidden') {
+        await customAlert(explainApiPolicyError(probe || {}));
+        return { allowed: false, reason: '' };
+    }
+    if (probe.error === 'reason_required') {
+        reason = await customPrompt(probe.message || 'Укажи причину операции.', '');
+        if (reason === null) return { allowed: false, reason: '' };
+        probe = await securityGuardCheck(moduleName, entityType, actionName, statusName, reason);
+    }
+    if (probe?.error) {
+        await customAlert(explainApiPolicyError(probe));
+        return { allowed: false, reason: '' };
+    }
+    return { allowed: true, reason };
+}
+
+window.explainApiPolicyError = explainApiPolicyError;
+window.securityGuardCheck = securityGuardCheck;
+window.guardDangerousAction = guardDangerousAction;
 
 async function fetchExchangeRates() {
     try {
@@ -53,99 +889,7 @@ const checklistTemplate = [
     { title: "6. Юридические вопросы и гарантия", responsibles: "Юрист", tasks: ["Возможные претензии и штрафы урегулированы. Оригинал Договора со всеми доп. соглашениями сдан в архив."] }
 ];
 
-async function apiCall(endpoint, method = 'GET', body = null) {
-    const options = { method, headers: {} };
-    if (body instanceof FormData) { options.body = body; } 
-    else if (body) { options.headers['Content-Type'] = 'application/json'; options.body = JSON.stringify(body); }
-    try { const res = await fetch(API_URL + endpoint, options); return await res.json(); } 
-    catch (e) { return null; }
-}
-
-async function loadProjects() { 
-    const isHead = currentUser.is_head || 0;
-    const url = `/projects?user_name=${encodeURIComponent(currentUser.name)}&user_role=${encodeURIComponent(currentUser.role)}&is_head=${isHead}`;
-    const data = await apiCall(url); 
-    if (data) projectsDB = data; 
-}
-async function loadClients() { const data = await apiCall('/clients'); if (data) clientsDB = data; }
-async function loadAllUsers() { const data = await apiCall('/users/all'); if (data) allUsersDB = data; }
-async function loadMeetings() { const data = await apiCall('/meetings'); if (data) meetingsDB = data; }
-async function loadDocuments() { const data = await apiCall('/documents'); if (data) documentsDB = data; }
-async function loadTasks() { const data = await apiCall('/tasks'); if(data) { tasksDB = data; if(typeof checkOverdueTasksGlobal === 'function') checkOverdueTasksGlobal(); } }
-async function loadKnowledge() { const data = await apiCall('/knowledge'); if(data) knowledgeDB = data; }
-async function loadApprovals() { const data = await apiCall('/approvals'); if(data) approvalsDB = data; }
-async function loadClaims() { const data = await apiCall('/claims'); if (data) claimsDB = data; }
-async function loadCourtCases() { const data = await apiCall('/court_cases'); if (data) courtCasesDB = data; }
-
-// === КЛИЕНТ WEBSOCKET ===
-let ws;
-function connectWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-    
-    ws.onmessage = async (event) => {
-        if(!currentUser || currentUser.status !== 'approved') return;
-        const data = JSON.parse(event.data);
-        
-        if (data.type === 'projects') {
-            await loadProjects();
-            if(document.getElementById('dashboardView') && document.getElementById('dashboardView').style.display === 'block') { 
-                if (viewMode === 'kanban') renderKanbanBoard();
-                else if (typeof renderDashboard === 'function') renderDashboard(); 
-                
-                if(document.getElementById('analyticsView') && document.getElementById('analyticsView').style.display === 'block' && typeof drawCharts === 'function') drawCharts(); 
-            }
-            else if(document.getElementById('projectView') && document.getElementById('projectView').style.display === 'block') { 
-                if (typeof updateChecklistUI === 'function') updateChecklistUI(); 
-                if (typeof renderChat === 'function') renderChat(); 
-                if (typeof renderFiles === 'function') renderFiles(); 
-            }
-            if (typeof renderNotifications === 'function') renderNotifications();
-        } 
-        else if (data.type === 'tasks') {
-            await loadTasks();
-            if(document.getElementById('tasksView') && document.getElementById('tasksView').style.display === 'block' && typeof renderTasks === 'function') renderTasks();
-            if(document.getElementById('kpiView') && document.getElementById('kpiView').style.display === 'block' && typeof renderKPI === 'function') renderKPI();
-        }
-        else if (data.type === 'chats') {
-            if (typeof loadGlobalChats === 'function') await loadGlobalChats();
-            const messView = document.getElementById('messengerView');
-            if(messView && messView.style.display === 'block') {
-                if (typeof currentGlobalChatId !== 'undefined' && currentGlobalChatId !== null) {
-                    if (typeof loadGlobalMessages === 'function') loadGlobalMessages(currentGlobalChatId, false);
-                } else {
-                    if (typeof renderGlobalChats === 'function') renderGlobalChats();
-                }
-            }
-        }
-        else if (data.type === 'documents') {
-            await loadDocuments();
-            if(document.getElementById('documentsView') && document.getElementById('documentsView').style.display === 'block' && typeof renderDocuments === 'function') renderDocuments();
-        }
-        else if (data.type === 'approvals') {
-            await loadApprovals();
-            if(document.getElementById('approvalsView') && document.getElementById('approvalsView').style.display === 'block' && typeof renderApprovals === 'function') renderApprovals();
-        }
-        else if (data.type === 'meetings') {
-            await loadMeetings();
-            if(document.getElementById('meetingsView') && document.getElementById('meetingsView').style.display === 'block' && typeof renderMeetings === 'function') renderMeetings();
-        }
-        else if (data.type === 'knowledge') {
-            await loadKnowledge();
-            if(document.getElementById('knowledgeView') && document.getElementById('knowledgeView').style.display === 'block' && typeof renderKnowledge === 'function') renderKnowledge();
-        }
-        else if (data.type === 'claims') {
-            await loadClaims();
-            if(document.getElementById('claimsView') && document.getElementById('claimsView').style.display === 'block' && typeof renderClaims === 'function' && currentLegalTab === 'claims') renderClaims();
-        }
-        else if (data.type === 'court_cases') {
-            await loadCourtCases();
-            if(document.getElementById('claimsView') && document.getElementById('claimsView').style.display === 'block' && typeof renderCourts === 'function' && currentLegalTab === 'courts') renderCourts();
-        }
-    };
-
-    ws.onclose = () => { setTimeout(connectWebSocket, 5000); };
-}
+// API/session/websocket helpers were extracted into app_api.js and app_shell.js.
 
 function checkOverdueTasksGlobal() {
     if (typeof tasksDB === 'undefined' || !currentUser) return;
@@ -169,23 +913,33 @@ function checkOverdueTasksGlobal() {
 }
 
 window.onload = async () => {
-    document.documentElement.dataset.theme = localStorage.getItem('theme') || 'light';
+    document.documentElement.dataset.theme = 'light';
+    localStorage.removeItem('theme');
     const path = window.location.pathname;
+    await bootstrapSession();
 
     if (currentUser && currentUser.status === 'approved') {
         if (path.includes('login.html') || path.includes('register.html') || path === '/' || path === '') {
             window.location.href = '/app'; return;
         }
         await fetchExchangeRates();
-        await loadProjects(); await loadClients(); await loadAllUsers(); await loadMeetings(); await loadDocuments(); await loadTasks(); await loadKnowledge(); await loadApprovals(); await loadClaims(); await loadCourtCases();
+        await loadPermissions();
+        await loadProjects(); await loadClients(); await loadAllUsers(); await loadMeetings(); await loadCalendarEvents(); await loadCrmLeads(); await loadCrmDeals(); await loadEmailAccounts(); await loadDocuments(); await loadTasks(); await loadKnowledge(); await loadApprovals(); await loadClaims(); await loadCourtCases(); await loadAuditLogs(); await loadNotifications();
         
         if (document.getElementById('appLayout')) {
+            document.getElementById('appLayout').classList.remove('krd-is-hidden');
             document.getElementById('appLayout').style.display = 'flex';
             
             let titleStr = `${currentUser.name} (${currentUser.role})`;
-            if (currentUser.is_head === 1 && currentUser.role !== 'Директор') titleStr += " 👑 Руководитель";
+            if (currentUser.is_head === 1 && currentUser.role !== 'Директор') titleStr += " · Руководитель";
             const uNameEl = document.getElementById('topbarUserName');
             if (uNameEl) uNameEl.innerText = titleStr;
+            const roleBadgeEl = document.getElementById('topbarRoleBadge');
+            if (roleBadgeEl) roleBadgeEl.innerText = currentUser.role === 'Директор' ? 'Директор' : currentUser.role || 'Роль';
+            const modeBadgeEl = document.getElementById('topbarModeBadge');
+            if (modeBadgeEl) {
+                modeBadgeEl.innerText = currentUser.role === 'Директор' ? 'Директор' : (currentUser.is_head === 1 ? 'Руководитель' : 'Рабочий контур');
+            }
             
             const uInitEl = document.getElementById('topbarUserInitials');
             if (uInitEl && currentUser.name) {
@@ -198,6 +952,10 @@ window.onload = async () => {
             
             const kpiBtn = document.getElementById('navKpi');
             if (kpiBtn) kpiBtn.style.display = currentUser.role === 'Директор' ? 'flex' : 'none';
+
+            const executiveBtn = document.getElementById('navExecutive');
+            if (executiveBtn) executiveBtn.style.display = currentUser.role === 'Директор' ? 'flex' : 'none';
+            if (typeof applyRoleShell === 'function') applyRoleShell();
             
             if (currentUser.role === 'Директор') {
                 const pUsers = await apiCall('/users/pending');
@@ -210,16 +968,18 @@ window.onload = async () => {
             if (typeof renderNotifications === 'function') renderNotifications();
             if (typeof initSignaturePad === 'function') initSignaturePad(); 
             checkOverdueTasksGlobal();
-            if (typeof navigateTo === 'function') navigateTo('dashboard');
+            const savedView = localStorage.getItem('korda_last_view');
+            const landingView = savedView || (typeof getRoleLandingView === 'function' ? getRoleLandingView() : 'dashboard');
+            if (typeof navigateTo === 'function') navigateTo(landingView);
             
             connectWebSocket();
             initClaimsUI();
         }
     } else if (currentUser && currentUser.status === 'pending') {
-        if (!path.includes('login.html') && !path.includes('register.html')) { window.location.href = 'login.html'; return; }
+        if (!path.includes('login.html') && !path.includes('register.html')) { window.location.href = '/static/login.html'; return; }
         if (path.includes('login.html')) { document.getElementById('loginFormCard').style.display = 'none'; document.getElementById('pendingCard').style.display = 'block'; }
     } else {
-        if (!path.includes('login.html') && !path.includes('register.html')) { window.location.href = 'login.html'; }
+        if (!path.includes('login.html') && !path.includes('register.html')) { window.location.href = '/static/login.html'; }
     }
 };
 
@@ -227,12 +987,11 @@ setInterval(async () => {
     if(!currentUser || currentUser.status !== 'approved') return;
     const res = await apiCall(`/status/${currentUser.email}`);
     if (res && res.status === 'banned') { 
-        customAlert("🔒 Ваш аккаунт был заблокирован администратором.").then(() => logout()); 
+        customAlert("Ваш аккаунт был заблокирован администратором.").then(() => logout()); 
         return; 
     }
     if (res && res.is_head !== undefined) {
         currentUser.is_head = res.is_head;
-        localStorage.setItem('korda_session', JSON.stringify(currentUser));
     }
     if (currentUser.role === 'Директор' && document.getElementById('appLayout')) {
         for (let i = 0; i < projectsDB.length; i++) {
@@ -269,823 +1028,10 @@ setInterval(async () => {
     }
 }, 60000); 
 
-function toggleTheme() {
-    const n = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = n; localStorage.setItem('theme', n);
-    if(document.getElementById('analyticsView') && document.getElementById('analyticsView').style.display === 'block' && typeof drawCharts === 'function') drawCharts();
-}
+setInterval(async () => {
+    if (!currentUser || currentUser.status !== 'approved') return;
+    await loadNotifications();
+    if (typeof renderNotifications === 'function') renderNotifications();
+}, 20000);
 
-// ==========================================
-// МОДУЛЬ: ПРЕТЕНЗИОННАЯ РАБОТА (ЮРИСwwТЫ)
-// ==========================================
-function getLegalScaleIcon() {
-    return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v2a4 4 0 0 1-4 4 4 4 0 0 1-4-4v-2"></path><path d="M12 4v12"></path><path d="M3 7h18"></path><path d="m7 7-3 5a3 3 0 0 0 6 0L7 7Z"></path><path d="m17 7-3 5a3 3 0 0 0 6 0l-3-5Z"></path></svg>`;
-}
-
-function getLegalCreateIcon() {
-    return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>`;
-}
-
-function getLegalExportIcon() {
-    return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>`;
-}
-
-function getLegalDocIcon() {
-    return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v5h5"></path><path d="M9 13h6"></path><path d="M9 17h6"></path></svg>`;
-}
-
-function getLegalSectionTitle(title, subtitle = '') {
-    return `
-        <div class="legal-title-row">
-            <div class="legal-icon legal-icon--hero">${getLegalScaleIcon()}</div>
-            <div>
-                <h2 class="legal-page-title">${title}</h2>
-                ${subtitle ? `<p class="legal-page-subtitle">${subtitle}</p>` : ''}
-            </div>
-        </div>
-    `;
-}
-
-function getLegalCreateButtonLabel(tab) {
-    const text = tab === 'claims' ? 'Создать претензию' : 'Добавить дело';
-    return `${getLegalCreateIcon()}<span>${text}</span>`;
-}
-
-function renderLegalToolbarButton(kind) {
-    const isClaims = kind === 'claims';
-    const fileName = isClaims ? 'Реестр_Претензий' : 'Реестр_Судебных_Дел';
-    const source = isClaims ? 'claimsDB' : 'courtCasesDB';
-    return `
-        <button class="btn-secondary legal-export-btn no-print" onclick="exportDataToExcel(${source}, '${fileName}')">
-            ${getLegalExportIcon()}
-            <span>Экспорт в Excel</span>
-        </button>
-    `;
-}
-
-function initClaimsUI() {
-    const sidebar = document.querySelector('.sidebar');
-    if (sidebar && !document.getElementById('navClaims')) {
-        const btn = document.createElement('a');
-        btn.href = "#"; btn.id = "navClaims"; btn.className = "nav-item";
-        btn.innerHTML = `${getLegalScaleIcon()}<span>Претензии и Суды</span>`;
-        btn.onclick = (e) => { 
-            e.preventDefault();
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            btn.classList.add('active');
-            if (typeof navigateTo === 'function') navigateTo('claims'); 
-            renderClaims();
-        };
-        sidebar.appendChild(btn);
-    }
-
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent && !document.getElementById('claimsView')) {
-        const claimsView = document.createElement('div');
-        claimsView.id = "claimsView"; claimsView.className = "fade-in legal-shell"; claimsView.style.display = "none";
-        claimsView.innerHTML = `
-<<<<<<< Updated upstream
-            <div class="header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                <h2 style="margin:0; color:var(--primary);">⚖️ Претензии и Суды</h2>
-                <button id="btnCreateLegal" class="btn-primary" onclick="openCreateLegalModal()">+ Создать претензию</button>
-            </div>
-            <div style="display:flex; gap:10px; margin-bottom:20px;">
-                <button id="tabLegalClaims" class="btn-secondary active" style="padding:6px 16px; font-size:13px;" onclick="switchLegalTab('claims')">Досудебные претензии</button>
-                <button id="tabLegalCourts" class="btn-secondary" style="padding:6px 16px; font-size:13px;" onclick="switchLegalTab('courts')">Судебные дела</button>
-=======
-            <div class="legal-hero">
-                ${getLegalSectionTitle('Претензии и Суды', 'Единый реестр досудебной и судебной работы')}
-                <button id="btnCreateLegal" class="btn-primary legal-create-btn" onclick="openCreateLegalModal()">${getLegalCreateButtonLabel('claims')}</button>
-            </div>
-            <div class="legal-toolbar">
-                <div class="legal-tabs">
-                <button id="tabLegalClaims" class="btn-secondary active btn-sm" onclick="switchLegalTab('claims')">Досудебные претензии</button>
-                <button id="tabLegalCourts" class="btn-secondary btn-sm" onclick="switchLegalTab('courts')">Судебные дела</button>
-                </div>
-                <div id="legalToolbarActions" class="legal-toolbar-actions"></div>
->>>>>>> Stashed changes
-            </div>
-            <div class="legal-board"><div id="legalListContainer"></div></div>
-        `;
-        mainContent.appendChild(claimsView);
-    }
-
-    if (!document.getElementById('createCourtModal')) {
-        document.body.insertAdjacentHTML('beforeend', `
-<<<<<<< Updated upstream
-        <div id="createCourtModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:9999;">
-            <div class="modal-content fade-in" style="background:var(--bg); padding:25px; border-radius:12px; width:700px; max-width:95%; box-shadow:0 10px 25px rgba(0,0,0,0.2);">
-                <h3 style="margin-top:0; color:var(--primary); margin-bottom:15px;">⚖️ Новое судебное дело</h3>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:20px;">
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Номер дела</label><input type="text" id="courtNum" class="auth-input" style="margin:0; width:100%;" placeholder="Например, А56-123/2024"></div>
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Суд</label><input type="text" id="courtName" class="auth-input" style="margin:0; width:100%;" placeholder="АС г. Санкт-Петербурга"></div>
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Истец</label><input type="text" id="courtPlain" class="auth-input" style="margin:0; width:100%;" value="ООО «КОРДА»"></div>
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Ответчик</label><input type="text" id="courtDef" class="auth-input" style="margin:0; width:100%;"></div>
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Сумма иска (₽)</label><input type="number" id="courtAmount" class="auth-input" style="margin:0; width:100%;"></div>
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Привязка к договору</label><select id="courtProj" class="auth-input" style="margin:0; width:100%;"></select></div>
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Инстанция</label>
-                        <select id="courtInst" class="auth-input" style="margin:0; width:100%;">
-=======
-        <div id="createCourtModal" class="modal modal-overlay-custom">
-            <div class="modal-content fade-in modal-content-custom">
-                <h3 class="legal-title legal-modal-title">${getLegalScaleIcon()}<span>Новое судебное дело</span></h3>
-                <div class="form-grid">
-                    <div><label class="form-label-custom">Номер дела</label><input type="text" id="courtNum" class="auth-input form-input-custom" placeholder="Например, А56-123/2024"></div>
-                    <div><label class="form-label-custom">Суд</label><input type="text" id="courtName" class="auth-input form-input-custom" placeholder="АС г. Санкт-Петербурга"></div>
-                    <div><label class="form-label-custom">Истец</label><input type="text" id="courtPlain" class="auth-input form-input-custom" value="ООО «КОРДА»"></div>
-                    <div><label class="form-label-custom">Ответчик</label><input type="text" id="courtDef" class="auth-input form-input-custom"></div>
-                    <div><label class="form-label-custom">Сумма иска (₽)</label><input type="number" id="courtAmount" class="auth-input form-input-custom"></div>
-                    <div><label class="form-label-custom">Привязка к договору</label><select id="courtProj" class="auth-input form-input-custom"></select></div>
-                    <div><label class="form-label-custom">Инстанция</label>
-                        <select id="courtInst" class="auth-input form-input-custom">
->>>>>>> Stashed changes
-                            <option value="Первая">Первая инстанция</option>
-                            <option value="Апелляция">Апелляционная инстанция</option>
-                            <option value="Кассация">Кассационная инстанция</option>
-                        </select>
-                    </div>
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Дата след. заседания</label><input type="date" id="courtHearing" class="auth-input" style="margin:0; width:100%;"></div>
-                </div>
-                <div style="display:flex; justify-content:flex-end; gap:10px; border-top:1px solid var(--border); padding-top:15px;">
-                    <button class="btn-secondary" onclick="document.getElementById('createCourtModal').style.display='none'">Отмена</button>
-                    <button class="btn-primary" onclick="submitNewCourt()">Сохранить дело</button>
-                </div>
-            </div>
-        </div>`);
-    }
-
-    if (!document.getElementById('createClaimModal')) {
-        document.body.insertAdjacentHTML('beforeend', `
-<<<<<<< Updated upstream
-        <div id="createClaimModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:9999;">
-            <div class="modal-content fade-in" style="background:var(--bg); padding:25px; border-radius:12px; width:600px; max-width:95%; box-shadow:0 10px 25px rgba(0,0,0,0.2);">
-                <h3 style="margin-top:0; color:var(--primary); margin-bottom:15px;">⚖️ Новая претензия</h3>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:20px;">
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Номер претензии</label><input type="text" id="claimNum" class="auth-input" style="margin:0; width:100%;" placeholder="Например, ПР-01"></div>
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Дата составления</label><input type="date" id="claimDate" class="auth-input" style="margin:0; width:100%;"></div>
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Инициатор</label><input type="text" id="claimInit" class="auth-input" style="margin:0; width:100%;" value="ООО «КОРДА»"></div>
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Адресат (Контрагент)</label><input type="text" id="claimAddr" class="auth-input" style="margin:0; width:100%;"></div>
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Сумма требований (₽)</label><input type="number" id="claimAmount" class="auth-input" style="margin:0; width:100%;"></div>
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Привязка к договору</label><select id="claimProj" class="auth-input" style="margin:0; width:100%;"></select></div>
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Дата направления</label><input type="date" id="claimDateSent" class="auth-input" style="margin:0; width:100%;"></div>
-                    <div><label style="font-size:12px; color:var(--secondary); display:block; margin-bottom:4px;">Срок ответа до</label><input type="date" id="claimDeadline" class="auth-input" style="margin:0; width:100%;"></div>
-=======
-        <div id="createClaimModal" class="modal modal-overlay-custom">
-            <div class="modal-content fade-in modal-content-custom medium">
-                <h3 class="legal-title legal-modal-title">${getLegalScaleIcon()}<span>Новая претензия</span></h3>
-                <div class="form-grid">
-                    <div><label class="form-label-custom">Номер претензии</label><input type="text" id="claimNum" class="auth-input form-input-custom" placeholder="Например, ПР-01"></div>
-                    <div><label class="form-label-custom">Дата составления</label><input type="date" id="claimDate" class="auth-input form-input-custom"></div>
-                    <div><label class="form-label-custom">Инициатор</label><input type="text" id="claimInit" class="auth-input form-input-custom" value="ООО «КОРДА»"></div>
-                    <div><label class="form-label-custom">Адресат (Контрагент)</label><input type="text" id="claimAddr" class="auth-input form-input-custom"></div>
-                    <div><label class="form-label-custom">Сумма требований (₽)</label><input type="number" id="claimAmount" class="auth-input form-input-custom"></div>
-                    <div><label class="form-label-custom">Привязка к договору</label><select id="claimProj" class="auth-input form-input-custom"></select></div>
-                    <div><label class="form-label-custom">Дата направления</label><input type="date" id="claimDateSent" class="auth-input form-input-custom"></div>
-                    <div><label class="form-label-custom">Срок ответа до</label><input type="date" id="claimDeadline" class="auth-input form-input-custom"></div>
->>>>>>> Stashed changes
-                </div>
-                <div style="display:flex; justify-content:flex-end; gap:10px; border-top:1px solid var(--border); padding-top:15px;">
-                    <button class="btn-secondary" onclick="document.getElementById('createClaimModal').style.display='none'">Отмена</button>
-                    <button class="btn-primary" onclick="submitNewClaim()">Сохранить в реестр</button>
-                </div>
-            </div>
-        </div>`);
-    }
-
-    if (typeof window.navigateTo === 'function') {
-        const origNav = window.navigateTo;
-        window.navigateTo = function(viewId) {
-            origNav(viewId);
-            const cv = document.getElementById('claimsView');
-            if (cv) cv.style.display = viewId === 'claims' ? 'block' : 'none';
-            if (viewId === 'claims') {
-                if (currentLegalTab === 'claims') renderClaims();
-                else renderCourts();
-            }
-        };
-    }
-}
-
-window.openCreateLegalModal = function() {
-    if (currentLegalTab === 'claims') {
-        openCreateClaimModal();
-    } else {
-        openCreateCourtModal();
-    }
-}
-
-window.switchLegalTab = function(tab) {
-    currentLegalTab = tab;
-    document.getElementById('tabLegalClaims').classList.toggle('active', tab === 'claims');
-    document.getElementById('tabLegalCourts').classList.toggle('active', tab === 'courts');
-    document.getElementById('btnCreateLegal').innerHTML = getLegalCreateButtonLabel(tab);
-    if (tab === 'claims') renderClaims(); else renderCourts();
-};
-
-window.renderClaims = function() {
-    const container = document.getElementById('legalListContainer');
-    const toolbarActions = document.getElementById('legalToolbarActions');
-    if (!container) return;
-    if (toolbarActions) toolbarActions.innerHTML = renderLegalToolbarButton('claims');
-
-    if (claimsDB.length === 0) {
-        container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--secondary); background:rgba(0,0,0,0.02); border-radius:8px; border:1px dashed var(--border);">Нет зарегистрированных претензий.</div>';
-        return;
-    }
-
-    let html = '<table class="admin-table" style="width:100%; text-align:left; border-collapse:collapse;"><thead><tr style="border-bottom:2px solid var(--border);"><th>№ и Дата</th><th>Договор / Контрагент</th><th>Сумма (₽)</th><th>Статусы и Сроки</th><th>Действия</th></tr></thead><tbody>';
-    const today = new Date(); today.setHours(0,0,0,0);
-    
-    claimsDB.forEach(c => {
-        const p = projectsDB.find(x => x.id === c.proj_id);
-        const pName = p ? p.contract : 'Договор не найден';
-        
-        let statusColor = 'var(--secondary)';
-        if (c.status === 'Направлена') statusColor = 'var(--primary)';
-        if (c.status === 'Ответ получен') statusColor = '#f59e0b';
-        if (c.status === 'Урегулирована') statusColor = 'var(--success)';
-        if (c.status === 'Отклонена') statusColor = 'var(--danger)';
-        
-        let deadlineColor = 'var(--text)';
-        if (c.deadline && (c.status === 'Направлена' || c.status === 'Подготовка')) {
-            const parts = c.deadline.split('-');
-            if (parts.length === 3 && new Date(parts[0], parts[1]-1, parts[2]) < today) deadlineColor = 'var(--danger)';
-        }
-
-        html += `<tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:10px 5px;"><b>№ ${c.number}</b><br><span style="font-size:11px; color:var(--secondary);">от ${c.d_date}</span></td>
-            <td style="padding:10px 5px;"><span style="color:var(--primary); cursor:pointer; font-weight:600; text-decoration:underline;" onclick="if(typeof openProject==='function'){openProject(${c.proj_id});}">${pName}</span><br><span style="font-size:12px;">${c.addressee}</span></td>
-            <td style="padding:10px 5px; font-weight:bold;">${c.amount.toLocaleString('ru-RU')} ₽</td>
-            <td style="padding:10px 5px;">
-                <span style="background:${statusColor}; color:white; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600;">${c.status}</span>
-                <div style="font-size:11px; margin-top:6px; color:var(--secondary);">Срок ответа: <b style="color:${deadlineColor};">${c.deadline || 'Не указан'}</b></div>
-            </td>
-            <td style="padding:10px 5px; display:flex; gap:5px; flex-direction:column;">
-                <select class="auth-input" onchange="updateClaimStatus(${c.id}, this.value)" style="margin:0; padding:4px; font-size:12px; height:auto;">
-                    <option value="Подготовка" ${c.status==='Подготовка'?'selected':''}>Подготовка</option>
-                    <option value="Направлена" ${c.status==='Направлена'?'selected':''}>Направлена</option>
-                    <option value="Ответ получен" ${c.status==='Ответ получен'?'selected':''}>Ответ получен</option>
-                    <option value="Урегулирована" ${c.status==='Урегулирована'?'selected':''}>Урегулирована</option>
-                    <option value="Отклонена" ${c.status==='Отклонена'?'selected':''}>Отклонена</option>
-                </select>
-<<<<<<< Updated upstream
-                <button class="btn-secondary" style="padding:4px; font-size:11px;" onclick="generateClaimTemplate(${c.id})">📄 Шаблон</button>
-=======
-                <button class="btn-secondary btn-xs legal-inline-btn" onclick="generateClaimTemplate(${c.id})">${getLegalDocIcon()}<span>Шаблон</span></button>
->>>>>>> Stashed changes
-            </td>
-        </tr>`;
-    });
-    html += '</tbody></table>';
-    container.innerHTML = html;
-};
-
-window.openCreateClaimModal = function() {
-    const sel = document.getElementById('claimProj');
-    sel.innerHTML = '<option value="" disabled selected>Выберите договор...</option>' + projectsDB.map(p => `<option value="${p.id}">${p.contract} (${p.client})</option>`).join('');
-    document.getElementById('claimDate').value = new Date().toISOString().split('T')[0];
-    document.getElementById('createClaimModal').style.display = 'flex';
-};
-
-window.submitNewClaim = async function() {
-    const data = {
-        number: document.getElementById('claimNum').value || 'Б/Н',
-        d_date: document.getElementById('claimDate').value || new Date().toISOString().split('T')[0],
-        initiator: document.getElementById('claimInit').value || 'ООО КОРДА',
-        addressee: document.getElementById('claimAddr').value || 'Не указан',
-        amount: parseFloat(document.getElementById('claimAmount').value) || 0,
-        proj_id: parseInt(document.getElementById('claimProj').value) || 0,
-        date_sent: document.getElementById('claimDateSent').value || '',
-        deadline: document.getElementById('claimDeadline').value || '',
-        date_answered: '',
-        status: 'Подготовка'
-    };
-    if(!data.proj_id) return typeof customAlert === 'function' ? customAlert("❌ Выберите связанный договор!") : alert("❌ Выберите связанный договор!");
-
-    const res = await apiCall('/claims', 'POST', data);
-    if(res && res.status === 'success') {
-        document.getElementById('createClaimModal').style.display = 'none';
-        await loadClaims(); renderClaims();
-        if(typeof showToast === 'function') showToast("Претензии", "Претензия успешно создана");
-        
-        const p = projectsDB.find(x => x.id === data.proj_id);
-        if (p) {
-            if(!p.logs) p.logs = [];
-            const now = new Date();
-            p.logs.unshift({time: `${now.getDate().toString().padStart(2,'0')}.${(now.getMonth()+1).toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`, user: currentUser.name, action: `⚖️ Зарегистрирована претензия №${data.number} на сумму ${data.amount} руб.`});
-            await apiCall(`/projects/${p.id}`, 'PUT', p);
-        }
-    } else {
-        typeof customAlert === 'function' ? customAlert("❌ Ошибка при создании") : alert("Ошибка");
-    }
-};
-
-window.updateClaimStatus = async function(id, newStatus) {
-    const c = claimsDB.find(x => x.id === id);
-    if(!c) return;
-    c.status = newStatus;
-    await apiCall(`/claims/${c.id}`, 'PUT', c);
-    await loadClaims(); renderClaims();
-    if(typeof showToast === 'function') showToast("Претензии", `Статус изменен на: ${newStatus}`);
-};
-
-window.generateClaimTemplate = function(claimId) {
-    const c = claimsDB.find(x => x.id === claimId);
-    if (!c) return;
-    const p = projectsDB.find(x => x.id === c.proj_id);
-    if (!p) return;
-
-    const docText = `ДОСУДЕБНАЯ ПРЕТЕНЗИЯ № ${c.number}\nДата: ${c.d_date}\n\nКому: ${c.addressee}\nОт кого: ${c.initiator}\n\nПо договору ${p.contract} от Заказчика/Исполнителя была выявлена задолженность (или неисполнение обязательств).\nСумма требований по настоящей претензии составляет: ${c.amount} руб.\n\nПросим урегулировать данную задолженность в срок до ${c.deadline || 'установленного договором времени'}. \nВ случае отсутствия ответа или отказа в удовлетворении требований, мы будем вынуждены обратиться в Арбитражный суд для защиты своих законных интересов, с возложением на Вас всех судебных издержек.\n\nС уважением,\nРуководитель ___________________`;
-    const fileName = `Pretenziya_N${c.number.replace(/[\\/\\s\\?]/g, '_')}_${p.contract.replace(/[\\/\\s\\?]/g, '_')}.txt`;
-    const blob = new Blob([docText], { type: 'text/plain;charset=utf-8' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = fileName;
-    link.click();
-    URL.revokeObjectURL(link.href);
-    if (typeof showToast === 'function') showToast("Шаблон", "Претензия скачана");
-};
-
-// === ФУНКЦИИ СУДЕБНЫХ ДЕЛ ===
-window.renderCourts = function() {
-    const container = document.getElementById('legalListContainer');
-    const toolbarActions = document.getElementById('legalToolbarActions');
-    if (!container) return;
-    if (toolbarActions) toolbarActions.innerHTML = renderLegalToolbarButton('courts');
-
-    if (courtCasesDB.length === 0) {
-        container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--secondary); background:rgba(0,0,0,0.02); border-radius:8px; border:1px dashed var(--border);">Нет зарегистрированных судебных дел.</div>';
-        return;
-    }
-
-    let html = '<table class="admin-table" style="width:100%; text-align:left; border-collapse:collapse;"><thead><tr style="border-bottom:2px solid var(--border);"><th>Дело и Суд</th><th>Договор и Стороны</th><th>Сумма (₽)</th><th>Стадия и Заседания</th><th>Действия</th></tr></thead><tbody>';
-    
-    courtCasesDB.forEach(c => {
-        const p = projectsDB.find(x => x.id === c.proj_id);
-        const pName = p ? p.contract : 'Договор не найден';
-        
-        let stageColor = 'var(--primary)';
-        if (c.stage === 'Закрыто') stageColor = 'var(--success)';
-        if (c.stage === 'Приостановлено') stageColor = 'var(--secondary)';
-        if (c.stage === 'Обжаловано') stageColor = '#f59e0b';
-        if (c.stage === 'Вынесение решения') stageColor = '#8b5cf6';
-        
-        html += `<tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:10px 5px;"><b>${c.number}</b><br><span style="font-size:11px; color:var(--secondary);">${c.court_name}</span><br><span style="font-size:10px; background:rgba(0,0,0,0.05); padding:2px 4px; border-radius:4px; display:inline-block; margin-top:4px;">${c.instance}</span></td>
-            <td style="padding:10px 5px;"><span style="color:var(--primary); cursor:pointer; font-weight:600; text-decoration:underline;" onclick="if(typeof openProject==='function'){openProject(${c.proj_id});}">${pName}</span><br><span style="font-size:11px; color:var(--secondary);">Истец:</span> <span style="font-size:11px;">${c.plaintiff}</span><br><span style="font-size:11px; color:var(--secondary);">Ответчик:</span> <span style="font-size:11px;">${c.defendant}</span></td>
-            <td style="padding:10px 5px; font-weight:bold;">${c.amount.toLocaleString('ru-RU')} ₽</td>
-            <td style="padding:10px 5px;">
-                <span style="background:${stageColor}; color:white; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600;">${c.stage}</span>
-                <div style="font-size:11px; margin-top:6px; color:var(--secondary);">След. заседание: <b style="color:var(--text);">${c.next_hearing || 'Не назначено'}</b></div>
-            </td>
-            <td style="padding:10px 5px; display:flex; gap:5px; flex-direction:column;">
-                <select class="auth-input" onchange="updateCourtStage(${c.id}, this.value)" style="margin:0; padding:4px; font-size:11px; height:auto;">
-                    <option value="Подготовка иска" ${c.stage==='Подготовка иска'?'selected':''}>Подготовка иска</option>
-                    <option value="Подан иск" ${c.stage==='Подан иск'?'selected':''}>Подан иск</option>
-                    <option value="Предварительное заседание" ${c.stage==='Предварительное заседание'?'selected':''}>Предварительное</option>
-                    <option value="Основное заседание" ${c.stage==='Основное заседание'?'selected':''}>Основное заседание</option>
-                    <option value="Вынесение решения" ${c.stage==='Вынесение решения'?'selected':''}>Вынесение решения</option>
-                    <option value="Обжаловано" ${c.stage==='Обжаловано'?'selected':''}>Обжаловано</option>
-                    <option value="Приостановлено" ${c.stage==='Приостановлено'?'selected':''}>Приостановлено</option>
-                    <option value="Закрыто" ${c.stage==='Закрыто'?'selected':''}>Закрыто</option>
-                </select>
-                <input type="date" class="auth-input" title="Изменить дату заседания" value="${c.next_hearing || ''}" onchange="updateCourtHearing(${c.id}, this.value)" style="margin:0; padding:4px; font-size:11px; height:auto;">
-            </td>
-        </tr>`;
-    });
-    html += '</tbody></table>';
-    container.innerHTML = html;
-};
-
-window.openCreateCourtModal = function() {
-    const sel = document.getElementById('courtProj');
-    sel.innerHTML = '<option value="" disabled selected>Выберите договор...</option>' + projectsDB.map(p => `<option value="${p.id}">${p.contract} (${p.client})</option>`).join('');
-    document.getElementById('createCourtModal').style.display = 'flex';
-};
-
-window.submitNewCourt = async function() {
-    const data = { number: document.getElementById('courtNum').value || 'Б/Н', court_name: document.getElementById('courtName').value || 'Не указан', plaintiff: document.getElementById('courtPlain').value || 'ООО КОРДА', defendant: document.getElementById('courtDef').value || 'Не указан', amount: parseFloat(document.getElementById('courtAmount').value) || 0, proj_id: parseInt(document.getElementById('courtProj').value) || 0, instance: document.getElementById('courtInst').value || 'Первая', next_hearing: document.getElementById('courtHearing').value || '', stage: 'Подготовка иска' };
-    if(!data.proj_id) return typeof customAlert === 'function' ? customAlert("❌ Выберите связанный договор!") : alert("❌ Выберите связанный договор!");
-
-    const res = await apiCall('/court_cases', 'POST', data);
-    if(res && res.status === 'success') {
-        document.getElementById('createCourtModal').style.display = 'none';
-        await loadCourtCases(); renderCourts();
-        if(typeof showToast === 'function') showToast("Судебные дела", "Дело успешно зарегистрировано");
-        
-        const p = projectsDB.find(x => x.id === data.proj_id);
-        if (p) {
-            if(!p.logs) p.logs = []; const now = new Date();
-            p.logs.unshift({time: `${now.getDate().toString().padStart(2,'0')}.${(now.getMonth()+1).toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`, user: currentUser.name, action: `⚖️ Зарегистрировано судебное дело №${data.number} (${data.instance}). Сумма иска: ${data.amount} руб.`});
-            await apiCall(`/projects/${p.id}`, 'PUT', p);
-        }
-    } else { typeof customAlert === 'function' ? customAlert("❌ Ошибка при создании") : alert("Ошибка"); }
-};
-
-window.updateCourtStage = async function(id, newStage) { const c = courtCasesDB.find(x => x.id === id); if(!c) return; c.stage = newStage; await apiCall(`/court_cases/${c.id}`, 'PUT', c); await loadCourtCases(); renderCourts(); if(typeof showToast === 'function') showToast("Судебные дела", `Стадия изменена на: ${newStage}`); };
-window.updateCourtHearing = async function(id, newDate) { const c = courtCasesDB.find(x => x.id === id); if(!c) return; c.next_hearing = newDate; await apiCall(`/court_cases/${c.id}`, 'PUT', c); await loadCourtCases(); renderCourts(); if(typeof showToast === 'function') showToast("Судебные дела", `Дата заседания обновлена`); };
-
-async function login() {
-    const e = document.getElementById('loginEmail').value, p = document.getElementById('loginPassword').value;
-    const res = await apiCall('/login', 'POST', { email: e, password: p });
-    if (res && res.error) { document.getElementById('loginError').innerText = res.error; return; }
-    currentUser = res; localStorage.setItem('korda_session', JSON.stringify(currentUser)); window.location.href = '/app';
-}
-
-async function register() {
-    const name = document.getElementById('regName').value.trim();
-    const email = document.getElementById('regEmail').value.trim();
-    const pass = document.getElementById('regPassword').value;
-    const errDiv = document.getElementById('regError');
-    const btn = document.querySelector('#registerFormCard button');
-    if(!name || !email || !pass) { errDiv.innerText = "Заполните все поля!"; return; }
-    if(btn) { btn.innerText = "Отправка..."; btn.disabled = true; }
-    const res = await apiCall('/register', 'POST', { email, password: pass, name });
-    if (!res || res.error) { 
-        errDiv.innerText = (res && res.error) ? res.error : "Ошибка сервера"; 
-        if(btn) { btn.innerText = "Отправить заявку"; btn.disabled = false; }
-        return; 
-    }
-    currentUser = { email, name, status: 'pending', role: null }; 
-    localStorage.setItem('korda_session', JSON.stringify(currentUser)); 
-    customAlert("Заявка успешно отправлена!\nОжидайте одобрения Директором.").then(() => { window.location.href = 'login.html'; });
-}
-
-async function recoverPassword() {
-    const email = document.getElementById('recEmail').value;
-    if(!email) return; await apiCall('/recover', 'POST', { email });
-    customAlert("Письмо для восстановления отправлено."); 
-    const recF = document.getElementById('recoverFormCard'); if(recF) recF.style.display='none'; 
-    const logF = document.getElementById('loginFormCard'); if(logF) logF.style.display='block';
-}
-
-function logout() { currentUser = null; localStorage.removeItem('korda_session'); window.location.href = 'login.html'; }
-
-// --- UI UTILITIES: CUSTOM WINDOWS ---
-function showToast(title, message, type = 'success') {
-    const container = document.getElementById('toastContainer');
-    if(!container) return;
-    const id = Date.now();
-    const html = `
-        <div id="toast_${id}" class="toast fade-in" style="border-left: 4px solid ${type === 'error' ? 'var(--danger)' : 'var(--primary)'}">
-            <div style="font-weight:bold; font-size:13px;">${title}</div>
-            <div style="font-size:12px; margin-top:4px; color:var(--secondary);">${message}</div>
-        </div>
-    `;
-    container.insertAdjacentHTML('beforeend', html);
-    setTimeout(() => { const el = document.getElementById(`toast_${id}`); if(el) el.remove(); }, 4000);
-}
-
-function customAlert(message) {
-    return new Promise(resolve => {
-        const m = document.getElementById('genericModal');
-        document.getElementById('genModalTitle').innerText = 'Уведомление';
-        document.getElementById('genModalBody').innerHTML = `<p>${message}</p>`;
-        document.getElementById('genModalFooter').innerHTML = `<button class="btn-primary" id="genOk">Понятно</button>`;
-        m.style.display = 'flex';
-        document.getElementById('genOk').onclick = () => { m.style.display = 'none'; resolve(); };
-    });
-}
-
-function customConfirm(message) {
-    return new Promise(resolve => {
-        const m = document.getElementById('genericModal');
-        document.getElementById('genModalTitle').innerText = 'Подтверждение';
-        document.getElementById('genModalBody').innerHTML = `<p>${message}</p>`;
-        document.getElementById('genModalFooter').innerHTML = `
-            <button class="btn-secondary" id="genCancel">Отмена</button>
-            <button class="btn-danger" id="genConfirm">Да, выполнить</button>
-        `;
-        m.style.display = 'flex';
-        document.getElementById('genCancel').onclick = () => { m.style.display = 'none'; resolve(false); };
-        document.getElementById('genConfirm').onclick = () => { m.style.display = 'none'; resolve(true); };
-    });
-}
-
-function customPrompt(message, defaultValue = '') {
-    return new Promise(resolve => {
-        const m = document.getElementById('genericModal');
-        document.getElementById('genModalTitle').innerText = 'Ввод данных';
-        document.getElementById('genModalBody').innerHTML = `
-            <label style="font-size:13px; margin-bottom:8px; display:block;">${message}</label>
-            <input type="text" id="genInput" class="auth-input" value="${defaultValue}" style="margin:0;">
-        `;
-        document.getElementById('genModalFooter').innerHTML = `
-            <button class="btn-secondary" id="genCancel">Отмена</button>
-            <button class="btn-primary" id="genSubmit">Продолжить</button>
-        `;
-        m.style.display = 'flex';
-        const inp = document.getElementById('genInput');
-        inp.focus();
-        inp.onkeypress = (e) => { if(e.key === 'Enter') document.getElementById('genSubmit').click(); };
-        document.getElementById('genCancel').onclick = () => { m.style.display = 'none'; resolve(null); };
-        document.getElementById('genSubmit').onclick = () => { m.style.display = 'none'; resolve(inp.value); };
-    });
-}
-
-// ==========================================
-// ГЛОБАЛЬНЫЙ OMNI-ПОИСК (1С-СТАНДАРТ)
-// ==========================================
-window.handleOmniSearch = function() {
-    const q = document.getElementById('searchInput').value.toLowerCase().trim();
-    const resBox = document.getElementById('omniSearchResults');
-    if (!q) { resBox.style.display = 'none'; filterProjects(); return; }
-    
-    filterProjects(); // Оставляем локальную фильтрацию для списков
-    
-    let results = [];
-    projectsDB.forEach(p => { if((p.name||'').toLowerCase().includes(q) || (p.contract||'').toLowerCase().includes(q)) results.push({type: 'Проект', title: p.name, desc: p.contract, link: `openProject(${p.id}); document.getElementById('omniSearchResults').style.display='none';`, icon: '📁'}); });
-    documentsDB.forEach(d => { if((d.number||'').toLowerCase().includes(q) || (d.subject||'').toLowerCase().includes(q)) results.push({type: 'Документ', title: `№ ${d.number}`, desc: d.subject, link: `navigateTo('documents'); document.getElementById('omniSearchResults').style.display='none';`, icon: '📄'}); });
-    tasksDB.forEach(t => { if((t.title||'').toLowerCase().includes(q)) results.push({type: 'Поручение', title: t.title, desc: `Исполнитель: ${t.executor}`, link: `navigateTo('tasks'); document.getElementById('omniSearchResults').style.display='none';`, icon: '⚡'}); });
-    
-    if (results.length === 0) {
-        resBox.innerHTML = '<div style="color:var(--secondary); font-size:12px; text-align:center; padding:10px;">Ничего не найдено</div>';
-    } else {
-        resBox.innerHTML = results.map(r => `
-            <div onclick="${r.link}" style="padding: 8px 10px; background: var(--bg); border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 10px; border: 1px solid transparent;" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='transparent'">
-                <div style="font-size: 16px;">${r.icon}</div>
-                <div>
-                    <div style="font-size: 12px; font-weight: bold; color: var(--text);">${r.title}</div>
-                    <div style="font-size: 10px; color: var(--secondary);">${r.type} • ${r.desc.substring(0, 40)}</div>
-                </div>
-            </div>
-        `).join('');
-    }
-    resBox.style.display = 'flex';
-};
-
-document.addEventListener('click', (e) => { const sb = document.querySelector('.search-bar'); const box = document.getElementById('omniSearchResults'); if(sb && !sb.contains(e.target) && box) box.style.display = 'none'; });
-
-window.exportDataToExcel = function(data, filename) {
-    if (typeof XLSX === 'undefined') return customAlert("Библиотека XLSX не загружена");
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Реестр");
-    XLSX.writeFile(wb, filename + ".xlsx");
-};
-
-window.openClientCard = function(id) {
-    const client = clientsDB.find(c => c.id === id);
-    if(!client) return;
-    
-    const cProjs = projectsDB.filter(p => (p.client || '').includes(client.name));
-    const cClaims = claimsDB.filter(c => (c.addressee || '').includes(client.name) || (c.initiator || '').includes(client.name) || cProjs.some(p => p.id === c.proj_id));
-    const cCourts = courtCasesDB.filter(c => (c.plaintiff || '').includes(client.name) || (c.defendant || '').includes(client.name) || cProjs.some(p => p.id === c.proj_id));
-
-    let html = `<div style="display:flex; gap:20px; flex-wrap:wrap;">
-        <div style="flex:1; min-width:250px; background:var(--bg); padding:15px; border-radius:12px; border:1px solid var(--border);">
-            <h4 style="margin-top:0; color:var(--primary); display:flex; justify-content:space-between;">Сделки <span>${cProjs.length}</span></h4>
-            ${cProjs.length === 0 ? '<span style="font-size:12px; color:var(--secondary);">Нет сделок</span>' : cProjs.map(p => `<div style="font-size:12px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px dashed var(--border);"><a href="#" onclick="openProject(${p.id}); document.getElementById('clientCardModal').style.display='none';"><b>${p.contract}</b></a><br><span style="color:var(--secondary)">Сумма:</span> ${p.budget.toLocaleString()} ₽<br><span style="color:var(--secondary)">Статус:</span> ${p.status}</div>`).join('')}
-        </div>
-        <div style="flex:1; min-width:250px; background:var(--bg); padding:15px; border-radius:12px; border:1px solid var(--danger);">
-            <h4 style="margin-top:0; color:var(--danger); display:flex; justify-content:space-between;">Претензии <span>${cClaims.length}</span></h4>
-            ${cClaims.length === 0 ? '<span style="font-size:12px; color:var(--secondary);">Нет претензий</span>' : cClaims.map(c => `<div style="font-size:12px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px dashed var(--danger);"><b style="color:var(--danger)">№${c.number}</b><br><span style="color:var(--secondary)">Сумма:</span> ${c.amount.toLocaleString()} ₽<br><span style="color:var(--secondary)">Статус:</span> ${c.status}</div>`).join('')}
-        </div>
-        <div style="flex:1; min-width:250px; background:var(--bg); padding:15px; border-radius:12px; border:1px solid #8b5cf6;">
-            <h4 style="margin-top:0; color:#8b5cf6; display:flex; justify-content:space-between;">Суды <span>${cCourts.length}</span></h4>
-            ${cCourts.length === 0 ? '<span style="font-size:12px; color:var(--secondary);">Нет судов</span>' : cCourts.map(c => `<div style="font-size:12px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px dashed #8b5cf6;"><b style="color:#8b5cf6">${c.number}</b><br><span style="color:var(--secondary)">Сумма:</span> ${c.amount.toLocaleString()} ₽<br><span style="color:var(--secondary)">Стадия:</span> ${c.stage}</div>`).join('')}
-        </div>
-    </div>`;
-
-    let modal = document.getElementById('clientCardModal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'clientCardModal';
-        modal.className = 'modal-overlay';
-        modal.style.zIndex = '10005';
-        modal.innerHTML = `
-            <div class="modal-card" style="max-width: 1000px; width: 95%;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
-                    <h2 id="clientCardTitle" style="margin:0;"></h2>
-                    <button class="btn-danger" onclick="document.getElementById('clientCardModal').style.display='none'">✕</button>
-                </div>
-                <div style="font-size:13px; color:var(--secondary); margin-bottom: 20px; background:var(--bg); padding:10px; border-radius:8px;">
-                    ИНН: <b id="clientCardInn" style="color:var(--text)"></b> | Контакт: <b id="clientCardContact" style="color:var(--text)"></b>
-                </div>
-                <div id="clientCardContent" style="max-height: 60vh; overflow-y: auto; padding-right: 10px;"></div>
-            </div>`;
-        document.body.appendChild(modal);
-    }
-    document.getElementById('clientCardTitle').innerText = `Досье контрагента: ${client.name}`;
-    document.getElementById('clientCardInn').innerText = client.inn || 'Не указан';
-    document.getElementById('clientCardContact').innerText = client.contact || 'Не указан';
-    document.getElementById('clientCardContent').innerHTML = html;
-    modal.style.display = 'flex';
-};
-
-// Переопределяем функцию рендера клиентов глобально, чтобы добавить кнопку экспорта
-window.renderClients = function() { 
-    const tbody = document.getElementById('clientsListTable'); if(!tbody) return; 
-    
-    const viewHeader = tbody.closest('table').parentElement;
-    if (viewHeader && !document.getElementById('btnExportClients')) {
-        const btn = document.createElement('button');
-        btn.id = 'btnExportClients';
-        btn.className = 'btn-success no-print';
-        btn.style.marginBottom = '15px';
-        btn.innerHTML = '📊 Экспорт реестра в Excel';
-        btn.onclick = () => exportDataToExcel(clientsDB, 'Реестр_Контрагентов');
-        viewHeader.insertBefore(btn, viewHeader.firstChild);
-    }
-
-    tbody.innerHTML = ''; 
-    clientsDB.forEach(c => { 
-        tbody.innerHTML += `<tr><td><b style="color:var(--primary); cursor:pointer; text-decoration:underline;" onclick="openClientCard(${c.id})" title="Открыть досье контрагента 360°">${c.name}</b></td><td>${c.inn}</td><td>${c.contact}</td></tr>`; 
-    }); 
-};
-
-// === KANBAN BOARD LOGIC ===
-window.setViewMode = function(mode) {
-    viewMode = mode;
-    localStorage.setItem('korda_view_mode', mode);
-    
-    document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('active'));
-    const activeBtn = document.querySelector(`.view-toggle button[onclick="setViewMode('${mode}')"]`);
-    if(activeBtn) activeBtn.classList.add('active');
-
-    if (document.getElementById('dashboardView') && document.getElementById('dashboardView').style.display === 'block') {
-        const listContainer = document.getElementById('projectsListContainer');
-        if (!listContainer) return;
-
-        if (mode === 'kanban') {
-            const table = listContainer.querySelector('table');
-            if (table) table.style.display = 'none';
-            renderKanbanBoard(listContainer);
-        } else {
-            const kb = listContainer.querySelector('.kanban-board');
-            if (kb) kb.remove();
-            const table = listContainer.querySelector('table');
-            if (table) table.style.display = 'table';
-            if (typeof renderDashboard === 'function') renderDashboard();
-        }
-    }
-};
-
-window.renderKanbanBoard = function(container) {
-    if (!container) container = document.getElementById('projectsListContainer');
-    if (!container) return;
-
-    let existingKb = container.querySelector('.kanban-board');
-    if (existingKb) existingKb.remove();
-
-    let counts = { active: 0, prolongation: 0, archive: 0, canceled: 0, terminated: 0 };
-    let filteredProjs = projectsDB; 
-    
-    if (typeof currentDepartmentFilter !== 'undefined' && currentDepartmentFilter !== 'all') {
-        filteredProjs = projectsDB.filter(p => p.manager === currentDepartmentFilter || (p.team && p.team.includes(currentDepartmentFilter)));
-    }
-
-    filteredProjs.forEach(p => { if(counts[p.status] !== undefined) counts[p.status]++; });
-
-    const kanbanHtml = `
-        <div class="kanban-board">
-            <div class="kanban-col" data-status="active" style="background: rgba(0,0,0,0.02); border: 1px solid var(--border);">
-                <h3 style="margin: 0 0 15px 0; color: var(--primary); display: flex; justify-content: space-between; font-size: 16px;">
-                    В работе <span class="badge" style="background: var(--primary); color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${counts.active}</span>
-                </h3>
-                <div class="kanban-list" id="kb-active"></div>
-            </div>
-        <div class="kanban-col" data-status="prolongation" style="background: rgba(245, 158, 11, 0.05); border: 1px solid var(--warning, #f59e0b);">
-            <h3 style="margin: 0 0 15px 0; color: var(--warning, #f59e0b); display: flex; justify-content: space-between; font-size: 16px;">
-                На пролонгации <span class="badge" style="background: var(--warning, #f59e0b); color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${counts.prolongation}</span>
-            </h3>
-            <div class="kanban-list" id="kb-prolongation"></div>
-        </div>
-            <div class="kanban-col" data-status="archive" style="background: rgba(16, 185, 129, 0.05); border: 1px solid var(--success);">
-                <h3 style="margin: 0 0 15px 0; color: var(--success); display: flex; justify-content: space-between; font-size: 16px;">
-                    Завершено <span class="badge" style="background: var(--success); color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${counts.archive}</span>
-                </h3>
-                <div class="kanban-list" id="kb-archive"></div>
-            </div>
-            <div class="kanban-col" data-status="canceled" style="background: rgba(239, 68, 68, 0.05); border: 1px solid var(--danger);">
-                <h3 style="margin: 0 0 15px 0; color: var(--danger); display: flex; justify-content: space-between; font-size: 16px;">
-                    Отменено <span class="badge" style="background: var(--danger); color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${counts.canceled}</span>
-                </h3>
-                <div class="kanban-list" id="kb-canceled"></div>
-            </div>
-        <div class="kanban-col" data-status="terminated" style="background: rgba(100, 116, 139, 0.05); border: 1px solid #64748b;">
-            <h3 style="margin: 0 0 15px 0; color: #64748b; display: flex; justify-content: space-between; font-size: 16px;">
-                Расторгнут <span class="badge" style="background: #64748b; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${counts.terminated}</span>
-            </h3>
-            <div class="kanban-list" id="kb-terminated"></div>
-        </div>
-        </div>
-    `;
-    
-    container.insertAdjacentHTML('beforeend', kanbanHtml);
-
-    filteredProjs.forEach(p => {
-        const col = document.getElementById(`kb-${p.status}`);
-        if (!col) return;
-
-        let totalTasks = 0; let doneTasks = 0;
-        if (p.checklist) {
-            p.checklist.forEach((sec, sIdx) => {
-                sec.tasks.forEach((t, tIdx) => {
-                    totalTasks++;
-                    if (p.checkedState && p.checkedState[`task_${sIdx}_${tIdx}`] && p.checkedState[`task_${sIdx}_${tIdx}`].startsWith('✅')) doneTasks++;
-                });
-            });
-        }
-        const progress = totalTasks === 0 ? 0 : Math.round((doneTasks / totalTasks) * 100);
-
-        col.innerHTML += `
-            <div class="kanban-card" data-id="${p.id}" style="background: var(--card-bg); padding: 15px; border-radius: 10px; border: 1px solid var(--border); cursor: grab; display: flex; flex-direction: column; gap: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-size: 11px; color: var(--secondary); font-weight: bold; padding: 2px 6px; background: var(--bg); border-radius: 4px;">${p.contract}</span>
-                    <span style="font-size: 12px; color: ${progress === 100 ? 'var(--success)' : 'var(--primary)'}; font-weight: bold;">${progress}%</span>
-                </div>
-                <div style="font-weight: bold; font-size: 14px; line-height: 1.3;">${p.name}</div>
-                <div style="font-size: 12px; color: var(--secondary); display: flex; align-items: center; gap: 4px;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                    ${p.manager}
-                </div>
-                <div style="font-size: 12px; color: var(--text); background: rgba(0,0,0,0.03); padding: 6px; border-radius: 6px; margin-top: 4px;">
-                    🏢 ${p.client || 'Без заказчика'}
-                </div>
-                <button class="btn-secondary no-drag" style="width: 100%; margin-top: 5px; padding: 6px; font-size: 12px; justify-content: center; cursor: pointer;" onclick="openProject(${p.id})">Открыть сделку</button>
-            </div>
-        `;
-    });
-
-    if (typeof Sortable !== 'undefined') {
-        ['kb-active', 'kb-prolongation', 'kb-archive', 'kb-canceled', 'kb-terminated'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) {
-                new Sortable(el, {
-                    group: 'shared-kanban',
-                    animation: 150,
-                    ghostClass: 'kanban-ghost',
-                    filter: '.no-drag', 
-                    preventOnFilter: false,
-                    delay: window.innerWidth <= 768 ? 100 : 0, 
-                    delayOnTouchOnly: true,
-                    onEnd: async function (evt) {
-                        const itemEl = evt.item;  
-                        const newStatus = evt.to.parentElement.parentElement.getAttribute('data-status');
-                        const projId = parseInt(itemEl.getAttribute('data-id'));
-
-                        const p = projectsDB.find(x => x.id === projId);
-                        if (!p || p.status === newStatus) return; 
-
-                        if (newStatus === 'archive') {
-                        const hasRec = await customConfirm("Подписан ли двусторонний Акт сверки взаиморасчетов?\nБез него закрытие договора невозможно.");
-                        if (!hasRec) {
-                            renderKanbanBoard(container);
-                            return customAlert("Перенос отменен: требуется Акт сверки.");
-                        }
-                            const folder = await customPrompt("Сделка завершена! Введите номер папки для физического архива:");
-                            const rack = await customPrompt("Введите номер стеллажа:");
-                            if (!folder || !rack) {
-                                renderKanbanBoard(container); 
-                                return customAlert("Перенос отменен: для закрытия сделки обязательно указать данные архива.");
-                            }
-                            if (!p.archive_details) p.archive_details = {};
-                            p.archive_details.folder = folder; p.archive_details.rack = rack;
-                            const now = new Date();
-                            p.archive_details.date = `${now.getDate().toString().padStart(2,'0')}.${(now.getMonth()+1).toString().padStart(2,'0')}.${now.getFullYear()}`;
-                            
-                            if (!p.logs) p.logs = [];
-                            p.logs.unshift({time: p.archive_details.date + " 00:00", user: currentUser.name, action: `Перенес сделку в Архив (Drag & Drop). Стеллаж: ${rack}, Папка: ${folder}`});
-                        } 
-                        else if (newStatus === 'canceled') {
-                            if (!(await customConfirm(`Вы уверены, что хотите отменить проект "${p.name}"?`))) {
-                                renderKanbanBoard(container); return;
-                            }
-                            if (!p.logs) p.logs = [];
-                            const now = new Date();
-                            p.logs.unshift({time: `${now.getDate().toString().padStart(2,'0')}.${(now.getMonth()+1).toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`, user: currentUser.name, action: "Отменил проект (Drag & Drop)"});
-                    }
-                    else if (newStatus === 'prolongation') {
-                        const newDate = await customPrompt("Введите новую дату окончания (ДД.ММ.ГГГГ):");
-                        if (!newDate) { renderKanbanBoard(container); return customAlert("Отменено."); }
-                        if (!p.archive_details) p.archive_details = {};
-                        p.archive_details.prolongation = { date: newDate, reason: "Drag & Drop" };
-                        if (!p.logs) p.logs = [];
-                        const now = new Date();
-                        p.logs.unshift({time: `${now.getDate().toString().padStart(2,'0')}.${(now.getMonth()+1).toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`, user: currentUser.name, action: `Перевел договор на пролонгацию. До: ${newDate}`});
-                    }
-                    else if (newStatus === 'terminated') {
-                        const reason = await customPrompt("Укажите причину расторжения:");
-                        if (!reason) { renderKanbanBoard(container); return customAlert("Отменено."); }
-                        if (!p.archive_details) p.archive_details = {};
-                        p.archive_details.termination_reason = reason;
-                        if (!p.logs) p.logs = [];
-                        const now = new Date();
-                        p.logs.unshift({time: `${now.getDate().toString().padStart(2,'0')}.${(now.getMonth()+1).toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`, user: currentUser.name, action: `Расторг договор. Причина: ${reason}`});
-                        }
-                        else if (newStatus === 'active') {
-                            if (!p.logs) p.logs = [];
-                            const now = new Date();
-                            p.logs.unshift({time: `${now.getDate().toString().padStart(2,'0')}.${(now.getMonth()+1).toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`, user: currentUser.name, action: "Восстановил проект в работу (Drag & Drop)"});
-                        }
-
-                        p.status = newStatus;
-                        await apiCall(`/projects/${p.id}`, 'PUT', p); 
-                        showToast("Канбан", "Статус проекта обновлен");
-                    },
-                });
-            }
-        });
-    }
-};
+// Theme/auth/modal/search shell moved into app_shell.js.

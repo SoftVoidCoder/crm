@@ -1,31 +1,89 @@
-<div id="contactsView" style="display: none;">
-    <div style="background: var(--card-bg); border-radius: 20px; border: 1px solid var(--border); padding: 32px;">
-        <h2 style="margin-bottom: 24px;">НСИ: Справочник Контактов (Физлица)</h2>
-        <div class="client-form" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
-            <div style="flex: 2; min-width: 200px;"><label>ФИО контакта *</label><input type="text" id="addContactName" class="auth-input" style="margin:0;"></div>
-            <div style="flex: 2; min-width: 200px;"><label>Привязка к контрагенту *</label><select id="addContactClient" class="auth-input" style="margin:0; appearance: auto;"></select></div>
-            <div style="flex: 1; min-width: 150px;"><label>Телефон</label><input type="text" id="addContactPhone" class="auth-input" style="margin:0;"></div>
-            <div style="flex: 1; min-width: 150px;"><label>Email</label><input type="text" id="addContactEmail" class="auth-input" style="margin:0;"></div>
-            
-            <div style="flex: 1; min-width: 150px;">
-                <label>Должность</label>
-                <input type="text" id="addContactPosition" list="posList" class="auth-input" style="margin:0;" placeholder="Выбрать / Ввести">
-                <datalist id="posList">
-                    <option value="Генеральный директор"></option>
-                    <option value="Коммерческий директор"></option>
-                    <option value="Менеджер по закупкам"></option>
-                    <option value="Главный инженер"></option>
-                    <option value="Бухгалтер"></option>
-                    <option value="Юрист"></option>
-                    <option value="Руководитель проекта"></option>
-                </datalist>
-            </div>
-            
-            <button class="btn-primary" style="height: 46px; margin-top: 22px;" onclick="addContact()">+ Добавить</button>
+<div id="contactsView" class="view-page crm-page-shell" style="display: none;">
+    <div class="view-header">
+        <div class="view-heading">
+            <span class="view-eyebrow">НСИ</span>
+            <h1 class="view-title">Справочник контактов</h1>
+            <p class="view-subtitle">Единая база физических лиц, связанных с контрагентами, сделками и рабочими коммуникациями.</p>
         </div>
-        <table class="admin-table">
-            <thead><tr><th>ФИО</th><th>Контрагент</th><th>Должность</th><th>Телефон</th><th>Email</th></tr></thead>
-            <tbody id="contactsListTable"></tbody>
-        </table>
+    </div>
+    <div class="workbench-strip">
+        <div class="workbench-card">
+            <div class="workbench-card-title">Основной сценарий</div>
+            <div class="workbench-card-text">Сначала создайте контакт и привяжите его к контрагенту, затем используйте запись в продажах, договорах и переписке.</div>
+        </div>
+        <div class="workbench-card">
+            <div class="workbench-card-title">Контроль качества</div>
+            <div class="workbench-card-text">Храните в одном месте телефон, email и должность, чтобы менеджеры и юристы работали с единым профилем контакта.</div>
+        </div>
+        <div class="workbench-card">
+            <div class="workbench-card-title">Быстро</div>
+            <div class="workbench-card-actions">
+                <button class="btn-primary" onclick="document.getElementById('addContactName').focus()">Новый контакт</button>
+            </div>
+        </div>
+    </div>
+    <div class="row g-4 align-items-stretch crm-bootstrap-grid">
+        <section class="col-12 col-xl-4">
+            <div class="surface-card surface-card--padded tw-flex tw-h-full tw-flex-col tw-gap-4">
+                <div class="section-header">
+                    <div>
+                        <h3 class="section-title">Новая карточка контакта</h3>
+                        <p class="section-subtitle">Добавьте физлицо и сразу зафиксируйте его связь с клиентом или партнёром.</p>
+                    </div>
+                </div>
+                <div class="crm-form-shell">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="field-label">ФИО контакта *</label>
+                            <input type="text" id="addContactName" class="auth-input">
+                        </div>
+                        <div class="col-12">
+                            <label class="field-label">Привязка к контрагенту *</label>
+                            <select id="addContactClient" class="auth-input" style="margin:0; appearance: auto;"></select>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="field-label">Телефон</label>
+                            <input type="text" id="addContactPhone" class="auth-input">
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="field-label">Эл. почта</label>
+                            <input type="text" id="addContactEmail" class="auth-input">
+                        </div>
+                        <div class="col-12">
+                            <label class="field-label">Должность</label>
+                            <input type="text" id="addContactPosition" list="posList" class="auth-input" placeholder="Выбрать / ввести">
+                            <datalist id="posList">
+                                <option value="Генеральный директор"></option>
+                                <option value="Коммерческий директор"></option>
+                                <option value="Менеджер по закупкам"></option>
+                                <option value="Главный инженер"></option>
+                                <option value="Бухгалтер"></option>
+                                <option value="Юрист"></option>
+                                <option value="Руководитель проекта"></option>
+                            </datalist>
+                        </div>
+                        <div class="col-12">
+                            <button class="btn-primary" style="width:100%; justify-content:center;" onclick="addContact()">+ Добавить контакт</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section class="col-12 col-xl-8">
+            <div class="surface-card surface-card--padded tw-flex tw-h-full tw-flex-col tw-gap-4">
+                <div class="section-header">
+                    <div>
+                        <h3 class="section-title">Реестр контактов</h3>
+                        <p class="section-subtitle">Актуальная клиентская книга для продаж, документооборота и коммуникаций.</p>
+                    </div>
+                </div>
+                <div class="table-shell">
+                    <table class="admin-table">
+                        <thead><tr><th>ФИО</th><th>Контрагент</th><th>Должность</th><th>Телефон</th><th>Эл. почта</th></tr></thead>
+                        <tbody id="contactsListTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
     </div>
 </div>

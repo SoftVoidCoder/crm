@@ -1,11 +1,51 @@
-<div id="approvalsView" style="display: none;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-        <h1 style="margin:0; font-size: 22px;">Маршруты согласования</h1>
-        <button class="btn-primary" onclick="openCreateApprovalModal()">+ Запустить процесс</button>
-    </div>
-    <div class="tabs" style="margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
-        <button class="tab active" id="tabApprPending" onclick="switchApprTab('pending')">На согласовании</button>
-        <button class="tab" id="tabApprCompleted" onclick="switchApprTab('completed')">Завершенные</button>
-    </div>
-    <div id="approvalsListContainer" style="display: flex; flex-direction: column; gap: 16px;"></div>
+<div id="approvalsView" class="view-page krd-process-shell" style="display: none;">
+    <!-- Page header -->
+    <header class="view-header">
+        <div class="view-heading">
+            <h1 class="view-title">Согласования</h1>
+            <p class="view-subtitle">Маршруты, статусы и история согласований — в одном рабочем пространстве.</p>
+        </div>
+        <div class="view-actions">
+            <button class="btn-secondary" type="button" onclick="openWorkflowDesigner()" title="Конструктор бизнес-процессов BPMN">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+                <span>Конструктор BPMN</span>
+            </button>
+            <button class="btn-secondary" type="button" onclick="openCreateApprovalModal({ item_link: currentProjectId || '', title: currentProjectId ? 'Согласование по проекту' : '' })" title="Запустить согласование по текущему проекту">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <span>По проекту</span>
+            </button>
+            <button class="btn-primary" type="button" onclick="openCreateApprovalModal()" title="Создать новый маршрут согласования">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Запустить процесс</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Role workbench (renders dynamically by role) -->
+    <div id="approvalsRoleWorkbenchMount"></div>
+
+    <!-- BPMN designer mount -->
+    <div id="workflowDesignerMount"></div>
+
+    <!-- Inbox & history -->
+    <section class="surface-card surface-card--padded krd-approvals-workspace">
+        <div class="krd-approvals-toolbar">
+            <nav class="krd-segment" role="tablist" aria-label="Состояние маршрутов">
+                <button class="krd-tab krd-segment__btn active" id="tabApprPending" type="button" role="tab" aria-selected="true" onclick="switchApprTab('pending')">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+                    <span>На согласовании</span>
+                </button>
+                <button class="krd-tab krd-segment__btn" id="tabApprCompleted" type="button" role="tab" aria-selected="false" onclick="switchApprTab('completed')">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span>История</span>
+                </button>
+            </nav>
+            <div class="krd-approvals-toolbar__hint">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                <span>Сначала решение, потом история и аналитика.</span>
+            </div>
+        </div>
+
+        <div id="approvalsListContainer" class="krd-approval-list" aria-live="polite"></div>
+    </section>
 </div>

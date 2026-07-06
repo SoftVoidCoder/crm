@@ -1,0 +1,167 @@
+<div id="executiveView" class="view-page" style="display:none;">
+    <div class="view-header">
+        <div class="view-heading">
+            <span class="view-eyebrow">Управление</span>
+            <h1 class="view-title">Панель директора</h1>
+    <p class="view-subtitle">Управленческий слой по кассовому разрыву, рисковым проектам, перегруженным ресурсам, сервисным кейсам и зависшим согласованиям.</p>
+        </div>
+    </div>
+    <div class="ops-overview-card ops-overview-card--compact">
+        <div>
+        <div class="ops-overview-title">Управленческий центр контроля</div>
+            <div class="ops-overview-text">Короткий управленческий слой: где кассовый риск, где перегруз команды и какие проекты требуют решения сейчас.</div>
+        </div>
+    </div>
+    <div class="workbench-strip">
+        <div class="workbench-card">
+            <div class="workbench-card-title">Главный вопрос</div>
+            <div class="workbench-card-text">Где нужно вмешательство сейчас: деньги, зависшие решения и рисковые проекты.</div>
+        </div>
+        <div class="workbench-card">
+            <div class="workbench-card-title">Детализация</div>
+      <div class="workbench-card-text">Производство, склад, интеграции и аналитика ниже нужны уже как расшифровка управленческой картины.</div>
+        </div>
+    </div>
+    <div id="executiveRoleWorkbenchMount"></div>
+    <div id="executiveBoardroomBrief" class="boardroom-brief" style="margin-bottom:24px;"></div>
+    <div class="client360-grid" style="margin-bottom:24px;">
+        <section class="surface-card surface-card--padded">
+            <h3 class="section-title">Что требует решения сейчас</h3>
+            <p class="section-subtitle">Самые важные сигналы, которые директор должен увидеть до ухода в детали.</p>
+            <div id="executiveDecisionQueue" class="client360-list"></div>
+        </section>
+    </div>
+    <div class="client360-grid" style="margin-bottom:24px;">
+        <section class="surface-card surface-card--padded">
+        <h3 class="section-title">Сквозной поток компании</h3>
+            <div id="executiveErpMetrics" class="metrics-grid metrics-grid--info-rail"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <h3 class="section-title">Качество справочников</h3>
+            <div id="executiveDataQuality" class="client360-list"></div>
+        </section>
+    </div>
+    <div class="client360-grid" style="margin-bottom:24px;">
+        <section class="surface-card surface-card--padded">
+            <div class="section-header">
+                <div>
+        <h3 class="section-title">Мониторинг и восстановление 1С</h3>
+        <p class="section-subtitle">Зависшие блокировки, повторы, ошибки и конфликты обмена теперь видны отдельно.</p>
+                </div>
+                <div class="view-actions">
+        <button class="btn-secondary" onclick="recoverExecutiveIntegration(0)">Снять зависшую блокировку</button>
+        <button class="btn-secondary" onclick="recoverExecutiveIntegration(1)">Повторить ошибочные</button>
+                </div>
+            </div>
+            <div id="executiveIntegrationMonitoring" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <div class="section-header">
+                <div>
+        <h3 class="section-title">Финансовые срезы</h3>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary" onclick="navigateTo('finance')">Открыть финансы</button>
+        <button class="btn-secondary" onclick="exportExecutiveDeepAnalytics()">Экспорт данных</button>
+                </div>
+            </div>
+            <div id="executiveFinanceSlices" class="client360-list"></div>
+        </section>
+    </div>
+    <div id="executiveMetricsGrid" class="metrics-grid metrics-grid--info-rail"></div>
+    <div class="client360-grid secondary-zone">
+        <section class="surface-card surface-card--padded">
+            <h3 class="section-title">Рисковые проекты</h3>
+            <div id="executiveRiskProjects" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <h3 class="section-title">Перегруженные ресурсы</h3>
+            <div id="executiveResources" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <h3 class="section-title">Подвисшие затраты</h3>
+            <div id="executiveExpenses" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <h3 class="section-title">Внутренние заявки</h3>
+            <div id="executiveRequests" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <h3 class="section-title">Сервисные кейсы</h3>
+            <div id="executiveService" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Узкие места производства</h3>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary" onclick="navigateTo('production')">Открыть производство</button>
+                </div>
+            </div>
+            <div id="executiveProductionBottlenecks" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Складские расхождения</h3>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary" onclick="navigateTo('nomenclature')">Открыть НСИ/склад</button>
+                </div>
+            </div>
+            <div id="executiveInventoryDiscrepancies" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Интеграция 1С</h3>
+                    <p class="section-subtitle">Глобальная очередь обмена по финансам, складу, номенклатуре, производству и продажам.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary" onclick="processExecutiveIntegrationQueue()">Обработать очередь</button>
+                </div>
+            </div>
+            <div id="executiveIntegrationQueue" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <h3 class="section-title">Оборот склада</h3>
+            <div id="executiveWarehouseTurnover" class="client360-list"></div>
+        </section>
+    </div>
+    <div class="client360-grid secondary-zone" style="margin-top:24px;">
+        <section class="surface-card surface-card--padded">
+        <h3 class="section-title">Панели по ролям</h3>
+            <div id="executiveRoleDashboards" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+        <h3 class="section-title">Сохранённые аналитические представления</h3>
+            <div id="executiveSavedViews" class="client360-list"></div>
+        </section>
+    </div>
+    <div class="client360-grid secondary-zone" style="margin-top:24px;">
+        <section class="surface-card surface-card--padded">
+            <h3 class="section-title">Маржинальность по клиентам</h3>
+            <div id="executiveClientMargin" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <h3 class="section-title">Маржинальность по продуктам</h3>
+            <div id="executiveProductMargin" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+        <h3 class="section-title">Сервисные сроки и сервис</h3>
+            <div id="executiveSlaSummary" class="client360-list"></div>
+        </section>
+        <section class="surface-card surface-card--padded">
+            <h3 class="section-title">План-факт</h3>
+            <div id="executivePlanFactSummary" class="client360-list"></div>
+        </section>
+    </div>
+    <div class="client360-grid secondary-zone" style="margin-top:24px;">
+        <section class="surface-card surface-card--padded">
+        <h3 class="section-title">Провал в аналитику</h3>
+        <p class="section-subtitle">Нажми кнопку детализации в любой карточке выше, чтобы провалиться в первичку.</p>
+            <div id="executiveDrilldownList" class="client360-list"></div>
+        </section>
+    </div>
+</div>

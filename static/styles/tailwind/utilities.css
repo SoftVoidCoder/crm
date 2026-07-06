@@ -1,0 +1,68 @@
+/* Tailwind compatibility utilities for tw-* classes used by templates. */
+.tw-flex {
+    display: flex !important;
+}
+
+.tw-flex-col {
+    flex-direction: column !important;
+}
+
+.tw-grid {
+    display: grid !important;
+}
+
+.tw-gap-4 {
+    gap: 1rem !important;
+}
+
+.tw-gap-5 {
+    gap: 1.25rem !important;
+}
+
+.tw-h-full {
+    height: 100% !important;
+}
+
+.tw-mb-6 {
+    margin-bottom: 1.5rem !important;
+}
+
+.tw-mt-4 {
+    margin-top: 1rem !important;
+}
+
+.tw-col-span-12 {
+    grid-column: span 12 / span 12 !important;
+}
+
+@media (min-width: 1024px) {
+    .lg\:tw-grid-cols-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (min-width: 1280px) {
+    .xl\:tw-grid-cols-12 {
+        grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
+    }
+
+    .xl\:tw-col-span-4 {
+        grid-column: span 4 / span 4 !important;
+    }
+
+    .xl\:tw-col-span-5 {
+        grid-column: span 5 / span 5 !important;
+    }
+
+    .xl\:tw-col-span-6 {
+        grid-column: span 6 / span 6 !important;
+    }
+
+    .xl\:tw-col-span-7 {
+        grid-column: span 7 / span 7 !important;
+    }
+
+    .xl\:tw-col-span-8 {
+        grid-column: span 8 / span 8 !important;
+    }
+}

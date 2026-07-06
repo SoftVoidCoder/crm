@@ -2,8 +2,23 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Korda CRM | Enterprise</title>
-    <link rel="stylesheet" href="/static/style.css?v=2">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Korda CRM | Система</title>
+    <link rel="icon" href="data:,">
+    <!-- Tailwind v4 (browser build). Bootstrap снят — grid-шим живёт в redesign.css -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style type="text/tailwindcss">
+        @layer theme, base, components, utilities;
+        @import "tailwindcss/theme.css" layer(theme) prefix(tw);
+        @import "tailwindcss/utilities.css" layer(utilities) prefix(tw);
+
+        @theme {
+            --color-korda-sky: #0176d3;
+            --color-korda-ink: #032d60;
+        }
+    </style>
+    <link rel="stylesheet" href="/static/style.css?v=139">
+    <link rel="stylesheet" href="/static/styles/tailwind/redesign.css?v=145">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -16,7 +31,7 @@
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 </head>
 <body>
-    <div id="appLayout" class="app-layout" style="display: none;">
+    <div id="appLayout" class="app-layout krd-is-hidden">
         
         {% include 'components/sidebar.html' %}
 
@@ -30,11 +45,28 @@
                 {% include 'views/tasks.html' %}
                 {% include 'views/knowledge.html' %}
                 {% include 'views/documents.html' %}
+                {% include 'views/integrations.html' %}
                 {% include 'views/messenger.html' %}
                 {% include 'views/emails.html' %}
                 {% include 'views/meetings.html' %}
+                {% include 'views/finance.html' %}
+                {% include 'views/accounting.html' %}
+                {% include 'views/supply.html' %}
+                {% include 'views/sales.html' %}
+                {% include 'views/production.html' %}
+                {% include 'views/expenses.html' %}
+                {% include 'views/requests.html' %}
+                {% include 'views/resources.html' %}
+                {% include 'views/service.html' %}
+                {% include 'views/executive.html' %}
+                {% include 'views/operations_center.html' %}
                 {% include 'views/dashboard.html' %}
                 {% include 'views/clients.html' %}
+                {% include 'views/prospecting.html' %}
+                {% include 'views/leads.html' %}
+                {% include 'views/deals.html' %}
+                {% include 'views/client360.html' %}
+                {% include 'views/contracts.html' %}
                 {% include 'views/analytics.html' %}
                 {% include 'views/admin.html' %}
                 {% include 'views/profile.html' %}
@@ -49,21 +81,40 @@
     
     <div id="toastContainer" class="toast-container"></div>
     
-    <script src="/static/core.js?v=2"></script>
-    <script src="/static/users.js?v=2"></script>
-    <script src="/static/project.js?v=2"></script>
-    <script src="/static/project_roles.js?v=2"></script>
-    <script src="/static/checklist.js?v=2"></script>
+    <script src="/static/app_api.js?v=7"></script>
+    <script src="/static/app_shell.js?v=8"></script>
+    <script src="/static/i18n.js?v=5"></script>
+    <script src="/static/core.js?v=21"></script>
+    <script src="/static/workspace_config.js?v=3"></script>
+    <script src="/static/client_tools.js?v=2"></script>
+    <script src="/static/legal.js?v=2"></script>
+    <script src="/static/users.js?v=15"></script>
+    <script src="/static/project.js?v=8"></script>
+    <script src="/static/project_roles.js?v=3"></script>
+    <script src="/static/checklist.js?v=7"></script>
     <script src="/static/generator.js?v=2"></script>
-    <script src="/static/dashboard_navigation.js?v=2"></script>
-    <script src="/static/dashboard_projects.js?v=2"></script>
-    <script src="/static/dashboard_documents.js?v=2"></script>
-    <script src="/static/dashboard_approvals.js?v=2"></script>
-    <script src="/static/dashboard_messenger.js?v=2"></script>
-    <script src="/static/dashboard_meetings_emails.js?v=2"></script>
-    <script src="/static/dashboard_tasks.js?v=2"></script>
+    <script src="/static/dashboard_navigation.js?v=10"></script>
+    <script src="/static/dashboard_projects.js?v=16"></script>
+    <script src="/static/dashboard_documents.js?v=16"></script>
+    <script src="/static/dashboard_approvals.js?v=10"></script>
+    <script src="/static/dashboard_messenger.js?v=5"></script>
+    <script src="/static/dashboard_meetings_emails.js?v=5"></script>
+    <script src="/static/dashboard_tasks.js?v=8"></script>
     <script src="/static/dashboard_knowledge.js?v=2"></script>
-    <script src="/static/nsi.js?v=2"></script>
+    <script src="/static/nsi.js?v=11"></script>
+    <script src="/static/finance.js?v=29"></script>
+    <script src="/static/accounting.js?v=11"></script>
+    <script src="/static/contracts.js?v=6"></script>
+    <script src="/static/crm_ops.js?v=1"></script>
+    <script src="/static/prospecting.js?v=2"></script>
+    <script src="/static/ops.js?v=33"></script>
+    <script src="/static/erp_deep.js?v=8"></script>
+    <script src="/static/erp_ops_plus.js?v=15"></script>
+    <script src="/static/enterprise.js?v=25"></script>
+    <script src="/static/smart_features.js?v=2"></script>
+    <script src="/static/crm_assistant.js?v=8"></script>
+    <script src="/static/section_guides.js?v=2"></script>
+    <script src="/static/layout_collapsible.js?v=12"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <script src="/static/qr_scanner.js?v=2"></script>
 </body>

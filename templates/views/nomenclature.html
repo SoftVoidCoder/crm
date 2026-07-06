@@ -1,11 +1,46 @@
-<div id="nomenclatureView" style="display: none;">
-    <div style="background: var(--card-bg); border-radius: 20px; border: 1px solid var(--border); padding: 32px;">
-        <h2 style="margin-bottom: 24px;">НСИ: Склад и Номенклатура</h2>
-        <div class="client-form" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
-            <div style="flex: 2; min-width: 200px;"><label>Наименование продукции *</label><input type="text" id="addNomName" class="auth-input" style="margin:0;"></div>
-            <div style="flex: 1; min-width: 120px;"><label>Артикул</label><input type="text" id="addNomArticle" class="auth-input" style="margin:0;"></div>
-            <div style="flex: 1; min-width: 80px;"><label>Ед. изм.</label><input type="text" id="addNomUnit" class="auth-input" style="margin:0;" value="шт"></div>
-            <div style="flex: 1; min-width: 120px;"><label>Базовая цена</label><input type="number" id="addNomPrice" class="auth-input" style="margin:0;" value="0"></div>
+<div id="nomenclatureView" class="view-page view-page--compact" style="display: none;">
+    <div class="nsi-page-shell">
+        <div class="view-header nsi-hero" style="margin-bottom: 20px;">
+            <div class="view-heading">
+                <span class="view-eyebrow">НСИ без хаоса</span>
+                <h1 class="view-title">Номенклатура и складские справочники</h1>
+                <p class="view-subtitle">Понятные карточки материалов, складов, ячеек, единиц измерения и операций. Технические коды оставляем для 1С, а людям показываем нормальные названия.</p>
+            </div>
+        </div>
+        <div class="ops-overview-card nsi-quick-guide">
+            <div>
+                <div class="ops-overview-title">Что здесь делать</div>
+                <div class="ops-overview-text">Добавляй материалы, смотри остатки, веди приход/расход/перемещение и поддерживай справочники в чистом виде.</div>
+            </div>
+            <div class="ops-overview-pills">
+                <span class="ops-pill">Товары</span>
+                <span class="ops-pill">Склады</span>
+                <span class="ops-pill">Ячейки</span>
+                <span class="ops-pill">1С</span>
+            </div>
+        </div>
+        <div id="stockCockpitMount" class="surface-card surface-card--padded" style="margin:16px 0 20px;"></div>
+        <div class="nsi-work-tabs" role="tablist" aria-label="Режимы НСИ">
+            <button class="nsi-work-tab is-active" type="button" data-nsi-tab-button="items" onclick="switchNSIWorkspaceTab('items')">Товары и остатки</button>
+            <button class="nsi-work-tab" type="button" data-nsi-tab-button="directories" onclick="switchNSIWorkspaceTab('directories')">Справочники</button>
+            <button class="nsi-work-tab" type="button" data-nsi-tab-button="documents" onclick="switchNSIWorkspaceTab('documents')">Документы склада</button>
+            <button class="nsi-work-tab" type="button" data-nsi-tab-button="journal" onclick="switchNSIWorkspaceTab('journal')">Журнал</button>
+        </div>
+        <section class="surface-card surface-card--padded nsi-entry-card nsi-work-panel is-active" data-nsi-panel="items">
+            <div class="section-header">
+                <div>
+                    <div class="view-eyebrow">Быстрое добавление</div>
+                    <h3 class="section-title">Новая позиция номенклатуры</h3>
+                    <p class="section-subtitle">Минимум обязательных полей: название, единица измерения и при необходимости артикул.</p>
+                </div>
+            </div>
+            <div class="client-form">
+            <div style="flex: 2; min-width: 200px;"><label>Название материала или товара *</label><input type="text" id="addNomName" class="auth-input" placeholder="Например: Кабель силовой 3×2.5"></div>
+            <div style="flex: 1; min-width: 120px;"><label>Артикул</label><input type="text" id="addNomArticle" class="auth-input" placeholder="Если есть"></div>
+            <div style="flex: 1; min-width: 120px;"><label>Ед. изм.</label><select id="addNomUnit" class="auth-input" style="margin:0; cursor:pointer;"></select></div>
+            <div style="flex: 1; min-width: 140px;"><label>Группа</label><select id="addNomGroup" class="auth-input" style="margin:0; cursor:pointer;"></select></div>
+            <div style="flex: 1; min-width: 150px;"><label>Основной склад</label><select id="addNomWarehouse" class="auth-input" style="margin:0; cursor:pointer;"></select></div>
+            <div style="flex: 1; min-width: 120px;"><label>Базовая цена</label><input type="number" id="addNomPrice" class="auth-input" value="0"></div>
             <div style="flex: 1; min-width: 90px;">
                 <label>Валюта</label>
                 <select id="addNomCurrency" class="auth-input" style="margin:0; cursor: pointer;">
@@ -15,19 +50,195 @@
                     <option value="CNY">¥ (CNY)</option>
                 </select>
             </div>
-            <button class="btn-primary" style="height: 46px; margin-top: 22px;" onclick="addNomenclature()">+ Добавить</button>
+            <button class="btn-primary" style="height: 46px;" onclick="addNomenclature()">Добавить позицию</button>
+            </div>
+        </section>
+        <div class="finance-actions-row nsi-file-actions nsi-work-panel is-active" data-nsi-panel="items" style="margin-bottom:16px;">
+            <input id="nomenclatureImportFile" type="file" accept=".csv,.json" class="auth-input" style="margin:0; max-width:320px;">
+            <button class="btn-secondary" onclick="importNomenclatureFile()">Импорт из CSV/JSON</button>
+            <button class="btn-secondary" onclick="mergeNomenclaturePrompt()">Объединить дубли</button>
         </div>
-        <table class="admin-table">
-            <thead>
-                <tr>
-                    <th>Наименование</th>
-                    <th>Артикул</th>
-                    <th>Цена</th>
-                    <th>На складе</th>
-                    <th style="text-align: right; width: 220px;">Движение (Приход/Расход)</th>
-                </tr>
-            </thead>
-            <tbody id="nomenclatureListTable"></tbody>
-        </table>
+        <div class="ops-grid-two nsi-panel-group" data-nsi-panel-group style="margin-bottom:20px;">
+            <div class="surface-card surface-card--padded nsi-work-panel" data-nsi-panel="directories">
+      <div class="ops-inline-title">Справочник склада</div>
+                <p class="view-subtitle" style="margin-bottom:14px;">Единые справочники для склада, сотрудников, должностей, ЦФО, видов операций, банковских счетов и ячеек хранения.</p>
+                <div id="nsiMasterSummaryCards" class="metrics-grid metrics-grid--info-rail nsi-master-summary-grid" style="margin-bottom:16px;"></div>
+                <div class="client-form" style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:180px;">
+                        <label>Тип справочника</label>
+                        <select id="nsiMasterEntityType" class="auth-input" style="margin:0; cursor:pointer;" onchange="syncNSIMasterForm()">
+                            <option value="warehouses">Склад</option>
+                            <option value="units">Единица измерения</option>
+                            <option value="groups">Группа номенклатуры</option>
+                            <option value="storage_cells">Ячейка хранения</option>
+                            <option value="characteristics">Характеристика номенклатуры</option>
+                            <option value="positions">Должность</option>
+                            <option value="employees">Сотрудник</option>
+                            <option value="income_expense_articles">Статья доходов / расходов</option>
+                            <option value="financial_responsibility_centers">ЦФО</option>
+                            <option value="operation_types">Вид операции</option>
+                            <option value="bank_accounts">Банковский счет</option>
+                        </select>
+                    </div>
+                    <div style="flex:2; min-width:180px;"><label>Наименование</label><input id="nsiMasterName" type="text" class="auth-input"></div>
+                    <div style="flex:1; min-width:140px;"><label>Код</label><input id="nsiMasterCode" type="text" class="auth-input"></div>
+                    <button id="nsiMasterSaveBtn" class="btn-primary" style="height:46px; margin-top:22px;" onclick="saveNSIMasterRecord()">+ Добавить</button>
+                </div>
+                <div id="nsiMasterFormHint" class="nsi-master-hint" style="margin-top:10px;"></div>
+                <div class="client-form" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+                    <div data-nsi-field="employees" style="display:none; flex:1; min-width:160px;"><label>Табельный номер</label><input id="nsiMasterPersonnelNumber" type="text" class="auth-input"></div>
+          <div data-nsi-field="employees" style="display:none; flex:1; min-width:180px;"><label>Эл. почта</label><input id="nsiMasterEmail" type="text" class="auth-input"></div>
+                    <div data-nsi-field="employees" style="display:none; flex:1; min-width:160px;"><label>Телефон</label><input id="nsiMasterPhone" type="text" class="auth-input"></div>
+                    <div data-nsi-field="positions" style="display:none; flex:1; min-width:180px;"><label>Подразделение должности</label><input id="nsiMasterDepartmentName" type="text" class="auth-input"></div>
+                    <div data-nsi-field="characteristics" style="display:none; flex:1; min-width:180px;"><label>Тип характеристики</label><input id="nsiMasterCharacteristicType" type="text" class="auth-input"></div>
+                    <div data-nsi-field="storage_cells" style="display:none; flex:1; min-width:160px;"><label>Склад</label><select id="nsiMasterWarehouseId" class="auth-input"></select></div>
+                    <div data-nsi-field="storage_cells" style="display:none; flex:1; min-width:160px;"><label>Зона</label><input id="nsiMasterZoneName" type="text" class="auth-input"></div>
+                    <div data-nsi-field="income_expense_articles" style="display:none; flex:1; min-width:170px;"><label>Тип статьи</label><select id="nsiMasterArticleKind" class="auth-input"><option value="income">Доход</option><option value="expense">Расход</option></select></div>
+                    <div data-nsi-field="operation_types" style="display:none; flex:1; min-width:180px;"><label>Модуль</label><input id="nsiMasterModuleName" type="text" class="auth-input"></div>
+                    <div data-nsi-field="operation_types" style="display:none; flex:1; min-width:160px;"><label>Поток</label><select id="nsiMasterFlowKind" class="auth-input"><option value="">Не задан</option><option value="incoming">Входящий</option><option value="outgoing">Исходящий</option><option value="internal">Внутренний</option></select></div>
+                    <div data-nsi-field="employees,financial_responsibility_centers,bank_accounts" style="display:none; flex:1; min-width:180px;"><label>Юрлицо</label><select id="nsiMasterLegalEntityId" class="auth-input"></select></div>
+                    <div data-nsi-field="employees,financial_responsibility_centers" style="display:none; flex:1; min-width:180px;"><label>Подразделение</label><select id="nsiMasterBusinessUnitId" class="auth-input"></select></div>
+                    <div data-nsi-field="employees" style="display:none; flex:1; min-width:180px;"><label>Должность</label><select id="nsiMasterPositionId" class="auth-input"></select></div>
+                    <div data-nsi-field="financial_responsibility_centers" style="display:none; flex:1; min-width:180px;"><label>Руководитель</label><input id="nsiMasterManagerName" type="text" class="auth-input"></div>
+                    <div data-nsi-field="bank_accounts" style="display:none; flex:1; min-width:180px;"><label>Банк</label><input id="nsiMasterBankName" type="text" class="auth-input"></div>
+                    <div data-nsi-field="bank_accounts" style="display:none; flex:1; min-width:180px;"><label>Номер счета</label><input id="nsiMasterAccountNumber" type="text" class="auth-input"></div>
+                    <div data-nsi-field="bank_accounts" style="display:none; flex:1; min-width:140px;"><label>БИК</label><input id="nsiMasterBik" type="text" class="auth-input"></div>
+                    <div data-nsi-field="bank_accounts" style="display:none; flex:1; min-width:120px;"><label>Валюта</label><select id="nsiMasterCurrency" class="auth-input"><option value="RUB">Российский рубль (RUB)</option><option value="USD">Доллар США (USD)</option><option value="EUR">Евро (EUR)</option><option value="CNY">Юань (CNY)</option></select></div>
+                    <div style="flex:2; min-width:220px;"><label>Комментарий</label><input id="nsiMasterComment" type="text" class="auth-input"></div>
+                    <button class="btn-secondary" style="height:46px; margin-top:22px;" onclick="resetNSIMasterForm()">Сбросить</button>
+                </div>
+                <div class="finance-actions-row nsi-filter-row" style="margin-top:16px;">
+                    <input id="nsiMasterSearch" type="text" class="auth-input" style="margin:0; max-width:320px;" placeholder="Поиск по справочникам, коду, табельному, БИК, счету">
+                    <label class="nsi-master-toggle"><input id="nsiMasterOnlyActive" type="checkbox" checked> Только активные</label>
+                    <label class="nsi-master-toggle"><input id="nsiMasterOnlyIssues" type="checkbox"> Только с проблемами синка</label>
+                </div>
+                <div class="ops-inline-section" style="margin-top:16px;">
+                    <div class="ops-inline-title">Массовая сверка справочников с 1С</div>
+                    <div class="finance-actions-row" style="margin:12px 0 0;">
+                        <button class="btn-secondary" onclick="runNSIMasterReconciliation()">Запустить сверку</button>
+                    </div>
+                    <div id="nsiReconciliationList" class="client360-list" style="margin-top:12px;"></div>
+                </div>
+                <div id="nsiMasterDataLists" class="client360-list" style="margin-top:16px;"></div>
+            </div>
+            <div class="surface-card surface-card--padded nsi-work-panel" data-nsi-panel="documents">
+      <div class="ops-inline-title">Складской документ</div>
+                <p class="view-subtitle" style="margin-bottom:14px;">Инвентаризация, списание, перемещение и приходная корректировка с фиксацией расхождений.</p>
+                <div class="client-form" style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:150px;">
+                        <label>Тип документа</label>
+                        <select id="inventoryDocType" class="auth-input" style="margin:0; cursor:pointer;" onchange="syncInventoryDocumentForm()">
+                            <option value="inventory">Инвентаризация</option>
+                            <option value="writeoff">Списание</option>
+                            <option value="transfer">Перемещение</option>
+                            <option value="receipt_adjustment">Приходная корректировка</option>
+                        </select>
+                    </div>
+                    <div style="flex:1; min-width:140px;"><label>Артикул</label><input id="inventoryDocArticle" type="text" class="auth-input"></div>
+                    <div style="flex:1; min-width:140px;"><label>Количество</label><input id="inventoryDocQty" type="number" class="auth-input" value="0"></div>
+                    <div id="inventoryDocCountedQtyWrap" style="flex:1; min-width:140px;"><label>Подсчёт (для инв.)</label><input id="inventoryDocCountedQty" type="number" class="auth-input" value="0"></div>
+                    <div style="flex:1; min-width:140px;"><label>Склад</label><select id="inventoryDocWarehouse" class="auth-input" style="margin:0; cursor:pointer;"></select></div>
+                    <div style="flex:1; min-width:120px;"><label>Ячейка</label><input id="inventoryDocBin" type="text" class="auth-input" list="nsiStorageCellOptions" value="A-01"></div>
+                    <div id="inventoryDocTargetWarehouseWrap" style="flex:1; min-width:140px;"><label>Склад назначения</label><select id="inventoryDocTargetWarehouse" class="auth-input" style="margin:0; cursor:pointer;"></select></div>
+                    <div id="inventoryDocTargetBinWrap" style="flex:1; min-width:120px;"><label>Ячейка назначения</label><input id="inventoryDocTargetBin" type="text" class="auth-input" list="nsiStorageCellOptions" value="M-01"></div>
+                    <div style="flex:2; min-width:200px;"><label>Причина / комментарий</label><input id="inventoryDocReason" type="text" class="auth-input"></div>
+                    <button class="btn-primary" style="height:46px; margin-top:22px;" onclick="createInventoryDocument()">Провести документ</button>
+                </div>
+                <div id="inventoryDocHint" class="nsi-master-hint" style="margin-top:10px;"></div>
+                <datalist id="nsiStorageCellOptions"></datalist>
+                <div id="inventoryDocumentsList" class="client360-list" style="margin-top:16px;"></div>
+            </div>
+        </div>
+        <div class="ops-grid-two nsi-panel-group" data-nsi-panel-group style="margin-bottom:20px;">
+            <div class="surface-card surface-card--padded nsi-work-panel" data-nsi-panel="documents">
+                <div class="ops-inline-title">Инвентаризационные акты</div>
+                <p class="view-subtitle" style="margin-bottom:14px;">Отдельный контур актов: факт, корректировка, печать и быстрые действия.</p>
+                <div class="client-form" style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:140px;"><label>Артикул</label><input id="inventoryActArticle" type="text" class="auth-input"></div>
+                    <div style="flex:1; min-width:140px;"><label>Наименование</label><input id="inventoryActName" type="text" class="auth-input"></div>
+                    <div style="flex:1; min-width:130px;"><label>Учёт</label><input id="inventoryActExpectedQty" type="number" class="auth-input" value="0"></div>
+                    <div style="flex:1; min-width:130px;"><label>Факт</label><input id="inventoryActCountedQty" type="number" class="auth-input" value="0"></div>
+                    <div style="flex:1; min-width:140px;"><label>Склад</label><select id="inventoryActWarehouse" class="auth-input"></select></div>
+                    <div style="flex:1; min-width:120px;"><label>Ячейка</label><input id="inventoryActBin" type="text" class="auth-input" list="nsiStorageCellOptions"></div>
+                    <div style="flex:2; min-width:220px;"><label>Комментарий</label><input id="inventoryActComment" type="text" class="auth-input"></div>
+                    <button class="btn-primary" style="height:46px; margin-top:22px;" onclick="createInventoryAct()">Создать акт</button>
+                </div>
+                <div id="inventoryActsList" class="client360-list" style="margin-top:16px;"></div>
+            </div>
+            <div class="surface-card surface-card--padded nsi-work-panel" data-nsi-panel="documents">
+                <div class="ops-inline-title">Качество и пересортица</div>
+                <p class="view-subtitle" style="margin-bottom:14px;">Блок качества, брака и пересортицы как отдельный складской поток.</p>
+                <div class="client-form" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+                    <div style="flex:1; min-width:140px;"><label>Артикул</label><input id="warehouseQualityArticle" type="text" class="auth-input"></div>
+                    <div style="flex:1; min-width:140px;"><label>Наименование</label><input id="warehouseQualityName" type="text" class="auth-input"></div>
+                    <div style="flex:1; min-width:120px;"><label>Кол-во</label><input id="warehouseQualityQty" type="number" class="auth-input" value="0"></div>
+                    <div style="flex:1; min-width:140px;"><label>Склад</label><select id="warehouseQualityWarehouse" class="auth-input"></select></div>
+                    <div style="flex:1; min-width:120px;"><label>Ячейка</label><input id="warehouseQualityBin" type="text" class="auth-input" list="nsiStorageCellOptions"></div>
+                    <div style="flex:1; min-width:140px;"><label>Статус качества</label><select id="warehouseQualityStatus" class="auth-input"><option value="hold">На удержании</option><option value="repair">На ремонте</option><option value="scrap">Брак / списать</option><option value="return">Возврат</option></select></div>
+                    <div style="flex:1; min-width:140px;"><label>Решение</label><select id="warehouseQualityDecision" class="auth-input"><option value="inspect">Проверить</option><option value="rework">Доработать</option><option value="release">Разрешить выпуск</option><option value="writeoff">Списать</option></select></div>
+                    <div style="flex:2; min-width:220px;"><label>Дефект / комментарий</label><input id="warehouseQualityDefect" type="text" class="auth-input"></div>
+                    <button class="btn-primary" style="height:46px; margin-top:22px;" onclick="createWarehouseQualityReport()">Завести кейс качества</button>
+                </div>
+                <div class="client-form" style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:140px;"><label>Из артикула</label><input id="regradingFromArticle" type="text" class="auth-input"></div>
+                    <div style="flex:1; min-width:140px;"><label>В артикул</label><input id="regradingToArticle" type="text" class="auth-input"></div>
+                    <div style="flex:1; min-width:120px;"><label>Количество</label><input id="regradingQty" type="number" class="auth-input" value="0"></div>
+                    <div style="flex:1; min-width:140px;"><label>Склад</label><select id="regradingWarehouse" class="auth-input"></select></div>
+                    <div style="flex:1; min-width:120px;"><label>Ячейка</label><input id="regradingBin" type="text" class="auth-input" list="nsiStorageCellOptions"></div>
+                    <div style="flex:2; min-width:220px;"><label>Причина</label><input id="regradingReason" type="text" class="auth-input"></div>
+                    <button class="btn-secondary" style="height:46px; margin-top:22px;" onclick="createRegradingDocument()">Оформить пересортицу</button>
+                </div>
+                <div id="stockQualityList" class="client360-list" style="margin-top:16px;"></div>
+                <div id="stockRegradingList" class="client360-list" style="margin-top:16px;"></div>
+            </div>
+        </div>
+        <section class="surface-card surface-card--padded nsi-products-section nsi-work-panel is-active" data-nsi-panel="items">
+            <div class="section-header">
+                <div>
+                    <div class="view-eyebrow">Материалы и товары</div>
+                    <h3 class="section-title">Карточки номенклатуры</h3>
+                    <p class="section-subtitle">Без табличной каши: название, артикул, группа, склад, цена и быстрые складские действия.</p>
+                </div>
+            </div>
+            <div id="nsiIntegrityBriefMount" class="nsi-integrity-brief"></div>
+            <div id="nomenclatureListCards" class="nsi-product-grid"></div>
+            <table class="admin-table nsi-legacy-table" style="display:none;">
+                <tbody id="nomenclatureListTable"></tbody>
+            </table>
+        </section>
+        <div class="ops-inline-section nsi-work-panel is-active" data-nsi-panel="items">
+            <div class="ops-inline-title">Остатки по складам и ячейкам</div>
+            <div id="stockBalancesList" class="client360-list" style="margin-top:16px;"></div>
+        </div>
+        <div class="ops-inline-section nsi-work-panel" data-nsi-panel="journal">
+            <div class="ops-inline-title">История движения</div>
+            <div id="stockMovementsList" class="client360-list" style="margin-top:16px;"></div>
+        </div>
+        <div class="ops-inline-section nsi-work-panel" data-nsi-panel="documents">
+            <div class="ops-inline-title">Акты расхождений и корректировки</div>
+            <div id="inventoryDiscrepancyActsList" class="client360-list" style="margin-top:16px;"></div>
+        </div>
+        <div class="ops-inline-section nsi-work-panel" data-nsi-panel="journal">
+            <div class="nsi-directory-header">
+                <div>
+                    <div class="ops-inline-title">Единый журнал склада</div>
+                    <div class="client360-item-meta">Общий реестр документов, инвентаризаций, качества, пересортицы и движений.</div>
+                </div>
+                <div class="finance-actions-row">
+                    <select id="stockJournalEntityType" class="auth-input" style="margin:0; max-width:220px;">
+                        <option value="">Все сущности</option>
+                        <option value="inventory_document">Складские документы</option>
+                        <option value="inventory_act">Инвентаризационные акты</option>
+                        <option value="quality_report">Качество</option>
+                        <option value="regrading_doc">Пересортица</option>
+                        <option value="discrepancy_act">Расхождения</option>
+                    </select>
+                    <button class="btn-secondary" onclick="applyStockBulkAction('print')">Печать выбранного</button>
+        <button class="btn-secondary" onclick="applyStockBulkAction('close')">Закрыть контроль качества</button>
+                    <button class="btn-secondary" onclick="applyStockBulkAction('delete')">Удалить выбранное</button>
+                </div>
+            </div>
+            <div id="stockJournalList" class="client360-list" style="margin-top:16px;"></div>
+        </div>
     </div>
 </div>

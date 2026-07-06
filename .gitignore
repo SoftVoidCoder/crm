@@ -1,4 +1,13 @@
 korda_v2.db
+korda_v2.db-shm
+korda_v2.db-wal
 .DS_Store
 uploads/
 __pycache__/
+.venv/
+.env
+*.pyc
+korda_crm/
+logs/
+backups/
+backups/*.db
