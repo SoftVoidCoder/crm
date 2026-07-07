@@ -1421,6 +1421,36 @@ function renderNotifications() {
     const notifications = notificationsDB || [];
     const unread = notifications.filter(n => !n.is_read).length;
 
+    const categoryLabel = (category) => ({
+        task: 'Задачи',
+        approval: 'Согласования',
+        project: 'Проекты',
+        user: 'Пользователи',
+        email: 'Почта',
+        lead: 'Лиды',
+        deal: 'Сделки',
+        finance: 'Оплаты',
+        expense: 'Оплаты',
+        request: 'Заявки',
+        service: 'Сервис',
+        system: 'Система',
+    }[String(category || 'system').toLowerCase()] || 'Событие');
+
+    const iconSvg = (category) => ({
+        task: '<path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>',
+        approval: '<path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>',
+        project: '<path d="M3 7h18"></path><path d="M7 3v4"></path><path d="M17 3v4"></path><rect x="3" y="5" width="18" height="16" rx="2"></rect>',
+        user: '<path d="M20 21a8 8 0 1 0-16 0"></path><circle cx="12" cy="7" r="4"></circle>',
+        email: '<path d="M4 4h16v16H4z"></path><path d="m22 6-10 7L2 6"></path>',
+        lead: '<path d="M12 2v20"></path><path d="M2 12h20"></path>',
+        deal: '<circle cx="12" cy="12" r="9"></circle><path d="M9 12h6"></path><path d="M12 9v6"></path>',
+        finance: '<path d="M12 1v22"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>',
+        expense: '<path d="M12 1v22"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>',
+        request: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path>',
+        service: '<path d="M12 1v6"></path><path d="M12 17v6"></path><path d="m4.93 4.93 4.24 4.24"></path><path d="m14.83 14.83 4.24 4.24"></path><path d="M1 12h6"></path><path d="M17 12h6"></path><path d="m4.93 19.07 4.24-4.24"></path><path d="m14.83 9.17 4.24-4.24"></path>',
+        system: '<path d="M12 2v20"></path><path d="M2 12h20"></path>',
+    }[String(category || 'system').toLowerCase()] || '<path d="M12 2v20"></path><path d="M2 12h20"></path>');
+
     notifications.slice(0, 40).forEach(n => {
         const notifId = `notif_${n.id}`;
         if (!seenToastIds.has(notifId)) {
@@ -1436,19 +1466,21 @@ function renderNotifications() {
             category === 'task' ? 'notif-yellow' :
             category === 'approval' ? 'notif-blue' :
             category === 'project' ? 'notif-green' :
+            category === 'finance' || category === 'expense' ? 'notif-yellow' :
+            category === 'email' ? 'notif-blue' :
+            category === 'lead' ? 'notif-blue' :
+            category === 'deal' ? 'notif-green' :
             category === 'user' ? 'notif-red' : 'notif-blue';
 
-        const onClick = n.entity_type === 'project' && n.entity_id
-            ? `onclick="openProject(${Number(n.entity_id)}); markNotificationRead(${n.id}, true)"`
-            : `onclick="markNotificationRead(${n.id}, false)"`;
+        const onClick = `onclick="openNotificationItem('${String(n.entity_type || '').replace(/'/g, '&#39;')}', '${String(n.entity_id || '').replace(/'/g, '&#39;')}', '${String(n.id || '').replace(/'/g, '&#39;')}', ${Number(n.synthetic || 0)})"`;
 
         html += `<div class="notif-item ${n.is_read ? '' : 'notif-item--unread'}" ${onClick}>
                     <div class="notif-icon ${iconClass}">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"></path><path d="M2 12h20"></path></svg>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${iconSvg(category)}</svg>
                     </div>
                     <div class="notif-content">
                         <div class="notif-header-row">
-                            <span class="notif-project">${category}</span>
+                            <span class="notif-project">${categoryLabel(category)}</span>
                             <span class="notif-time">${createdAt}</span>
                         </div>
                         <div class="notif-text">
@@ -1487,6 +1519,16 @@ function showToast(title, action, proj_id) {
 }
 
 async function markNotificationRead(notificationId, closeAfter = false) {
+    if (!notificationId || String(notificationId).startsWith('live-')) {
+        if (closeAfter) {
+            const dropdown = document.getElementById('notifDropdown');
+            if (dropdown) {
+                dropdown.classList.add('krd-is-hidden');
+                dropdown.style.display = 'none';
+            }
+        }
+        return;
+    }
     await apiCall(`/notifications/${notificationId}/read`, 'POST');
     if (typeof loadNotifications === 'function') await loadNotifications();
     renderNotifications();
@@ -1504,6 +1546,23 @@ async function markAllNotificationsRead() {
     if (typeof loadNotifications === 'function') await loadNotifications();
     renderNotifications();
 }
+
+window.openNotificationItem = async function(entityType, entityId, notificationId, synthetic = 0) {
+    const type = String(entityType || '').toLowerCase();
+    const rawId = String(entityId || '').trim();
+    const numericId = Number(rawId || 0);
+
+    if (type && rawId && typeof openOmniSearchResult === 'function') {
+        await openOmniSearchResult(type, Number.isFinite(numericId) ? numericId : rawId, '');
+    }
+
+    await markNotificationRead(notificationId, true);
+
+    if (synthetic) {
+        if (typeof loadNotifications === 'function') await loadNotifications();
+        renderNotifications();
+    }
+};
 
 async function toggleNotifications(forceToggle = true) {
     const dropdown = document.getElementById('notifDropdown');

@@ -88,6 +88,297 @@ def _safe_text(value: str, fallback: str = "") -> str:
     return safe_text_service(value, fallback)
 
 
+def _json_load(value, default):
+    if value in (None, ""):
+        return default
+    try:
+        return json.loads(value)
+    except Exception:
+        return default
+
+
+def _parse_notification_date(value: str):
+    raw = _safe_text(value)
+    if not raw:
+        return None
+    for pattern in (
+        "%d.%m.%Y",
+        "%d.%m.%Y %H:%M",
+        "%Y-%m-%d",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+    ):
+        try:
+            return datetime.datetime.strptime(raw[:19], pattern)
+        except Exception:
+            continue
+    return None
+
+
+def _notification_ts(value, fallback: int = 0) -> int:
+    if isinstance(value, (int, float)) and int(value or 0) > 0:
+        return int(value)
+    parsed = _parse_notification_date(str(value or ""))
+    if parsed:
+        return int(parsed.timestamp())
+    return int(fallback or time.time())
+
+
+def _notification_matches_user(value: str, actor_name: str, actor_email: str, actor_role: str = "") -> bool:
+    text = _safe_text(value)
+    if not text:
+        return True
+    lowered = text.lower()
+    return (
+        (actor_name and actor_name.lower() in lowered)
+        or (actor_email and actor_email.lower() in lowered)
+        or (actor_role and actor_role.lower() in lowered)
+    )
+
+
+def _approval_matches_user(row: dict, actor_name: str, actor_email: str, actor_role: str) -> bool:
+    if actor_role == "Директор":
+        return True
+    assignees = _json_load(row.get("current_assignees"), [])
+    assignee_text = " ".join([_safe_text(item) for item in assignees if _safe_text(item)])
+    if _notification_matches_user(assignee_text, actor_name, actor_email, actor_role):
+        return True
+    route_text = json.dumps(row or {}, ensure_ascii=False)
+    return _notification_matches_user(route_text, actor_name, actor_email, actor_role)
+
+
+def _append_live_notification(bucket: list, **kwargs):
+    payload = {
+        "id": kwargs.get("id"),
+        "title": kwargs.get("title") or "Уведомление",
+        "message": kwargs.get("message") or "",
+        "user_email": kwargs.get("user_email") or "",
+        "user_name": kwargs.get("user_name") or "",
+        "category": kwargs.get("category") or "system",
+        "entity_type": kwargs.get("entity_type") or "",
+        "entity_id": str(kwargs.get("entity_id") or ""),
+        "is_read": int(kwargs.get("is_read") or 0),
+        "created_at": int(kwargs.get("created_at") or time.time()),
+        "synthetic": 1,
+    }
+    bucket.append(payload)
+
+
+def _load_live_notifications(actor: dict, limit: int = 80) -> list[dict]:
+    actor_name = _safe_text(actor.get("name"))
+    actor_email = _safe_text(actor.get("email"))
+    actor_role = _safe_text(actor.get("role"))
+    today = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    soon = today + datetime.timedelta(days=3)
+
+    conn = get_connection(row_factory=True)
+    try:
+        c = conn.cursor()
+        items: list[dict] = []
+
+        if has_permission(actor, "emails", "read"):
+            c.execute(
+                """
+                SELECT m.id, m.subject, m.sender, m.sender_email, m.received_at, m.created_at, a.label
+                FROM email_messages m
+                LEFT JOIN email_accounts a ON a.id = m.account_id
+                WHERE COALESCE(m.is_deleted, 0)=0
+                  AND COALESCE(m.is_archived, 0)=0
+                  AND COALESCE(m.is_read, 0)=0
+                ORDER BY COALESCE(m.created_at, 0) DESC, m.id DESC
+                LIMIT 8
+                """
+            )
+            for row in c.fetchall():
+                item = dict(row)
+                _append_live_notification(
+                    items,
+                    id=f"live-email-{item.get('id')}",
+                    title=item.get("subject") or "Новое письмо",
+                    message=f"От {_safe_text(item.get('sender')) or _safe_text(item.get('sender_email')) or 'неизвестного отправителя'} · {_safe_text(item.get('label')) or 'Почта'}",
+                    category="email",
+                    entity_type="email",
+                    entity_id=item.get("id"),
+                    created_at=_notification_ts(item.get("created_at") or item.get("received_at")),
+                )
+
+        if has_permission(actor, "tasks", "read"):
+            c.execute(
+                """
+                SELECT id, title, executor, deadline, priority, status, updated_at
+                FROM tasks
+                WHERE COALESCE(status, '') NOT IN ('completed', 'canceled')
+                ORDER BY id DESC
+                LIMIT 160
+                """
+            )
+            for row in c.fetchall():
+                item = dict(row)
+                executor = _safe_text(item.get("executor"))
+                mine = not executor or actor_role == "Директор" or _notification_matches_user(executor, actor_name, actor_email, actor_role)
+                deadline_dt = _parse_notification_date(item.get("deadline"))
+                if not mine or not deadline_dt or deadline_dt >= today:
+                    continue
+                _append_live_notification(
+                    items,
+                    id=f"live-task-{item.get('id')}",
+                    title=item.get("title") or "Просроченная задача",
+                    message=f"Срок {item.get('deadline') or 'не указан'} · Исполнитель: {executor or 'не назначен'}",
+                    category="task",
+                    entity_type="task",
+                    entity_id=item.get("id"),
+                    created_at=_notification_ts(item.get("updated_at") or item.get("deadline")),
+                )
+
+        if has_permission(actor, "approvals", "read"):
+            c.execute(
+                """
+                SELECT id, title, status, current_assignees, due_at, created_at
+                FROM approvals
+                WHERE COALESCE(status, '')='pending'
+                ORDER BY id DESC
+                LIMIT 160
+                """
+            )
+            for row in c.fetchall():
+                item = dict(row)
+                if not _approval_matches_user(item, actor_name, actor_email, actor_role):
+                    continue
+                due_at = int(item.get("due_at") or 0)
+                due_text = datetime.datetime.fromtimestamp(due_at).strftime("%d.%m.%Y %H:%M") if due_at else "без SLA"
+                _append_live_notification(
+                    items,
+                    id=f"live-approval-{item.get('id')}",
+                    title=item.get("title") or "Согласование ожидает решения",
+                    message=f"Ожидает решения · срок {due_text}",
+                    category="approval",
+                    entity_type="approval",
+                    entity_id=item.get("id"),
+                    created_at=_notification_ts(due_at or item.get("created_at")),
+                )
+
+        if has_permission(actor, "clients", "read"):
+            c.execute(
+                """
+                SELECT id, title, client_name, responsible, stage, next_action, next_action_date, updated_at
+                FROM crm_leads
+                ORDER BY updated_at DESC, id DESC
+                LIMIT 160
+                """
+            )
+            for row in c.fetchall():
+                item = dict(row)
+                responsible = _safe_text(item.get("responsible"))
+                mine = not responsible or actor_role == "Директор" or _notification_matches_user(responsible, actor_name, actor_email, actor_role)
+                next_action_dt = _parse_notification_date(item.get("next_action_date"))
+                is_new = _safe_text(item.get("stage")).lower() in {"new", "draft", "incoming", ""}
+                is_due = next_action_dt and next_action_dt <= soon
+                if not mine or not (is_new or is_due):
+                    continue
+                _append_live_notification(
+                    items,
+                    id=f"live-lead-{item.get('id')}",
+                    title=item.get("title") or item.get("client_name") or "Новый лид",
+                    message=f"{item.get('client_name') or 'Клиент'} · Следующее действие: {_safe_text(item.get('next_action')) or 'нужно назначить'}",
+                    category="lead",
+                    entity_type="lead",
+                    entity_id=item.get("id"),
+                    created_at=_notification_ts(item.get("updated_at") or item.get("next_action_date")),
+                )
+
+        if has_permission(actor, "projects", "read"):
+            c.execute(
+                """
+                SELECT id, title, client_name, responsible, stage, next_action, next_action_date, amount, currency, updated_at
+                FROM crm_deals
+                ORDER BY updated_at DESC, id DESC
+                LIMIT 160
+                """
+            )
+            for row in c.fetchall():
+                item = dict(row)
+                responsible = _safe_text(item.get("responsible"))
+                mine = not responsible or actor_role == "Директор" or _notification_matches_user(responsible, actor_name, actor_email, actor_role)
+                next_action_dt = _parse_notification_date(item.get("next_action_date"))
+                if not mine or not next_action_dt or next_action_dt > soon:
+                    continue
+                amount = f"{int(float(item.get('amount') or 0)):,}".replace(",", " ")
+                _append_live_notification(
+                    items,
+                    id=f"live-deal-{item.get('id')}",
+                    title=item.get("title") or item.get("client_name") or "Сделка",
+                    message=f"{item.get('client_name') or 'Клиент'} · {amount} {item.get('currency') or 'RUB'} · {_safe_text(item.get('next_action')) or 'нужен следующий шаг'}",
+                    category="deal",
+                    entity_type="deal",
+                    entity_id=item.get("id"),
+                    created_at=_notification_ts(item.get("updated_at") or item.get("next_action_date")),
+                )
+
+        if has_permission(actor, "finance", "read"):
+            c.execute(
+                """
+                SELECT id, title, kind, amount, currency, due_date, status, updated_at
+                FROM finance_payments
+                WHERE COALESCE(status, '') NOT IN ('paid', 'posted', 'done', 'completed', 'canceled')
+                ORDER BY id DESC
+                LIMIT 200
+                """
+            )
+            for row in c.fetchall():
+                item = dict(row)
+                due_dt = _parse_notification_date(item.get("due_date"))
+                if not due_dt or due_dt > soon:
+                    continue
+                amount = f"{int(float(item.get('amount') or 0)):,}".replace(",", " ")
+                due_text = due_dt.strftime("%d.%m.%Y")
+                _append_live_notification(
+                    items,
+                    id=f"live-finance-{item.get('id')}",
+                    title=item.get("title") or ("Входящий платёж" if _safe_text(item.get("kind")) == "incoming" else "Исходящий платёж"),
+                    message=f"{amount} {item.get('currency') or 'RUB'} · срок оплаты {due_text}",
+                    category="finance",
+                    entity_type="finance_payment",
+                    entity_id=item.get("id"),
+                    created_at=_notification_ts(item.get("updated_at") or item.get("due_date")),
+                )
+
+        items.sort(key=lambda item: (0 if not item.get("is_read") else 1, -int(item.get("created_at") or 0)))
+        return items[: max(1, int(limit or 80))]
+    finally:
+        conn.close()
+
+
+def _build_notification_feed(actor: dict, limit: int = 80):
+    stored = get_notifications_for_user(actor.get("email", ""), actor.get("name", ""), limit=limit)
+    live = _load_live_notifications(actor, limit=limit)
+    seen_keys = set()
+    merged = []
+
+    def item_key(item: dict):
+        return (
+            _safe_text(item.get("entity_type")),
+            _safe_text(item.get("entity_id")),
+            _safe_text(item.get("title")),
+            _safe_text(item.get("message")),
+        )
+
+    for item in stored:
+        payload = dict(item)
+        payload["synthetic"] = 0
+        merged.append(payload)
+        seen_keys.add(item_key(payload))
+
+    for item in live:
+        key = item_key(item)
+        if key in seen_keys:
+            continue
+        merged.append(item)
+        seen_keys.add(key)
+
+    merged.sort(key=lambda item: (0 if not item.get("is_read") else 1, -int(item.get("created_at") or 0)))
+    return merged[: max(1, int(limit or 80))]
+
+
 def _email_provider_key(address: str) -> str:
     return email_provider_key_service(address)
 
@@ -886,7 +1177,7 @@ def get_notifications(request: Request, limit: int = 80):
     actor = require_approved_user(request)
     if not actor:
         return {"error": "forbidden"}
-    return get_notifications_for_user(actor.get("email", ""), actor.get("name", ""), limit=limit)
+    return _build_notification_feed(actor, limit=limit)
 
 
 @router.post("/api/notifications/{notification_id}/read")
