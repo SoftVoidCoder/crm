@@ -1492,7 +1492,10 @@ async function markNotificationRead(notificationId, closeAfter = false) {
     renderNotifications();
     if (closeAfter) {
         const dropdown = document.getElementById('notifDropdown');
-        if (dropdown) dropdown.style.display = 'none';
+        if (dropdown) {
+            dropdown.classList.add('krd-is-hidden');
+            dropdown.style.display = 'none';
+        }
     }
 }
 
@@ -1502,16 +1505,28 @@ async function markAllNotificationsRead() {
     renderNotifications();
 }
 
-function toggleNotifications(forceToggle = true) {
+async function toggleNotifications(forceToggle = true) {
     const dropdown = document.getElementById('notifDropdown');
     if(!dropdown) return;
-    if (dropdown.style.display === 'flex' && forceToggle) {
+    const isOpen = !dropdown.classList.contains('krd-is-hidden') && dropdown.style.display === 'flex';
+    if (isOpen && forceToggle) {
+        dropdown.classList.add('krd-is-hidden');
         dropdown.style.display = 'none';
     } else {
+        if (typeof loadNotifications === 'function') await loadNotifications();
+        renderNotifications();
+        dropdown.classList.remove('krd-is-hidden');
         dropdown.style.display = 'flex';
     }
 }
-document.addEventListener('click', (e) => { const wrap = document.querySelector('.notif-wrapper'); const drop = document.getElementById('notifDropdown'); if(wrap && !wrap.contains(e.target) && drop && drop.style.display === 'flex') { drop.style.display = 'none'; } });
+document.addEventListener('click', (e) => {
+    const wrap = document.querySelector('.notif-wrapper');
+    const drop = document.getElementById('notifDropdown');
+    if (wrap && !wrap.contains(e.target) && drop && drop.style.display === 'flex') {
+        drop.classList.add('krd-is-hidden');
+        drop.style.display = 'none';
+    }
+});
 
 function renderClients() {
     const tbody = document.getElementById('clientsListTable');

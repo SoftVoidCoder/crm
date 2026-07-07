@@ -7,7 +7,7 @@
 
         <div class="search-bar krd-topbar-search">
             <svg class="topbar-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--secondary)" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <input type="text" id="searchInput" placeholder="Поиск..." onkeyup="if(typeof handleOmniSearch === 'function') handleOmniSearch()" class="topbar-search-input">
+            <input type="text" id="searchInput" placeholder="Поиск..." oninput="if(typeof handleOmniSearch === 'function') handleOmniSearch()" onfocus="if(typeof openOmniSearchSuggestions === 'function') openOmniSearchSuggestions()" class="topbar-search-input">
             <button id="commandPaletteHint" class="command-palette-hint" type="button" onclick="if(typeof openCommandPalette === 'function') openCommandPalette()" title="Командная палитра">⌘K</button>
             <div id="omniSearchResults" class="omni-search-results krd-is-hidden"></div>
         </div>

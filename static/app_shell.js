@@ -584,6 +584,38 @@ function shortcutLabelBadges(actionKey) {
     return parts.map(key => `<span class="command-palette-kbd">${escapeHtml(key)}</span>`).join('');
 }
 
+function searchQueryVariants(query) {
+    const raw = String(query || '').trim().toLowerCase();
+    if (!raw) return [];
+    const variants = new Set([raw]);
+    const latinToCyr = {
+        q: 'й', w: 'ц', e: 'у', r: 'к', t: 'е', y: 'н', u: 'г', i: 'ш', o: 'щ', p: 'з',
+        '[': 'х', ']': 'ъ', a: 'ф', s: 'ы', d: 'в', f: 'а', g: 'п', h: 'р', j: 'о', k: 'л',
+        l: 'д', ';': 'ж', "'": 'э', z: 'я', x: 'ч', c: 'с', v: 'м', b: 'и', n: 'т', m: 'ь',
+        ',': 'б', '.': 'ю', '`': 'ё',
+    };
+    const cyrToLatin = Object.fromEntries(Object.entries(latinToCyr).map(([latin, cyr]) => [cyr, latin]));
+    const convert = (text, map) => text.split('').map(ch => map[ch] || ch).join('');
+    variants.add(convert(raw, latinToCyr));
+    variants.add(convert(raw, cyrToLatin));
+    return Array.from(variants).filter(Boolean);
+}
+
+function matchesSearchNeedle(values, query) {
+    const variants = searchQueryVariants(query);
+    if (!variants.length) return false;
+    const haystack = (Array.isArray(values) ? values : [values])
+        .map(value => String(value || '').toLowerCase())
+        .join(' ');
+    return variants.some(needle => haystack.includes(needle));
+}
+
+function setFloatingPanelVisibility(element, isVisible, displayMode = 'block') {
+    if (!element) return;
+    element.classList.toggle('krd-is-hidden', !isVisible);
+    element.style.display = isVisible ? displayMode : 'none';
+}
+
 function keyboardEventMatchesShortcut(event, shortcut) {
     const normalizedKey = String(event.key || '').toLowerCase();
     const targetKey = String(shortcut?.key || '').toLowerCase();
@@ -720,7 +752,7 @@ function navigationSearchCatalog() {
 function sectionSearchMatches(query) {
     const q = String(query || '').toLowerCase().trim();
     if (!q) return [];
-    return navigationSearchCatalog().filter(item => [item.title, item.desc, item.keywords].some(value => String(value || '').toLowerCase().includes(q)));
+    return navigationSearchCatalog().filter(item => matchesSearchNeedle([item.title, item.desc, item.keywords, item.view], q));
 }
 
 function openSearchSection(view) {
@@ -839,7 +871,7 @@ function runQuickSearchCommand(index) {
 function commandPaletteEntityCommands(query) {
     const q = String(query || '').toLowerCase().trim();
     if (!q) return [];
-    const matches = (values) => values.some(value => String(value || '').toLowerCase().includes(q));
+    const matches = (values) => matchesSearchNeedle(values, q);
     const rows = [];
     const projectRows = typeof projectsDB !== 'undefined' && Array.isArray(projectsDB) ? projectsDB : [];
     projectRows.forEach(item => {
@@ -886,7 +918,7 @@ function commandPaletteFilterLocal(query) {
     const q = String(query || '').toLowerCase().trim();
     const commands = commandPaletteStaticCommands().filter(item => {
         if (!q) return true;
-        return [item.title, item.desc, item.group, item.keywords].some(value => String(value || '').toLowerCase().includes(q));
+        return matchesSearchNeedle([item.title, item.desc, item.group, item.keywords], q);
     });
     const sections = sectionSearchMatches(q).map(item => ({
         group: 'Разделы',
@@ -1025,7 +1057,7 @@ window.openCommandPalette = function(initialQuery = '') {
 function omniSearchActionFor(item) {
     const type = String(item.entity_type || item.type || '').toLowerCase();
     const id = item.id ?? item.entity_id ?? '';
-    if (type === 'project' && id) return `openProject(${Number(id)}); document.getElementById('omniSearchResults').style.display='none';`;
+    if (type === 'project' && id) return `openProject(${Number(id)}); closeOmniSearchResults();`;
     const viewByType = {
         client: 'clients',
         document: 'documents',
@@ -1045,7 +1077,7 @@ function omniSearchActionFor(item) {
     };
     const targetView = String(item.view || item.view_name || viewByType[type] || 'dashboard');
     const safeView = /^[a-z0-9_]+$/i.test(targetView) ? targetView : 'dashboard';
-    return `navigateTo('${safeView}'); document.getElementById('omniSearchResults').style.display='none';`;
+    return `navigateTo('${safeView}'); closeOmniSearchResults();`;
 }
 
 function omniSearchIconFor(item) {
@@ -1069,7 +1101,25 @@ function omniSearchIconFor(item) {
 
 function closeOmniSearchResults() {
     const box = document.getElementById('omniSearchResults');
-    if (box) box.style.display = 'none';
+    setFloatingPanelVisibility(box, false, 'flex');
+}
+
+function omniStarterResults() {
+    const quickActions = quickSearchActionCatalog().slice(0, 4).map((action, index) => ({
+        type: 'Команда',
+        title: action.title,
+        desc: action.desc,
+        link: `runQuickSearchCommand(${index})`,
+        icon: action.icon || 'GO',
+    }));
+    const sections = navigationSearchCatalog().slice(0, 6).map(section => ({
+        type: 'Раздел',
+        title: section.title,
+        desc: section.desc,
+        link: section.view ? `openSearchSection('${section.view}')` : 'closeOmniSearchResults()',
+        icon: section.icon || 'NAV',
+    }));
+    return [...quickActions, ...sections];
 }
 
 function workflowFocusForSearchType(type) {
@@ -1206,15 +1256,17 @@ function renderOmniResults(resBox, results) {
             </div>
         `).join('');
     }
-    resBox.style.display = 'flex';
+    setFloatingPanelVisibility(resBox, true, 'flex');
 }
 
 window.handleOmniSearch = async function() {
-    const q = document.getElementById('searchInput').value.toLowerCase().trim();
+    const searchInput = document.getElementById('searchInput');
     const resBox = document.getElementById('omniSearchResults');
+    if (!searchInput || !resBox) return;
+    const q = String(searchInput.value || '').toLowerCase().trim();
     const seq = ++omniSearchSeq;
     if (!q) {
-        resBox.style.display = 'none';
+        closeOmniSearchResults();
         filterProjects();
         return;
     }
@@ -1223,8 +1275,7 @@ window.handleOmniSearch = async function() {
 
     const results = [];
     quickSearchActionCatalog().forEach((action, index) => {
-        const haystack = `${action.title} ${action.desc} ${action.chip || ''}`.toLowerCase();
-        if (q.startsWith('/') || haystack.includes(q)) {
+        if (q.startsWith('/') || matchesSearchNeedle([action.title, action.desc, action.chip || '', action.type || ''], q)) {
             results.push({
                 type: 'Команда',
                 title: action.title,
@@ -1240,46 +1291,45 @@ window.handleOmniSearch = async function() {
             type: 'Раздел',
             title: section.title,
             desc: section.desc,
-            link: navItem?.view ? `openSearchSection('${navItem.view}')` : "document.getElementById('omniSearchResults').style.display='none';",
+            link: navItem?.view ? `openSearchSection('${navItem.view}')` : "closeOmniSearchResults();",
             icon: section.icon,
         });
     });
     projectsDB.forEach(p => {
-        if ((p.name || '').toLowerCase().includes(q) || (p.contract || '').toLowerCase().includes(q)) {
-            results.push({ type: 'Проект', title: p.name, desc: p.contract, link: `openProject(${p.id}); document.getElementById('omniSearchResults').style.display='none';`, icon: 'PR' });
+        if (matchesSearchNeedle([p.name, p.contract, p.client, p.manager], q)) {
+            results.push({ type: 'Проект', title: p.name, desc: p.contract, link: `openProject(${p.id}); closeOmniSearchResults();`, icon: 'PR' });
         }
     });
     clientsDB.forEach(c => {
-        if ((c.name || '').toLowerCase().includes(q) || (c.inn || '').toLowerCase().includes(q) || (c.contact || '').toLowerCase().includes(q)) {
+        if (matchesSearchNeedle([c.name, c.inn, c.contact], q)) {
             results.push({ type: 'Клиент', title: c.name, desc: c.inn || c.contact || 'контрагент', link: `openOmniSearchResult('client', ${Number(c.id || 0)}, 'clients')`, icon: 'CL' });
         }
     });
     documentsDB.forEach(d => {
-        if ((d.number || '').toLowerCase().includes(q) || (d.subject || '').toLowerCase().includes(q)) {
+        if (matchesSearchNeedle([d.number, d.subject, d.correspondent, d.type, d.status], q)) {
             results.push({ type: 'Документ', title: `№ ${d.number}`, desc: d.subject, link: `openOmniSearchResult('document', ${Number(d.id || 0)}, 'documents')`, icon: 'DOC' });
         }
     });
     tasksDB.forEach(t => {
-        if ((t.title || '').toLowerCase().includes(q)) {
+        if (matchesSearchNeedle([t.title, t.executor, t.description, t.status], q)) {
             results.push({ type: 'Поручение', title: t.title, desc: `Исполнитель: ${t.executor}`, link: `openOmniSearchResult('task', ${Number(t.id || 0)}, 'tasks')`, icon: 'TSK' });
         }
     });
     (crmLeadsDB || []).forEach(lead => {
-        const haystack = [lead.title, lead.client_name, lead.contact_name, lead.contact_email, lead.contact_phone, lead.next_action].join(' ').toLowerCase();
-        if (haystack.includes(q)) {
+        if (matchesSearchNeedle([lead.title, lead.client_name, lead.contact_name, lead.contact_email, lead.contact_phone, lead.next_action, lead.source], q)) {
             results.push({ type: 'Лид', title: lead.title || `Лид #${lead.id}`, desc: `${lead.client_name || 'без компании'} · ${lead.contact_name || lead.source || 'без контакта'}`, link: `openOmniSearchResult('lead', ${Number(lead.id || 0)}, 'leads')`, icon: 'LEAD' });
         }
     });
     (crmDealsDB || []).forEach(deal => {
-        const haystack = [deal.title, deal.client_name, deal.contract_number, deal.next_action, deal.responsible].join(' ').toLowerCase();
-        if (haystack.includes(q)) {
+        if (matchesSearchNeedle([deal.title, deal.client_name, deal.contract_number, deal.next_action, deal.responsible, deal.stage], q)) {
             results.push({ type: 'Сделка', title: deal.title || `Сделка #${deal.id}`, desc: `${deal.contract_number || 'без номера'} · ${deal.client_name || 'без клиента'}`, link: `openOmniSearchResult('deal', ${Number(deal.id || 0)}, 'deals')`, icon: 'DEAL' });
         }
     });
 
-    renderOmniResults(resBox, results);
+    renderOmniResults(resBox, results.slice(0, 12));
 
     try {
+        if (q.length < 2) return;
         const server = await apiCall(`/search?q=${encodeURIComponent(q)}&limit=8`);
         if (seq !== omniSearchSeq || !server || !Array.isArray(server.items)) return;
         const existingKeys = new Set(results.map(item => `${String(item.type).toLowerCase()}:${String(item.title).toLowerCase()}`));
@@ -1303,6 +1353,18 @@ window.handleOmniSearch = async function() {
     }
 };
 
+window.openOmniSearchSuggestions = function() {
+    const searchInput = document.getElementById('searchInput');
+    const resBox = document.getElementById('omniSearchResults');
+    if (!searchInput || !resBox) return;
+    const query = String(searchInput.value || '').trim();
+    if (query) {
+        window.handleOmniSearch();
+        return;
+    }
+    renderOmniResults(resBox, omniStarterResults());
+};
+
 document.addEventListener('keydown', (e) => {
     if (keyboardEventMatchesShortcut(e, getShortcutConfig('commandPalette'))) {
         e.preventDefault();
@@ -1318,5 +1380,5 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('click', (e) => {
     const sb = document.querySelector('.search-bar');
     const box = document.getElementById('omniSearchResults');
-    if (sb && !sb.contains(e.target) && box) box.style.display = 'none';
+    if (sb && !sb.contains(e.target) && box) closeOmniSearchResults();
 });
