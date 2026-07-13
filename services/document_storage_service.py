@@ -12,6 +12,32 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 
 MAX_DOCUMENT_UPLOAD_BYTES = int(os.getenv("KORDA_MAX_DOCUMENT_UPLOAD_BYTES", str(50 * 1024 * 1024)))
+BLOCKED_DOCUMENT_EXTENSIONS = {
+    ".app",
+    ".bat",
+    ".cmd",
+    ".com",
+    ".dll",
+    ".dmg",
+    ".exe",
+    ".hta",
+    ".htm",
+    ".html",
+    ".jar",
+    ".js",
+    ".jse",
+    ".mjs",
+    ".msi",
+    ".ps1",
+    ".reg",
+    ".scr",
+    ".sh",
+    ".svg",
+    ".vb",
+    ".vbe",
+    ".vbs",
+    ".wsf",
+}
 ALLOWED_MIME_PREFIXES = ("text/", "image/")
 ALLOWED_MIME_TYPES = {
     "application/pdf",
@@ -82,6 +108,8 @@ def prepare_document_file(document_id: int, revision_no: int, upload_name: str, 
         validation_errors.append("empty_file")
     if len(file_bytes) > MAX_DOCUMENT_UPLOAD_BYTES:
         validation_errors.append("file_too_large")
+    if ext.lower() in BLOCKED_DOCUMENT_EXTENSIONS:
+        validation_errors.append("extension_not_allowed")
     if not _is_allowed_mime(detected_mime):
         validation_errors.append("mime_not_allowed")
     checksum = hashlib.sha256(file_bytes).hexdigest()

@@ -352,12 +352,12 @@ function renderLeadRegistry() {
             <div class="table-shell">
                 <table class="admin-table admin-table--dense crm-registry-table">
                     <colgroup>
-                        <col style="width: 34%;">
-                        <col style="width: 13%;">
-                        <col style="width: 15%;">
-                        <col style="width: 21%;">
-                        <col style="width: 10%;">
-                        <col style="width: 7%;">
+                        <col style="width: 340px;">
+                        <col style="width: 160px;">
+                        <col style="width: 220px;">
+                        <col style="width: 320px;">
+                        <col style="width: 160px;">
+                        <col style="width: 180px;">
                     </colgroup>
                     <thead>
                         <tr>
@@ -377,7 +377,7 @@ function renderLeadRegistry() {
                                 <td class="crm-meta-cell"><span class="crm-cell-single">${crmEscape(row.responsible || '—')}</span></td>
                                 <td class="crm-action-cell"><span class="crm-inline-pill crm-inline-pill--${crmToneByDueDate(row.next_action_date)}">${crmEscape(row.next_action_date || 'без даты')}</span><div class="table-subtext">${crmEscape(row.next_action || '—')}</div></td>
                                 <td class="is-num amount crm-amount-cell">${crmFormatMoney(row.budget, row.currency)}</td>
-                                <td class="crm-stage-cell"><span class="crm-cell-single">${crmEscape(crmStageLabel(row.stage))}</span></td>
+                                <td class="crm-stage-cell"><span class="crm-inline-pill crm-inline-pill--${crmToneByDueDate(row.next_action_date)}">${crmEscape(crmStageLabel(row.stage))}</span></td>
                             </tr>
                         `).join('') || '<tr><td colspan="6"><div class="empty-state">Лиды по текущему фильтру не найдены.</div></td></tr>'}
                     </tbody>
@@ -397,12 +397,12 @@ function renderDealRegistry() {
             <div class="table-shell">
                 <table class="admin-table admin-table--dense crm-registry-table">
                     <colgroup>
-                        <col style="width: 31%;">
-                        <col style="width: 18%;">
-                        <col style="width: 22%;">
-                        <col style="width: 13%;">
-                        <col style="width: 7%;">
-                        <col style="width: 9%;">
+                        <col style="width: 360px;">
+                        <col style="width: 240px;">
+                        <col style="width: 320px;">
+                        <col style="width: 170px;">
+                        <col style="width: 120px;">
+                        <col style="width: 180px;">
                     </colgroup>
                     <thead>
                         <tr>
@@ -422,7 +422,7 @@ function renderDealRegistry() {
                                 <td class="crm-action-cell"><span class="crm-inline-pill crm-inline-pill--${crmToneByDueDate(row.next_action_date)}">${crmEscape(row.next_action_date || 'без даты')}</span><div class="table-subtext">${crmEscape(row.next_action || '—')}</div></td>
                                 <td class="is-num amount crm-amount-cell">${crmFormatMoney(row.amount, row.currency)}</td>
                                 <td class="is-num crm-amount-cell">${Math.round(Number(row.margin_percent || 0))}%</td>
-                                <td class="crm-stage-cell"><span class="crm-cell-single">${crmEscape(crmStageLabel(row.stage))}</span></td>
+                                <td class="crm-stage-cell"><span class="crm-inline-pill crm-inline-pill--${crmToneByDueDate(row.next_action_date)}">${crmEscape(crmStageLabel(row.stage))}</span></td>
                             </tr>
                         `).join('') || '<tr><td colspan="6"><div class="empty-state">Сделки по текущему фильтру не найдены.</div></td></tr>'}
                     </tbody>

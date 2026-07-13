@@ -126,6 +126,33 @@ from utils import manager
 router = APIRouter()
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
+MAX_PROJECT_UPLOAD_BYTES = int(os.getenv("KORDA_MAX_PROJECT_UPLOAD_BYTES", str(50 * 1024 * 1024)))
+BLOCKED_PROJECT_UPLOAD_EXTENSIONS = {
+    ".app",
+    ".bat",
+    ".cmd",
+    ".com",
+    ".dll",
+    ".dmg",
+    ".exe",
+    ".hta",
+    ".htm",
+    ".html",
+    ".jar",
+    ".js",
+    ".jse",
+    ".mjs",
+    ".msi",
+    ".ps1",
+    ".reg",
+    ".scr",
+    ".sh",
+    ".svg",
+    ".vb",
+    ".vbe",
+    ".vbs",
+    ".wsf",
+}
 ERP_FULL_DEMO_CLIENT_NAME = "ООО Демо Контур ERP"
 ERP_FULL_DEMO_PROJECTS = [
     {"key": "sales", "name": "Демо: Продажи и закупки", "contract": "DEMO-ERP-SALES", "budget": 4200000, "costs": 1850000, "progress": 62},
@@ -138,6 +165,12 @@ ERP_FULL_DEMO_PROJECTS = [
 
 def _api_error(status_code: int, error: str, **payload):
     return JSONResponse(status_code=status_code, content={"error": error, **payload})
+
+
+def _safe_upload_filename(value: str) -> str:
+    raw = os.path.basename(str(value or "").replace("\\", "/")) or "file.bin"
+    cleaned = re.sub(r"[^A-Za-zА-Яа-я0-9._-]+", "_", raw).strip("._")
+    return cleaned[:140] or "file.bin"
 
 
 def _next_table_id(conn, table_name: str) -> int:
@@ -462,75 +495,156 @@ def _clean_phone(value: str) -> str:
     return digits[-11:] if digits else ""
 
 
+def _outreach_header_key(value: str) -> str:
+    return re.sub(r"[^a-zа-яё0-9]+", "", str(value or "").strip().lower())
+
+
+def _outreach_pick(row: dict, aliases: tuple[str, ...]) -> str:
+    if not row:
+        return ""
+    direct_aliases = [alias for alias in aliases if alias in row]
+    for alias in direct_aliases:
+        value = row.get(alias)
+        if _normalize_spaces(value):
+            return _normalize_spaces(value)
+    normalized = {_outreach_header_key(key): value for key, value in row.items()}
+    for alias in aliases:
+        value = normalized.get(_outreach_header_key(alias))
+        if _normalize_spaces(value):
+            return _normalize_spaces(value)
+    return ""
+
+
+def _outreach_contact_name(row: dict) -> str:
+    full_name = _outreach_pick(
+        row,
+        (
+            "contact_name",
+            "contact",
+            "person",
+            "fio",
+            "ФИО",
+            "Контакт",
+            "Контактное лицо",
+            "Полное имя",
+            "Имя контакта",
+            "CONTACT_NAME",
+            "FULL_NAME",
+        ),
+    )
+    if full_name:
+        return full_name
+    parts = [
+        _outreach_pick(row, ("Фамилия", "LAST_NAME")),
+        _outreach_pick(row, ("Имя", "NAME", "FIRST_NAME")),
+        _outreach_pick(row, ("Отчество", "SECOND_NAME", "MIDDLE_NAME")),
+    ]
+    return _normalize_spaces(" ".join(part for part in parts if part))
+
+
+OUTREACH_IMPORT_ALIASES = {
+    "company_name": (
+        "company_name",
+        "company",
+        "client",
+        "Название",
+        "title",
+        "Название компании",
+        "Компания",
+        "Контрагент",
+        "Организация",
+        "Название организации",
+        "Название лида",
+        "Лид",
+        "Название сделки",
+        "COMPANY",
+        "COMPANY_NAME",
+        "COMPANY_TITLE",
+        "CONTACT_COMPANY",
+        "TITLE",
+        "LEAD_TITLE",
+    ),
+    "company_inn": ("company_inn", "inn", "ИНН", "ИНН компании", "RQ_INN", "COMPANY_INN"),
+    "phone": (
+        "phone",
+        "telephone",
+        "mobile",
+        "Телефон",
+        "Мобильный",
+        "Телефон рабочий",
+        "Рабочий телефон",
+        "Мобильный телефон",
+        "Телефон мобильный",
+        "Телефон (раб.)",
+        "Телефон (моб.)",
+        "PHONE",
+        "PHONE_WORK",
+        "PHONE_MOBILE",
+    ),
+    "email": (
+        "email",
+        "mail",
+        "e-mail",
+        "Email",
+        "E-mail",
+        "Почта",
+        "Эл. почта",
+        "Email рабочий",
+        "E-mail рабочий",
+        "Рабочий email",
+        "Рабочий e-mail",
+        "EMAIL",
+        "EMAIL_WORK",
+    ),
+    "contact_method": ("contact_method", "preferred_channel", "how_to_contact", "Способ связи", "Как связаться", "Канал связи"),
+    "position": ("position", "role", "Должность", "Позиция", "POST", "CONTACT_POST"),
+    "website": ("website", "site", "url", "Сайт", "Веб-сайт", "WEB", "WEB_WORK"),
+    "city": ("city", "Город", "Регион", "Адрес город", "ADDRESS_CITY", "COMPANY_ADDRESS_CITY"),
+    "source_name": ("source_name", "source", "Источник", "Источник лида", "SOURCE", "SOURCE_ID", "SOURCE_DESCRIPTION"),
+    "status": ("status", "Статус", "Стадия", "STATUS", "STATUS_ID", "STAGE_ID"),
+    "priority": ("priority", "Приоритет", "PRIORITY"),
+    "manager_name": ("manager_name", "manager", "Менеджер", "Ответственный", "Ответственный менеджер", "ASSIGNED_BY", "ASSIGNED_BY_NAME"),
+    "manager_email": ("manager_email", "manager_mail", "Email ответственного", "E-mail ответственного", "ASSIGNED_BY_EMAIL"),
+    "planned_contact_date": ("planned_contact_date", "План", "Дата контакта", "Плановая дата контакта"),
+    "next_action": ("next_action", "Следующее действие", "Следующее дело", "NEXT_ACTIVITY_SUBJECT"),
+    "next_action_date": ("next_action_date", "Дата следующего шага", "Дата следующего дела", "NEXT_ACTIVITY_DATE"),
+    "notes": ("notes", "note", "comment", "Комментарий", "Комментарии", "COMMENTS", "Описание", "Description", "DESCRIPTION"),
+    "tags": ("tags", "Теги", "TAG", "TAGS"),
+    "result": ("result", "Результат", "RESULT"),
+    "do_not_contact": ("do_not_contact", "Не звонить", "DNC"),
+}
+
+
 def _normalize_outreach_row(row: dict):
-    company_name = _normalize_spaces(
-        row.get("company_name")
-        or row.get("company")
-        or row.get("client")
-        or row.get("name")
-        or row.get("Название компании")
-        or row.get("Компания")
-        or row.get("Контрагент")
-        or row.get("Организация")
-        or ""
-    )
-    contact_name = _normalize_spaces(
-        row.get("contact_name")
-        or row.get("contact")
-        or row.get("person")
-        or row.get("fio")
-        or row.get("ФИО")
-        or row.get("Контакт")
-        or row.get("Контактное лицо")
-        or ""
-    )
-    phone = _normalize_spaces(
-        row.get("phone")
-        or row.get("telephone")
-        or row.get("mobile")
-        or row.get("Телефон")
-        or row.get("Мобильный")
-        or ""
-    )
-    email = _normalize_spaces(
-        row.get("email")
-        or row.get("mail")
-        or row.get("e-mail")
-        or row.get("Email")
-        or row.get("Почта")
-        or row.get("Эл. почта")
-        or ""
-    )
-    contact_method = _normalize_spaces(
-        row.get("contact_method")
-        or row.get("preferred_channel")
-        or row.get("how_to_contact")
-        or row.get("Способ связи")
-        or row.get("Как связаться")
-        or ("phone" if phone else "email" if email else "")
-    )
+    company_name = _outreach_pick(row, OUTREACH_IMPORT_ALIASES["company_name"])
+    contact_name = _outreach_contact_name(row)
+    phone = _outreach_pick(row, OUTREACH_IMPORT_ALIASES["phone"])
+    email = _outreach_pick(row, OUTREACH_IMPORT_ALIASES["email"])
+    contact_method = _outreach_pick(row, OUTREACH_IMPORT_ALIASES["contact_method"]) or ("phone" if phone else "email" if email else "")
+    known_keys = {_outreach_header_key(alias) for aliases in OUTREACH_IMPORT_ALIASES.values() for alias in aliases}
+    known_keys.update({_outreach_header_key(alias) for alias in ("Фамилия", "Имя", "Отчество", "LAST_NAME", "NAME", "FIRST_NAME", "SECOND_NAME", "MIDDLE_NAME", "ID", "CONTACT_ID", "COMPANY_ID")})
     return {
         "company_name": company_name,
-        "company_inn": _normalize_spaces(str(row.get("company_inn") or row.get("inn") or row.get("ИНН") or "")),
+        "company_inn": _outreach_pick(row, OUTREACH_IMPORT_ALIASES["company_inn"]),
         "contact_name": contact_name,
-        "position": _normalize_spaces(row.get("position") or row.get("role") or row.get("Должность") or ""),
+        "position": _outreach_pick(row, OUTREACH_IMPORT_ALIASES["position"]),
         "phone": phone,
         "email": email,
-        "website": _normalize_spaces(row.get("website") or row.get("site") or row.get("url") or row.get("Сайт") or ""),
-        "city": _normalize_spaces(row.get("city") or row.get("Город") or row.get("Регион") or ""),
+        "website": _outreach_pick(row, OUTREACH_IMPORT_ALIASES["website"]),
+        "city": _outreach_pick(row, OUTREACH_IMPORT_ALIASES["city"]),
         "contact_method": contact_method,
-        "source_name": _normalize_spaces(row.get("source_name") or row.get("source") or row.get("Источник") or ""),
-        "status": _normalize_outreach_status(row.get("status") or row.get("Статус") or ""),
-        "priority": _normalize_outreach_priority(row.get("priority") or row.get("Приоритет") or ""),
-        "manager_name": _normalize_spaces(row.get("manager_name") or row.get("manager") or row.get("Менеджер") or row.get("Ответственный") or ""),
-        "manager_email": _normalize_spaces(row.get("manager_email") or row.get("manager_mail") or ""),
-        "planned_contact_date": _normalize_spaces(row.get("planned_contact_date") or row.get("План") or row.get("Дата контакта") or ""),
-        "next_action": _normalize_spaces(row.get("next_action") or row.get("Следующее действие") or ""),
-        "next_action_date": _normalize_spaces(row.get("next_action_date") or row.get("Дата следующего шага") or ""),
-        "notes": _normalize_spaces(row.get("notes") or row.get("note") or row.get("comment") or row.get("Комментарий") or ""),
-        "tags": [item.strip() for item in str(row.get("tags") or row.get("Теги") or "").split(",") if item.strip()],
-        "do_not_contact": 1 if _outreach_status_from_result(row.get("result") or "") == "do_not_contact" else _safe_int(row.get("do_not_contact") or 0),
-        "extra": {key: value for key, value in (row or {}).items() if key not in {"company_name", "company", "client", "name", "Название компании", "Компания", "Контрагент", "Организация", "contact_name", "contact", "person", "fio", "ФИО", "Контакт", "Контактное лицо", "phone", "telephone", "mobile", "Телефон", "Мобильный", "email", "mail", "e-mail", "Email", "Почта", "Эл. почта", "contact_method", "preferred_channel", "how_to_contact", "Способ связи", "Как связаться", "company_inn", "inn", "ИНН", "position", "role", "Должность", "website", "site", "url", "Сайт", "city", "Город", "Регион", "source_name", "source", "Источник", "status", "Статус", "priority", "Приоритет", "manager_name", "manager", "Менеджер", "Ответственный", "manager_email", "manager_mail", "planned_contact_date", "План", "Дата контакта", "next_action", "Следующее действие", "next_action_date", "Дата следующего шага", "notes", "note", "comment", "Комментарий", "tags", "Теги", "do_not_contact", "result"}},
+        "source_name": _outreach_pick(row, OUTREACH_IMPORT_ALIASES["source_name"]),
+        "status": _normalize_outreach_status(_outreach_pick(row, OUTREACH_IMPORT_ALIASES["status"])),
+        "priority": _normalize_outreach_priority(_outreach_pick(row, OUTREACH_IMPORT_ALIASES["priority"])),
+        "manager_name": _outreach_pick(row, OUTREACH_IMPORT_ALIASES["manager_name"]),
+        "manager_email": _outreach_pick(row, OUTREACH_IMPORT_ALIASES["manager_email"]),
+        "planned_contact_date": _outreach_pick(row, OUTREACH_IMPORT_ALIASES["planned_contact_date"]),
+        "next_action": _outreach_pick(row, OUTREACH_IMPORT_ALIASES["next_action"]),
+        "next_action_date": _outreach_pick(row, OUTREACH_IMPORT_ALIASES["next_action_date"]),
+        "notes": _outreach_pick(row, OUTREACH_IMPORT_ALIASES["notes"]),
+        "tags": [item.strip() for item in str(_outreach_pick(row, OUTREACH_IMPORT_ALIASES["tags"])).split(",") if item.strip()],
+        "do_not_contact": 1 if _outreach_status_from_result(_outreach_pick(row, OUTREACH_IMPORT_ALIASES["result"])) == "do_not_contact" else _safe_int(_outreach_pick(row, OUTREACH_IMPORT_ALIASES["do_not_contact"]) or 0),
+        "extra": {key: value for key, value in (row or {}).items() if _outreach_header_key(key) not in known_keys},
     }
 
 
@@ -548,6 +662,90 @@ def _outreach_duplicate_key(item: dict) -> str:
     if company:
         return f"company:{company}"
     return ""
+
+
+def _outreach_known_import_keys() -> set[str]:
+    keys = {_outreach_header_key(alias) for aliases in OUTREACH_IMPORT_ALIASES.values() for alias in aliases}
+    keys.update({_outreach_header_key(alias) for alias in ("Фамилия", "Имя", "Отчество", "LAST_NAME", "NAME", "FIRST_NAME", "SECOND_NAME", "MIDDLE_NAME", "ID", "CONTACT_ID", "COMPANY_ID")})
+    return keys
+
+
+def _outreach_item_lookup_keys(item: dict) -> list[str]:
+    return [
+        _outreach_duplicate_key(item),
+        f"email:{_normalize_match(item.get('email') or '')}" if item.get("email") else "",
+        f"company_phone:{_normalize_match(item.get('company_name') or '')}:{_clean_phone(item.get('phone') or '')}" if item.get("company_name") and item.get("phone") else "",
+        f"company:{_normalize_match(item.get('company_name') or '')}" if item.get("company_name") else "",
+    ]
+
+
+def _outreach_existing_key_map(rows: list[dict]) -> dict[str, dict]:
+    existing_keys = {}
+    for row in rows:
+        normalized = {
+            "company_name": row.get("company_name", ""),
+            "company_inn": row.get("company_inn", ""),
+            "phone": row.get("phone", ""),
+            "email": row.get("email", ""),
+        }
+        for key in _outreach_item_lookup_keys(normalized):
+            if key:
+                existing_keys[key] = row
+    return existing_keys
+
+
+def _outreach_import_preview_counts(data: OutreachImportData, existing_rows: list[dict]) -> dict:
+    known_keys = _outreach_known_import_keys()
+    raw_columns = []
+    seen_columns = set()
+    for raw in data.rows or []:
+        for key in (raw or {}).keys():
+            normalized = _outreach_header_key(key)
+            if normalized and normalized not in seen_columns:
+                seen_columns.add(normalized)
+                raw_columns.append(str(key))
+    recognized_columns = [key for key in raw_columns if _outreach_header_key(key) in known_keys]
+    existing_keys = _outreach_existing_key_map(existing_rows)
+    created = 0
+    updated = 0
+    skipped = 0
+    problems = []
+    default_manager_name = _normalize_spaces(data.default_manager_name)
+    default_manager_email = _normalize_spaces(data.default_manager_email)
+    default_plan_date = _normalize_spaces(data.planned_contact_date)
+    source_name = _normalize_spaces(data.source_name)
+    for index, raw in enumerate(data.rows or [], start=1):
+        item = _normalize_outreach_row(raw or {})
+        if not item["company_name"] and not item["phone"] and not item["email"]:
+            skipped += 1
+            problems.append({"row": index, "reason": "нет компании, телефона и email"})
+            continue
+        item["manager_name"] = item["manager_name"] or default_manager_name
+        item["manager_email"] = item["manager_email"] or default_manager_email
+        item["planned_contact_date"] = item["planned_contact_date"] or default_plan_date
+        item["source_name"] = item["source_name"] or source_name
+        lookup_keys = _outreach_item_lookup_keys(item)
+        match = next((existing_keys.get(key) for key in lookup_keys if key and existing_keys.get(key)), None)
+        if match:
+            updated += 1
+        else:
+            created += 1
+        virtual_row = {"id": match.get("id") if match else -created, **item}
+        for key in lookup_keys:
+            if key:
+                existing_keys[key] = virtual_row
+    return {
+        "rows_total": len(data.rows or []),
+        "columns_total": len(raw_columns),
+        "recognized_columns": len(recognized_columns),
+        "unrecognized_columns": max(0, len(raw_columns) - len(recognized_columns)),
+        "recognized_column_names": recognized_columns,
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "problem_rows": skipped,
+        "problems": problems[:20],
+    }
 
 
 def _outreach_status_from_result(value: str) -> str:
@@ -614,10 +812,42 @@ def _decorate_outreach_rows(rows: list[dict]) -> list[dict]:
                 next_dt = datetime.strptime(next_date, "%d.%m.%Y")
             except Exception:
                 next_dt = None
-        item["is_overdue"] = bool(next_dt and next_dt.date() < now.date() and item.get("status") not in {"converted", "archived", "do_not_contact"})
+        status = item.get("status")
+        is_closed = status in {"converted", "archived", "do_not_contact"}
+        created_ts = _safe_int(item.get("created_at"))
+        first_contact_age = (int(time.time()) - created_ts) if created_ts else 0
+        first_contact_overdue = bool(
+            not is_closed
+            and item.get("manager_email")
+            and _safe_int(item.get("attempts_count")) == 0
+            and first_contact_age >= 24 * 60 * 60
+        )
+        item["is_first_contact_overdue"] = first_contact_overdue
+        item["overdue_reason"] = "SLA первого контакта 24ч" if first_contact_overdue else ""
+        item["is_overdue"] = bool((next_dt and next_dt.date() < now.date() and not is_closed) or first_contact_overdue)
         item["is_due_today"] = bool(next_dt and next_dt.strftime("%Y%m%d") == today_key)
         decorated.append(item)
     return decorated
+
+
+def _outreach_manager_matches(row: dict, manager: dict) -> bool:
+    row_email = _normalize_match(row.get("manager_email", ""))
+    row_name = _normalize_match(row.get("manager_name", ""))
+    manager_email = _normalize_match(manager.get("email", ""))
+    manager_name = _normalize_match(manager.get("name", ""))
+    return bool((manager_email and row_email == manager_email) or (not manager_email and manager_name and row_name == manager_name))
+
+
+def _outreach_report_matches(row: dict, manager: dict) -> bool:
+    row_email = _normalize_match(row.get("manager_email", ""))
+    row_name = _normalize_match(row.get("manager_name", ""))
+    manager_email = _normalize_match(manager.get("email", ""))
+    manager_name = _normalize_match(manager.get("name", ""))
+    return bool((manager_email and row_email == manager_email) or (not manager_email and manager_name and row_name == manager_name))
+
+
+def _display_datetime_is_today(value: str, today: str) -> bool:
+    return str(value or "").strip().startswith(today)
 
 
 def _table_exists(conn, table_name: str) -> bool:
@@ -6256,26 +6486,7 @@ def import_outreach_prospects(data: OutreachImportData, request: Request):
     c = conn.cursor()
     c.execute("SELECT * FROM outreach_prospects")
     existing_rows = [dict(row) for row in c.fetchall()]
-    existing_keys = {}
-    for row in existing_rows:
-        row_keys = set()
-        normalized = {
-            "company_name": row.get("company_name", ""),
-            "company_inn": row.get("company_inn", ""),
-            "phone": row.get("phone", ""),
-            "email": row.get("email", ""),
-        }
-        primary_key = _outreach_duplicate_key(normalized)
-        if primary_key:
-            row_keys.add(primary_key)
-        if row.get("email"):
-            row_keys.add(f"email:{_normalize_match(row.get('email') or '')}")
-        if row.get("company_name"):
-            row_keys.add(f"company:{_normalize_match(row.get('company_name') or '')}")
-        if row.get("phone") and row.get("company_name"):
-            row_keys.add(f"company_phone:{_normalize_match(row.get('company_name') or '')}:{_clean_phone(row.get('phone') or '')}")
-        for key in row_keys:
-            existing_keys[key] = row
+    existing_keys = _outreach_existing_key_map(existing_rows)
     created = 0
     updated = 0
     skipped = 0
@@ -6293,12 +6504,7 @@ def import_outreach_prospects(data: OutreachImportData, request: Request):
         item["manager_email"] = item["manager_email"] or default_manager_email
         item["planned_contact_date"] = item["planned_contact_date"] or default_plan_date
         item["source_name"] = item["source_name"] or source_name
-        lookup_keys = [
-            _outreach_duplicate_key(item),
-            f"email:{_normalize_match(item.get('email') or '')}" if item.get("email") else "",
-            f"company_phone:{_normalize_match(item.get('company_name') or '')}:{_clean_phone(item.get('phone') or '')}" if item.get("company_name") and item.get("phone") else "",
-            f"company:{_normalize_match(item.get('company_name') or '')}" if item.get("company_name") else "",
-        ]
+        lookup_keys = _outreach_item_lookup_keys(item)
         match = next((existing_keys.get(key) for key in lookup_keys if key and existing_keys.get(key)), None)
         item_status = item["status"] or "new"
         item_processed = 1 if item_status not in {"new", "assigned"} else 0
@@ -6383,7 +6589,10 @@ def import_outreach_prospects(data: OutreachImportData, request: Request):
             )
             new_id = c.lastrowid
             created += 1
-            existing_keys[_outreach_duplicate_key(item)] = {"id": new_id, **item, "is_processed": item_processed}
+            virtual_row = {"id": new_id, **item, "is_processed": item_processed}
+            for key in lookup_keys:
+                if key:
+                    existing_keys[key] = virtual_row
     c.execute(
         """
         INSERT INTO outreach_import_batches (
@@ -6409,6 +6618,23 @@ def import_outreach_prospects(data: OutreachImportData, request: Request):
     conn.close()
     audit_log("outreach_imported", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="outreach_import", entity_id=str(batch_id), details={"filename": source_filename, "rows_total": len(data.rows), "created": created, "updated": updated, "skipped": skipped})
     return {"status": "success", "batch_id": batch_id, "created": created, "updated": updated, "skipped": skipped}
+
+
+@router.post("/api/outreach/prospects/import_preview")
+def preview_outreach_import(data: OutreachImportData, request: Request):
+    actor = require_approved_user(request)
+    if not _outreach_allowed(actor, "create"):
+        return {"error": "forbidden"}
+    if not data.rows:
+        return {"error": "items_required", "message": "Добавьте хотя бы одну строку для предпросмотра."}
+    conn = get_connection(row_factory=True)
+    try:
+        c = conn.cursor()
+        c.execute("SELECT * FROM outreach_prospects")
+        existing_rows = [dict(row) for row in c.fetchall()]
+    finally:
+        conn.close()
+    return {"status": "success", **_outreach_import_preview_counts(data, existing_rows)}
 
 
 @router.put("/api/outreach/prospects/{prospect_id}")
@@ -6624,6 +6850,79 @@ def get_outreach_reports(request: Request, report_date: str = "", manager_email:
             continue
         visible.append(row)
     return visible
+
+
+@router.get("/api/outreach/manager_control")
+def get_outreach_manager_control(request: Request):
+    actor = require_approved_user(request)
+    if not actor or not (actor.get("role") == "Директор" or _safe_int(actor.get("is_head"))):
+        return []
+    if not _outreach_allowed(actor, "read"):
+        return {"error": "forbidden"}
+    today = _today_display()
+    conn = get_connection(row_factory=True)
+    c = conn.cursor()
+    c.execute("SELECT * FROM outreach_prospects ORDER BY updated_at DESC, id DESC")
+    prospects = _decorate_outreach_rows([dict(row) for row in c.fetchall()])
+    c.execute("SELECT * FROM outreach_reports WHERE report_date=? ORDER BY updated_at DESC, id DESC", (today,))
+    reports = [dict(row) for row in c.fetchall()]
+    conn.close()
+
+    managers: dict[str, dict] = {}
+
+    def add_manager(name: str, email: str):
+        key = _normalize_match(email or name)
+        if not key:
+            return
+        if key not in managers:
+            managers[key] = {"name": _normalize_spaces(name), "email": _normalize_spaces(email)}
+
+    for row in prospects:
+        add_manager(row.get("manager_name", ""), row.get("manager_email", ""))
+    for report in reports:
+        add_manager(report.get("manager_name", ""), report.get("manager_email", ""))
+
+    rows = []
+    for manager in managers.values():
+        manager_prospects = [row for row in prospects if _outreach_manager_matches(row, manager)]
+        report = next((item for item in reports if _outreach_report_matches(item, manager)), None)
+        calls_today = 0
+        emails_today = 0
+        for prospect in manager_prospects:
+            for activity in prospect.get("activities", []) if isinstance(prospect.get("activities"), list) else []:
+                created_at = _safe_int(activity.get("created_at"))
+                if not created_at or datetime.fromtimestamp(created_at).strftime("%d.%m.%Y") != today:
+                    continue
+                if activity.get("activity_type") == "call":
+                    calls_today += 1
+                if activity.get("activity_type") == "email":
+                    emails_today += 1
+        processed_today = sum(1 for row in manager_prospects if _display_datetime_is_today(row.get("last_contact_at", ""), today))
+        converted_today = sum(1 for row in manager_prospects if row.get("status") == "converted" and _display_datetime_is_today(row.get("last_contact_at", ""), today))
+        rows.append(
+            {
+                "name": manager.get("name") or manager.get("email") or "Без имени",
+                "email": manager.get("email", ""),
+                "plan": _safe_int(report.get("plan_total")) if report else sum(1 for row in manager_prospects if row.get("is_due_today")),
+                "processed": _safe_int(report.get("processed_total")) if report else processed_today,
+                "calls": _safe_int(report.get("calls_total")) if report else calls_today,
+                "emails": _safe_int(report.get("emails_total")) if report else emails_today,
+                "overdue": sum(1 for row in manager_prospects if row.get("is_overdue")),
+                "first_contact_overdue": sum(1 for row in manager_prospects if row.get("is_first_contact_overdue")),
+                "warm": sum(1 for row in manager_prospects if row.get("status") in {"warm", "meeting"}),
+                "leads": _safe_int(report.get("converted_total")) if report else converted_today,
+                "submitted": bool(report),
+            }
+        )
+
+    return sorted(
+        rows,
+        key=lambda item: (
+            1 if item.get("submitted") else 0,
+            -_safe_int(item.get("overdue")),
+            _normalize_match(item.get("name") or item.get("email") or ""),
+        ),
+    )
 
 
 @router.post("/api/outreach/reports")
@@ -12805,46 +13104,61 @@ async def upload_file(proj_id: int, request: Request, file: UploadFile = File(..
     actor = require_approved_user(request)
     if not actor:
         return {"error": "forbidden"}
-    conn = get_connection(row_factory=True); c = conn.cursor()
-    
-    c.execute("SELECT files, logs FROM projects WHERE id=?", (proj_id,))
-    row = c.fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Проект не найден")
-    project_payload = _project_payload(dict(row) | {"id": proj_id})
-    if not can_edit_project(actor, project_payload):
-        return {"error": "forbidden"}
-    actual_user = actor.get("name", user)
-        
-    files = json.loads(row['files']) if row['files'] else []
-    logs = json.loads(row['logs']) if row['logs'] else []
-    
-    base_filename = file.filename
-    existing_files = [f for f in files if f.get('base_name', f['name']) == base_filename]
-    version = len(existing_files) + 1
-    
-    if existing_files:
-        latest_file = sorted(existing_files, key=lambda x: x.get('version', 1))[-1]
-        if latest_file.get('lockedBy') and latest_file.get('lockedBy') != actual_user:
-            raise HTTPException(status_code=403, detail=f"Файл захвачен пользователем: {latest_file.get('lockedBy')}. Дождитесь освобождения.")
+    conn = get_connection(row_factory=True)
+    try:
+        c = conn.cursor()
+        c.execute("SELECT files, logs FROM projects WHERE id=?", (proj_id,))
+        row = c.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Проект не найден")
+        project_payload = _project_payload(dict(row) | {"id": proj_id})
+        if not can_edit_project(actor, project_payload):
+            return {"error": "forbidden"}
+        actual_user = actor.get("name", user)
 
-    file_path = f"uploads/{int(time.time())}_{file.filename.replace(' ', '_')}"
-    with open(file_path, "wb") as buffer: shutil.copyfileobj(file.file, buffer)
-    
-    display_name = f"{base_filename} (v.{version})" if version > 1 else base_filename
-    
-    for f in files:
-        if f.get('base_name', f['name']) == base_filename:
-            f['lockedBy'] = None
+        safe_filename = _safe_upload_filename(file.filename)
+        if os.path.splitext(safe_filename)[1].lower() in BLOCKED_PROJECT_UPLOAD_EXTENSIONS:
+            return {"error": "file_validation_failed", "message": "extension_not_allowed"}
+        payload = await file.read()
+        if not payload:
+            return {"error": "file_validation_failed", "message": "empty_file"}
+        if len(payload) > MAX_PROJECT_UPLOAD_BYTES:
+            return {"error": "file_validation_failed", "message": "file_too_large"}
 
-    f_obj = {"name": display_name, "base_name": base_filename, "url": f"/{file_path}", "user": actual_user, "time": time.strftime("%d.%m.%Y %H:%M"), "version": version, "lockedBy": None, "doc_type": doc_type, "parent": parent_file}
-    files.append(f_obj)
-    
-    logs.insert(0, {"time": time.strftime("%d.%m.%Y %H:%M"), "user": actual_user, "action": f"Загрузил файл: {display_name}" if version == 1 else f"Обновил версию файла: {display_name}"})
-    
-    c.execute("UPDATE projects SET files=?, logs=? WHERE id=?", (json.dumps(files), json.dumps(logs), proj_id))
-    conn.commit()
-    conn.close()
+        files = json.loads(row['files']) if row['files'] else []
+        logs = json.loads(row['logs']) if row['logs'] else []
+
+        base_filename = safe_filename
+        existing_files = [f for f in files if f.get('base_name', f['name']) == base_filename]
+        version = len(existing_files) + 1
+
+        if existing_files:
+            latest_file = sorted(existing_files, key=lambda x: x.get('version', 1))[-1]
+            if latest_file.get('lockedBy') and latest_file.get('lockedBy') != actual_user:
+                raise HTTPException(status_code=403, detail=f"Файл захвачен пользователем: {latest_file.get('lockedBy')}. Дождитесь освобождения.")
+
+        os.makedirs(UPLOADS_DIR, exist_ok=True)
+        checksum = hashlib.sha256(payload).hexdigest()[:12]
+        stored_filename = f"{int(time.time())}_{int(proj_id or 0)}_{checksum}_{safe_filename}"
+        file_path = os.path.join(UPLOADS_DIR, stored_filename)
+        with open(file_path, "wb") as buffer:
+            buffer.write(payload)
+
+        display_name = f"{base_filename} (v.{version})" if version > 1 else base_filename
+
+        for f in files:
+            if f.get('base_name', f['name']) == base_filename:
+                f['lockedBy'] = None
+
+        f_obj = {"name": display_name, "base_name": base_filename, "url": f"/uploads/{stored_filename}", "user": actual_user, "time": time.strftime("%d.%m.%Y %H:%M"), "version": version, "lockedBy": None, "doc_type": doc_type, "parent": parent_file}
+        files.append(f_obj)
+
+        logs.insert(0, {"time": time.strftime("%d.%m.%Y %H:%M"), "user": actual_user, "action": f"Загрузил файл: {display_name}" if version == 1 else f"Обновил версию файла: {display_name}"})
+
+        c.execute("UPDATE projects SET files=?, logs=? WHERE id=?", (json.dumps(files), json.dumps(logs), proj_id))
+        conn.commit()
+    finally:
+        conn.close()
     
     await manager.broadcast({"type": "projects"}) 
     return {"status": "success", "file": f_obj}

@@ -25,6 +25,38 @@ const WORKSPACE_SHORTCUT_DEFS = {
             windows: { ctrl: true, meta: false, alt: false, shift: true, key: 'f' },
         },
     },
+    notifications: {
+        label: 'Уведомления',
+        description: 'Открыть колокольчик и быстро перейти к новым событиям',
+        defaults: {
+            mac: { ctrl: false, meta: true, alt: false, shift: true, key: 'n' },
+            windows: { ctrl: true, meta: false, alt: false, shift: true, key: 'n' },
+        },
+    },
+    newTask: {
+        label: 'Создать поручение',
+        description: 'Открыть быстрое создание новой задачи',
+        defaults: {
+            mac: { ctrl: false, meta: true, alt: false, shift: true, key: 't' },
+            windows: { ctrl: true, meta: false, alt: false, shift: true, key: 't' },
+        },
+    },
+    newDocument: {
+        label: 'Создать документ',
+        description: 'Открыть карточку нового входящего или исходящего документа',
+        defaults: {
+            mac: { ctrl: false, meta: true, alt: false, shift: true, key: 'd' },
+            windows: { ctrl: true, meta: false, alt: false, shift: true, key: 'd' },
+        },
+    },
+    qrScanner: {
+        label: 'QR-сканер',
+        description: 'Открыть сканирование QR без перехода по меню',
+        defaults: {
+            mac: { ctrl: false, meta: true, alt: false, shift: true, key: 'q' },
+            windows: { ctrl: true, meta: false, alt: false, shift: true, key: 'q' },
+        },
+    },
 };
 
 let workspaceConfigCache = null;
@@ -128,6 +160,7 @@ function getWorkspaceDefaultConfig() {
         dashboardBlockOrder: WORKSPACE_DASHBOARD_BLOCKS.map(block => block.key),
         hiddenDashboardBlocks: [],
         platformPreference: 'auto',
+        shortcutOrder: Object.keys(WORKSPACE_SHORTCUT_DEFS),
         shortcuts: getWorkspaceDefaultShortcuts(),
     };
 }
@@ -147,8 +180,13 @@ function normalizeWorkspaceConfig(rawConfig = null) {
     });
     const allNavItemIds = uniqueWorkspaceList(getWorkspaceSidebarMeta().flatMap(group => group.itemIds));
     const platformPreference = sanitizeWorkspacePlatformPreference(next.platformPreference || defaults.platformPreference);
+    const shortcutKeys = Object.keys(WORKSPACE_SHORTCUT_DEFS);
+    const shortcutOrder = uniqueWorkspaceList(next.shortcutOrder).filter(key => shortcutKeys.includes(key));
+    shortcutKeys.forEach(key => {
+        if (!shortcutOrder.includes(key)) shortcutOrder.push(key);
+    });
     const shortcuts = {};
-    Object.keys(WORKSPACE_SHORTCUT_DEFS).forEach(actionKey => {
+    shortcutKeys.forEach(actionKey => {
         shortcuts[actionKey] = getWorkspaceShortcutConfig(actionKey, {
             ...defaults,
             platformPreference,
@@ -156,13 +194,14 @@ function normalizeWorkspaceConfig(rawConfig = null) {
         });
     });
     return {
-        version: 2,
+        version: 3,
         sidebarGroupOrder,
         hiddenGroups: uniqueWorkspaceList(next.hiddenGroups).filter(id => groupIds.includes(id)),
         hiddenNavItems: uniqueWorkspaceList(next.hiddenNavItems).filter(id => allNavItemIds.includes(id)),
         dashboardBlockOrder,
         hiddenDashboardBlocks: uniqueWorkspaceList(next.hiddenDashboardBlocks).filter(key => dashboardKeys.includes(key)),
         platformPreference,
+        shortcutOrder,
         shortcuts,
     };
 }
@@ -211,6 +250,132 @@ function workspaceEscape(value) {
 
 function workspaceStateLabel(isVisible) {
     return isVisible ? 'Показан' : 'Скрыт';
+}
+
+function workspaceShortcutRead(prefix) {
+    const keyValue = String(document.getElementById(`${prefix}key`)?.value || '').trim();
+    return {
+        ctrl: Boolean(document.getElementById(`${prefix}ctrl`)?.checked),
+        meta: Boolean(document.getElementById(`${prefix}meta`)?.checked),
+        alt: Boolean(document.getElementById(`${prefix}alt`)?.checked),
+        shift: Boolean(document.getElementById(`${prefix}shift`)?.checked),
+        key: keyValue ? keyValue.slice(0, 1).toLowerCase() : '',
+    };
+}
+
+function workspaceShortcutSignature(shortcut = {}) {
+    return [
+        shortcut.ctrl ? 'ctrl' : '',
+        shortcut.meta ? 'meta' : '',
+        shortcut.alt ? 'alt' : '',
+        shortcut.shift ? 'shift' : '',
+        String(shortcut.key || '').trim().toLowerCase(),
+    ].filter(Boolean).join('+');
+}
+
+function findWorkspaceShortcutConflict(actionKey, shortcut, config = loadWorkspaceConfig()) {
+    const defs = window.WORKSPACE_SHORTCUT_DEFS || {};
+    const signature = workspaceShortcutSignature(shortcut);
+    if (!signature) return null;
+    return Object.keys(defs).find(otherActionKey => {
+        if (otherActionKey === actionKey) return false;
+        return workspaceShortcutSignature(getWorkspaceShortcutConfig(otherActionKey, config)) === signature;
+    }) || null;
+}
+
+function renderWorkspaceShortcutSection(config = loadWorkspaceConfig()) {
+    const preference = String(config?.platformPreference || 'auto');
+    const resolvedPlatform = resolveWorkspaceShortcutPlatform(preference);
+    const defs = window.WORKSPACE_SHORTCUT_DEFS || {};
+    const shortcutOrder = Array.isArray(config?.shortcutOrder) && config.shortcutOrder.length
+        ? config.shortcutOrder.filter(actionKey => defs[actionKey])
+        : Object.keys(defs);
+    const actionOptions = Object.entries(defs).map(([optionKey, optionDefinition]) => ({
+        key: optionKey,
+        label: optionDefinition.label || optionKey,
+    }));
+    const rows = shortcutOrder.map((actionKey, slotIndex) => {
+        const definition = defs[actionKey];
+        const shortcut = getWorkspaceShortcutConfig(actionKey, config);
+        const preview = formatWorkspaceShortcutLabel(shortcut, resolvedPlatform);
+        const slotLabel = `Сочетание ${slotIndex + 1}`;
+        const prefix = `workspaceShortcut_slot${slotIndex}_`;
+        const optionsHtml = actionOptions.map(option => `
+            <option value="${workspaceEscape(option.key)}" ${option.key === actionKey ? 'selected' : ''}>${workspaceEscape(option.label)}</option>
+        `).join('');
+        return `
+            <div class="profile-shortcut-row">
+                <div class="profile-shortcut-copy">
+                    <div class="profile-shortcut-head">
+                        <div>
+                            <div class="profile-shortcut-keylabel">${workspaceEscape(slotLabel)}</div>
+                            <div class="profile-shortcut-title">Действие сочетания</div>
+                        </div>
+                        <span class="profile-shortcut-preview">${workspaceEscape(preview)}</span>
+                    </div>
+                    <div class="profile-shortcut-actionwrap">
+                        <span class="profile-shortcut-keylabel">Что делает сочетание</span>
+                        <select id="${prefix}action" class="auth-input profile-shortcut-action" onchange="changeWorkspaceShortcutAction(${slotIndex}, this.value)">
+                            ${optionsHtml}
+                        </select>
+                    </div>
+                    <div class="profile-shortcut-text">
+                        <strong>${workspaceEscape(definition.label || actionKey)}</strong>.<br>
+                        Сначала выбери действие, потом выставь модификаторы и клавишу. ${workspaceEscape(definition.description || '')}
+                    </div>
+                </div>
+                <div class="profile-shortcut-form">
+                    <label class="profile-shortcut-toggle">
+                        <input id="${prefix}ctrl" type="checkbox" ${shortcut.ctrl ? 'checked' : ''}>
+                        <span>Ctrl</span>
+                    </label>
+                    <label class="profile-shortcut-toggle">
+                        <input id="${prefix}meta" type="checkbox" ${shortcut.meta ? 'checked' : ''}>
+                        <span>${resolvedPlatform === 'mac' ? '⌘ Cmd' : 'Win'}</span>
+                    </label>
+                    <label class="profile-shortcut-toggle">
+                        <input id="${prefix}alt" type="checkbox" ${shortcut.alt ? 'checked' : ''}>
+                        <span>${resolvedPlatform === 'mac' ? 'Option' : 'Alt'}</span>
+                    </label>
+                    <label class="profile-shortcut-toggle">
+                        <input id="${prefix}shift" type="checkbox" ${shortcut.shift ? 'checked' : ''}>
+                        <span>Shift</span>
+                    </label>
+                    <div class="profile-shortcut-keywrap">
+                        <span class="profile-shortcut-keylabel">Клавиша</span>
+                        <input id="${prefix}key" class="auth-input profile-shortcut-key" type="text" maxlength="1" value="${workspaceEscape(shortcut.key || '')}" placeholder="K">
+                    </div>
+                    <div class="profile-shortcut-actions">
+                        <button class="btn-primary" type="button" onclick="saveWorkspaceShortcutSlot(${slotIndex})">Сохранить</button>
+                        <button class="btn-secondary" type="button" onclick="resetWorkspaceShortcutSlot(${slotIndex})">По умолчанию</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <section class="workspace-config-section">
+            <div class="workspace-config-section-head">
+                <div>
+                    <div class="workspace-config-eyebrow">Горячие клавиши</div>
+                    <h3 class="workspace-config-title">Командная палитра и поиск</h3>
+                    <p class="workspace-config-text">Выбери платформу, затем задай каждой комбинации конкретное действие. Конфиг меняется сразу для текущего пользователя.</p>
+                </div>
+                <div class="workspace-config-header-actions">
+                    <select id="workspaceConfigPlatformPreference" class="auth-input" onchange="saveWorkspacePlatformPreference(this.value); renderWorkspaceConfigModal(); if (typeof updateCommandPaletteShortcutHints === 'function') updateCommandPaletteShortcutHints();">
+                        <option value="auto" ${preference === 'auto' ? 'selected' : ''}>Автоопределение</option>
+                        <option value="windows" ${preference === 'windows' ? 'selected' : ''}>Windows / Ctrl</option>
+                        <option value="mac" ${preference === 'mac' ? 'selected' : ''}>macOS / Command</option>
+                    </select>
+                    <span class="ops-section-chip ops-section-chip--primary">${resolvedPlatform === 'mac' ? 'macOS' : 'Windows/PC'}</span>
+                </div>
+            </div>
+            <div class="workspace-config-stack">
+                <div class="profile-shortcut-grid">${rows}</div>
+            </div>
+        </section>
+    `;
 }
 
 function applySidebarWorkspaceConfig() {
@@ -368,6 +533,7 @@ function renderWorkspaceConfigModal() {
                 <div class="workspace-config-stack">${dashboardHtml || '<div class="empty-state">Блоки дашборда пока недоступны для настройки.</div>'}</div>
             </section>
         </div>
+        ${renderWorkspaceShortcutSection(config)}
         <div class="workspace-config-note">Личный кабинет и служебные зоны остаются закреплены. Конфиг сохраняется отдельно для каждого пользователя и роли.</div>
     `;
 }
@@ -452,6 +618,18 @@ function saveWorkspaceShortcutConfig(actionKey, nextShortcut) {
     return loadWorkspaceConfig();
 }
 
+function saveWorkspaceShortcutOrder(nextOrder = []) {
+    mutateWorkspaceConfig(config => {
+        const shortcutKeys = Object.keys(WORKSPACE_SHORTCUT_DEFS);
+        const normalized = uniqueWorkspaceList(nextOrder).filter(key => shortcutKeys.includes(key));
+        shortcutKeys.forEach(key => {
+            if (!normalized.includes(key)) normalized.push(key);
+        });
+        config.shortcutOrder = normalized;
+    });
+    return loadWorkspaceConfig();
+}
+
 function resetWorkspaceShortcutConfig(actionKey) {
     if (!WORKSPACE_SHORTCUT_DEFS[actionKey]) return loadWorkspaceConfig();
     mutateWorkspaceConfig(config => {
@@ -459,6 +637,68 @@ function resetWorkspaceShortcutConfig(actionKey) {
         delete config.shortcuts[actionKey];
     });
     return loadWorkspaceConfig();
+}
+
+function changeWorkspaceShortcutAction(slotIndex, nextActionKey) {
+    const defs = window.WORKSPACE_SHORTCUT_DEFS || {};
+    if (!defs[nextActionKey]) return;
+    const config = loadWorkspaceConfig();
+    const fallbackOrder = Object.keys(defs);
+    const order = Array.isArray(config?.shortcutOrder) && config.shortcutOrder.length
+        ? [...config.shortcutOrder]
+        : [...fallbackOrder];
+    const currentActionKey = order[slotIndex];
+    if (!currentActionKey || currentActionKey === nextActionKey) return;
+    const existingIndex = order.indexOf(nextActionKey);
+    if (existingIndex >= 0) {
+        [order[slotIndex], order[existingIndex]] = [order[existingIndex], order[slotIndex]];
+    } else {
+        order[slotIndex] = nextActionKey;
+    }
+    saveWorkspaceShortcutOrder(order);
+    renderWorkspaceConfigModal();
+    if (typeof updateCommandPaletteShortcutHints === 'function') updateCommandPaletteShortcutHints();
+    if (typeof showToast === 'function') showToast('Горячие клавиши', 'Назначение действия обновлено');
+}
+
+function saveWorkspaceShortcutSlot(slotIndex) {
+    const actionKey = String(document.getElementById(`workspaceShortcut_slot${slotIndex}_action`)?.value || '').trim();
+    const shortcut = workspaceShortcutRead(`workspaceShortcut_slot${slotIndex}_`);
+    const defs = window.WORKSPACE_SHORTCUT_DEFS || {};
+    if (!actionKey) {
+        if (typeof customAlert === 'function') customAlert('Выбери действие для сочетания.');
+        return;
+    }
+    if (!shortcut.key) {
+        if (typeof customAlert === 'function') customAlert('Укажи клавишу для сочетания.');
+        return;
+    }
+    if (!shortcut.ctrl && !shortcut.meta && !shortcut.alt && !shortcut.shift) {
+        if (typeof customAlert === 'function') customAlert('Выбери хотя бы один модификатор: Ctrl, Cmd/Win, Alt или Shift.');
+        return;
+    }
+    const conflictActionKey = findWorkspaceShortcutConflict(actionKey, shortcut);
+    if (conflictActionKey) {
+        const currentLabel = defs[actionKey]?.label || actionKey;
+        const conflictLabel = defs[conflictActionKey]?.label || conflictActionKey;
+        if (typeof customAlert === 'function') {
+            customAlert(`Сочетание уже занято.\n\n"${currentLabel}" конфликтует с действием "${conflictLabel}".\nВыбери другую комбинацию или сначала сбрось конфликтующее действие.`);
+        }
+        return;
+    }
+    saveWorkspaceShortcutConfig(actionKey, shortcut);
+    renderWorkspaceConfigModal();
+    if (typeof updateCommandPaletteShortcutHints === 'function') updateCommandPaletteShortcutHints();
+    if (typeof showToast === 'function') showToast('Горячие клавиши', `Сочетание сохранено для "${defs[actionKey]?.label || actionKey}"`);
+}
+
+function resetWorkspaceShortcutSlot(slotIndex) {
+    const actionKey = String(document.getElementById(`workspaceShortcut_slot${slotIndex}_action`)?.value || '').trim();
+    if (!actionKey) return;
+    resetWorkspaceShortcutConfig(actionKey);
+    renderWorkspaceConfigModal();
+    if (typeof updateCommandPaletteShortcutHints === 'function') updateCommandPaletteShortcutHints();
+    if (typeof showToast === 'function') showToast('Горячие клавиши', 'Сочетание сброшено');
 }
 
 async function resetWorkspaceConfig() {
@@ -495,4 +735,8 @@ window.formatWorkspaceShortcutLabel = formatWorkspaceShortcutLabel;
 window.shortcutLabelParts = shortcutLabelParts;
 window.saveWorkspacePlatformPreference = saveWorkspacePlatformPreference;
 window.saveWorkspaceShortcutConfig = saveWorkspaceShortcutConfig;
+window.saveWorkspaceShortcutOrder = saveWorkspaceShortcutOrder;
 window.resetWorkspaceShortcutConfig = resetWorkspaceShortcutConfig;
+window.changeWorkspaceShortcutAction = changeWorkspaceShortcutAction;
+window.saveWorkspaceShortcutSlot = saveWorkspaceShortcutSlot;
+window.resetWorkspaceShortcutSlot = resetWorkspaceShortcutSlot;

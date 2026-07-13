@@ -1653,6 +1653,9 @@ async def upload_doc_file(doc_id: int, request: Request, file: UploadFile = File
         document = _row_dict(c.fetchone())
         if not document:
             return {"error": "document_not_found"}
+        access_ok, _, _, _, _ = _document_scope_access(conn, actor, doc_id)
+        if not access_ok:
+            return {"error": "forbidden"}
         file_bytes = await file.read()
         try:
             revision = _create_document_file_revision(c, document, actor, file.filename or "", file.content_type or "", file_bytes, comment, make_current, "upload")

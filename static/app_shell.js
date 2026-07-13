@@ -543,6 +543,8 @@ window.clearFormDraft = function(key, notify = false) {
 };
 
 let omniSearchSeq = 0;
+let omniSearchResults = [];
+let omniSearchSelectedIndex = -1;
 let commandPaletteResults = [];
 let commandPaletteSelectedIndex = 0;
 let commandPaletteSeq = 0;
@@ -604,16 +606,117 @@ function searchQueryVariants(query) {
 function matchesSearchNeedle(values, query) {
     const variants = searchQueryVariants(query);
     if (!variants.length) return false;
-    const haystack = (Array.isArray(values) ? values : [values])
+    const fields = (Array.isArray(values) ? values : [values])
         .map(value => String(value || '').toLowerCase())
-        .join(' ');
-    return variants.some(needle => haystack.includes(needle));
+        .filter(Boolean);
+    const haystack = fields.join(' ');
+    const compactHaystack = normalizeSearchComparable(haystack);
+    return variants.some(needle => {
+        if (!needle) return false;
+        if (haystack.includes(needle)) return true;
+        const compactNeedle = normalizeSearchComparable(needle);
+        if (compactNeedle && compactHaystack.includes(compactNeedle)) return true;
+        const tokens = needle.split(/\s+/).map(token => token.trim()).filter(Boolean);
+        if (!tokens.length) return false;
+        return tokens.every(token => {
+            const compactToken = normalizeSearchComparable(token);
+            return haystack.includes(token) || (compactToken && compactHaystack.includes(compactToken));
+        });
+    });
+}
+
+function normalizeSearchComparable(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[\s\-–—_/\\.,:;()[\]{}"'`]+/g, '')
+        .trim();
+}
+
+function searchMatchScore(values, query) {
+    const variants = searchQueryVariants(query);
+    if (!variants.length) return -1;
+    const fields = (Array.isArray(values) ? values : [values]).map(value => String(value || '').toLowerCase().trim());
+    let best = -1;
+    fields.forEach((field, fieldIndex) => {
+        if (!field) return;
+        const compactField = normalizeSearchComparable(field);
+        variants.forEach((needle, needleIndex) => {
+            if (!needle) return;
+            const compactNeedle = normalizeSearchComparable(needle);
+            let score = -1;
+            if (field === needle || (compactNeedle && compactField === compactNeedle)) {
+                score = 860;
+            } else if (field.startsWith(needle)) {
+                score = 690;
+            } else {
+                const wordIndex = field.indexOf(` ${needle}`);
+                if (wordIndex >= 0) {
+                    score = 620 - Math.min(wordIndex, 80);
+                } else {
+                    const index = field.indexOf(needle);
+                    if (index >= 0) score = 520 - Math.min(index, 120);
+                }
+            }
+            if (score < 0 && compactNeedle && compactField.includes(compactNeedle)) {
+                score = 560;
+            }
+            if (score < 0) {
+                const tokens = needle.split(/\s+/).map(token => token.trim()).filter(Boolean);
+                if (tokens.length > 1) {
+                    const matchedTokens = tokens.filter(token => {
+                        const compactToken = normalizeSearchComparable(token);
+                        return field.includes(token) || (compactToken && compactField.includes(compactToken));
+                    }).length;
+                    if (matchedTokens === tokens.length) {
+                        score = 470 + Math.min(tokens.length * 18, 80);
+                    } else if (matchedTokens > 0) {
+                        score = 330 + matchedTokens * 22;
+                    }
+                }
+            }
+            if (score >= 0) {
+                score += Math.max(0, 28 - fieldIndex * 8) - needleIndex * 3;
+                best = Math.max(best, score);
+            }
+        });
+    });
+    return best;
+}
+
+function searchResultBucketKey(item = {}) {
+    return [
+        String(item.entityType || item.type || '').toLowerCase(),
+        String(item.entityId ?? item.title ?? '').toLowerCase(),
+        String(item.title || '').toLowerCase(),
+    ].join('::');
+}
+
+function mergeRankedSearchResult(bucket, item, score) {
+    if (!(bucket instanceof Map) || !item || score < 0) return;
+    const key = searchResultBucketKey(item);
+    const next = { ...item, __score: score };
+    const current = bucket.get(key);
+    if (!current || score > Number(current.__score || -1)) {
+        bucket.set(key, next);
+    }
+}
+
+function rankedSearchResults(bucket, limit = 12) {
+    return Array.from((bucket instanceof Map ? bucket.values() : []))
+        .sort((left, right) => {
+            const scoreDiff = Number(right.__score || 0) - Number(left.__score || 0);
+            if (scoreDiff !== 0) return scoreDiff;
+            return String(left.title || '').localeCompare(String(right.title || ''), 'ru');
+        })
+        .slice(0, limit)
+        .map(({ __score, ...item }) => item);
 }
 
 function setFloatingPanelVisibility(element, isVisible, displayMode = 'block') {
     if (!element) return;
     element.classList.toggle('krd-is-hidden', !isVisible);
     element.style.display = isVisible ? displayMode : 'none';
+    element.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
 }
 
 function keyboardEventMatchesShortcut(event, shortcut) {
@@ -646,6 +749,39 @@ function updateCommandPaletteShortcutHints() {
     if (shortcut) shortcut.innerHTML = shortcutLabelBadges('commandPalette');
     const searchInput = document.getElementById('searchInput');
     if (searchInput) searchInput.title = `Глобальный поиск (${searchLabel})`;
+}
+
+function workspaceShortcutHandlers() {
+    return {
+        commandPalette: () => {
+            if (typeof openCommandPalette === 'function') openCommandPalette();
+        },
+        globalSearch: () => {
+            focusGlobalSearchInput();
+            if (typeof openOmniSearchSuggestions === 'function') openOmniSearchSuggestions();
+        },
+        notifications: () => {
+            if (typeof toggleNotifications === 'function') toggleNotifications(true, true);
+        },
+        newTask: () => {
+            commandCreateTask();
+        },
+        newDocument: () => {
+            commandCreateDocument({});
+        },
+        qrScanner: () => {
+            if (typeof openScanner === 'function') openScanner();
+        },
+    };
+}
+
+function orderedWorkspaceShortcutActions() {
+    const defs = window.WORKSPACE_SHORTCUT_DEFS || {};
+    const config = typeof loadWorkspaceConfig === 'function' ? loadWorkspaceConfig() : {};
+    const ordered = Array.isArray(config?.shortcutOrder) && config.shortcutOrder.length
+        ? config.shortcutOrder.filter(actionKey => defs[actionKey])
+        : Object.keys(defs);
+    return ordered.filter(Boolean);
 }
 
 function navigationSearchCatalog() {
@@ -762,7 +898,39 @@ function openSearchSection(view) {
 
 function closeCommandPalette() {
     const overlay = document.getElementById('commandPaletteOverlay');
-    if (overlay) overlay.style.display = 'none';
+    if (!overlay) return;
+    overlay.style.display = 'none';
+    overlay.setAttribute('aria-hidden', 'true');
+    const input = document.getElementById('commandPaletteInput');
+    if (input) input.blur();
+}
+window.closeCommandPalette = closeCommandPalette;
+
+function readTopbarSearchQuery(explicitQuery = null) {
+    if (explicitQuery !== null && explicitQuery !== undefined) {
+        return String(explicitQuery || '').trim();
+    }
+    const input = document.getElementById('searchInput');
+    if (!input) return '';
+    return String(
+        input.value
+        || input.getAttribute?.('value')
+        || input.dataset?.query
+        || ''
+    ).trim();
+}
+
+function writeTopbarSearchQuery(nextQuery = '') {
+    const value = String(nextQuery || '');
+    const input = document.getElementById('searchInput');
+    if (!input) return;
+    try {
+        input.value = value;
+    } catch (_) {}
+    try {
+        input.setAttribute('value', value);
+    } catch (_) {}
+    if (input.dataset) input.dataset.query = value;
 }
 
 function commandPaletteRunSafely(action) {
@@ -871,47 +1039,94 @@ function runQuickSearchCommand(index) {
 function commandPaletteEntityCommands(query) {
     const q = String(query || '').toLowerCase().trim();
     if (!q) return [];
-    const matches = (values) => matchesSearchNeedle(values, q);
-    const rows = [];
+    const bucket = new Map();
+    const push = (item, values, boost = 0) => {
+        const score = searchMatchScore(values, q);
+        mergeRankedSearchResult(bucket, item, score >= 0 ? score + boost : score);
+    };
     const projectRows = typeof projectsDB !== 'undefined' && Array.isArray(projectsDB) ? projectsDB : [];
     projectRows.forEach(item => {
-        if (matches([item.name, item.contract, item.client])) rows.push({ group: 'Найдено', icon: 'PR', title: item.name || item.contract || `Проект #${item.id}`, desc: item.contract || item.client || 'Проект', chip: 'Проект', action: () => openProject(Number(item.id || 0)) });
+        push(
+            { group: 'Найдено', icon: 'PR', title: item.name || item.contract || `Проект #${item.id}`, desc: item.contract || item.client || 'Проект', chip: 'Проект', entityType: 'project', entityId: Number(item.id || 0), action: () => openProject(Number(item.id || 0)) },
+            [item.name, item.contract, item.client],
+            String(item.contract || '').toLowerCase() === q ? 120 : 0,
+        );
     });
     const clientRows = typeof clientsDB !== 'undefined' && Array.isArray(clientsDB) ? clientsDB : [];
     clientRows.forEach(item => {
-        if (matches([item.name, item.inn, item.contact])) rows.push({ group: 'Найдено', icon: 'CL', title: item.name || `Клиент #${item.id}`, desc: item.inn || item.contact || 'Контрагент', chip: 'Клиент', action: () => openOmniSearchResult('client', Number(item.id || 0), 'clients') });
+        push(
+            { group: 'Найдено', icon: 'CL', title: item.name || `Клиент #${item.id}`, desc: item.inn || item.contact || 'Контрагент', chip: 'Клиент', entityType: 'client', entityId: Number(item.id || 0), action: () => openOmniSearchResult('client', Number(item.id || 0), 'clients') },
+            [item.name, item.inn, item.contact],
+        );
     });
     const documentRows = typeof documentsDB !== 'undefined' && Array.isArray(documentsDB) ? documentsDB : [];
     documentRows.forEach(item => {
-        if (matches([item.number, item.subject, item.correspondent])) rows.push({ group: 'Найдено', icon: 'DOC', title: item.number || `Документ #${item.id}`, desc: item.subject || item.correspondent || 'Документ', chip: 'Документ', action: () => openOmniSearchResult('document', Number(item.id || 0), 'documents') });
+        push(
+            { group: 'Найдено', icon: 'DOC', title: item.number || `Документ #${item.id}`, desc: item.subject || item.correspondent || 'Документ', chip: 'Документ', entityType: 'document', entityId: Number(item.id || 0), action: () => openOmniSearchResult('document', Number(item.id || 0), 'documents') },
+            [item.number, item.subject, item.correspondent],
+        );
     });
     const taskRows = typeof tasksDB !== 'undefined' && Array.isArray(tasksDB) ? tasksDB : [];
     taskRows.forEach(item => {
-        if (matches([item.title, item.executor, item.description])) rows.push({ group: 'Найдено', icon: 'TSK', title: item.title || `Задача #${item.id}`, desc: item.executor || item.deadline || 'Поручение', chip: 'Задача', action: () => openOmniSearchResult('task', Number(item.id || 0), 'tasks') });
+        push(
+            { group: 'Найдено', icon: 'TSK', title: item.title || `Задача #${item.id}`, desc: item.executor || item.deadline || 'Поручение', chip: 'Задача', entityType: 'task', entityId: Number(item.id || 0), action: () => openOmniSearchResult('task', Number(item.id || 0), 'tasks') },
+            [item.title, item.executor, item.description],
+        );
     });
     const leadRows = typeof crmLeadsDB !== 'undefined' && Array.isArray(crmLeadsDB) ? crmLeadsDB : [];
     leadRows.forEach(item => {
-        if (matches([item.title, item.client_name, item.contact_name, item.contact_email, item.contact_phone, item.next_action])) rows.push({ group: 'Найдено', icon: 'LEAD', title: item.title || `Лид #${item.id}`, desc: item.client_name || item.contact_name || item.source || 'Лид', chip: 'Лид', action: () => openOmniSearchResult('lead', Number(item.id || 0), 'leads') });
+        push(
+            { group: 'Найдено', icon: 'LEAD', title: item.title || `Лид #${item.id}`, desc: item.client_name || item.contact_name || item.source || 'Лид', chip: 'Лид', entityType: 'lead', entityId: Number(item.id || 0), action: () => openOmniSearchResult('lead', Number(item.id || 0), 'leads') },
+            [item.title, item.client_name, item.contact_name, item.contact_email, item.contact_phone, item.next_action],
+        );
     });
     const dealRows = typeof crmDealsDB !== 'undefined' && Array.isArray(crmDealsDB) ? crmDealsDB : [];
     dealRows.forEach(item => {
-        if (matches([item.title, item.client_name, item.contract_number, item.next_action, item.responsible])) rows.push({ group: 'Найдено', icon: 'DEAL', title: item.title || `Сделка #${item.id}`, desc: item.contract_number || item.client_name || item.next_action || 'Сделка', chip: 'Сделка', action: () => openOmniSearchResult('deal', Number(item.id || 0), 'deals') });
+        push(
+            { group: 'Найдено', icon: 'DEAL', title: item.title || `Сделка #${item.id}`, desc: item.contract_number || item.client_name || item.next_action || 'Сделка', chip: 'Сделка', entityType: 'deal', entityId: Number(item.id || 0), action: () => openOmniSearchResult('deal', Number(item.id || 0), 'deals') },
+            [item.title, item.client_name, item.contract_number, item.next_action, item.responsible],
+            String(item.contract_number || '').toLowerCase() === q ? 120 : 0,
+        );
     });
     const financeRows = typeof financePaymentsDB !== 'undefined' && Array.isArray(financePaymentsDB) ? financePaymentsDB : [];
     if (financeRows.length) {
         financeRows.forEach(item => {
-            if (matches([item.title, item.client_name, item.project_name, item.project_contract, item.comment])) rows.push({ group: 'Найдено', icon: 'FIN', title: item.title || `Платёж #${item.id}`, desc: `${item.client_name || item.project_name || 'Финансы'} · ${item.amount || ''}`, chip: 'Оплата', action: () => openOmniSearchResult('finance_payment', Number(item.id || 0), 'finance') });
+            push(
+                { group: 'Найдено', icon: 'FIN', title: item.title || `Платёж #${item.id}`, desc: `${item.client_name || item.project_name || 'Финансы'} · ${item.amount || ''}`, chip: 'Оплата', entityType: 'finance_payment', entityId: Number(item.id || 0), action: () => openOmniSearchResult('finance_payment', Number(item.id || 0), 'finance') },
+                [item.title, item.client_name, item.project_name, item.project_contract, item.comment],
+            );
         });
     }
     const purchaseRows = typeof purchasesDB !== 'undefined' && Array.isArray(purchasesDB) ? purchasesDB : [];
     purchaseRows.forEach(item => {
-        if (matches([item.item_name, item.item_article, item.supplier, item.project_name, item.client_name])) rows.push({ group: 'Найдено', icon: 'PUR', title: item.item_name || `Закупка #${item.id}`, desc: item.supplier || item.expected_date || 'Закупка', chip: 'Закупка', action: () => openOmniSearchResult('purchase_order', Number(item.id || 0), 'supply') });
+        push(
+            { group: 'Найдено', icon: 'PUR', title: item.item_name || `Закупка #${item.id}`, desc: item.supplier || item.expected_date || 'Закупка', chip: 'Закупка', entityType: 'purchase_order', entityId: Number(item.id || 0), action: () => openOmniSearchResult('purchase_order', Number(item.id || 0), 'supply') },
+            [item.item_name, item.item_article, item.supplier, item.project_name, item.client_name],
+        );
     });
     const productionRows = typeof productionOrdersDB !== 'undefined' && Array.isArray(productionOrdersDB) ? productionOrdersDB : [];
     productionRows.forEach(item => {
-        if (matches([item.order_name, item.responsible, item.project_name, item.client_name, item.route_name])) rows.push({ group: 'Найдено', icon: 'MFG', title: item.order_name || `Производственный заказ #${item.id}`, desc: item.responsible || item.stage || 'Производство', chip: 'Производство', action: () => openOmniSearchResult('production_order', Number(item.id || 0), 'production') });
+        push(
+            { group: 'Найдено', icon: 'MFG', title: item.order_name || `Производственный заказ #${item.id}`, desc: item.responsible || item.stage || 'Производство', chip: 'Производство', entityType: 'production_order', entityId: Number(item.id || 0), action: () => openOmniSearchResult('production_order', Number(item.id || 0), 'production') },
+            [item.order_name, item.responsible, item.project_name, item.client_name, item.route_name],
+        );
     });
-    return rows.slice(0, 10);
+    const contractRows = typeof contractRegistryDB !== 'undefined' && Array.isArray(contractRegistryDB) ? contractRegistryDB : [];
+    contractRows.forEach(item => {
+        push(
+            { group: 'Найдено', icon: 'CTR', title: item.contract_number || item.title || `Договор #${item.id}`, desc: [item.title, item.client_name].filter(Boolean).join(' · ') || 'Договор', chip: 'Договор', entityType: 'contract', entityId: Number(item.id || 0), action: () => openOmniSearchResult('contract', Number(item.id || 0), 'contract360') },
+            [item.contract_number, item.title, item.client_name, item.project_name, item.manager_name, item.folder, item.category],
+            String(item.contract_number || '').toLowerCase() === q ? 140 : 0,
+        );
+    });
+    const mailRows = typeof emailsDB !== 'undefined' && Array.isArray(emailsDB) ? emailsDB : [];
+    mailRows.forEach(item => {
+        push(
+            { group: 'Найдено', icon: 'MAIL', title: item.subject || `Письмо #${item.id}`, desc: [item.sender, item.sender_email, item.received_at].filter(Boolean).join(' · ') || 'Письмо', chip: 'Письмо', entityType: 'email', entityId: Number(item.id || 0), action: () => openOmniSearchResult('email', Number(item.id || 0), 'emails') },
+            [item.subject, item.sender, item.sender_email, item.body_text, item.body_preview],
+        );
+    });
+    return rankedSearchResults(bucket, 10);
 }
 
 function commandPaletteFilterLocal(query) {
@@ -945,11 +1160,11 @@ function commandPaletteRender() {
         return `${section}
             <button class="command-palette-item ${index === commandPaletteSelectedIndex ? 'is-active' : ''}" data-command-index="${index}" type="button">
                 <span class="command-palette-icon">${escapeHtml(item.icon || 'GO')}</span>
-                <span>
+                <span class="command-palette-item__body">
                     <span class="command-palette-title">${escapeHtml(item.title)}</span>
                     <span class="command-palette-desc">${escapeHtml(item.desc || '')}</span>
                 </span>
-                <span class="command-palette-chip">${escapeHtml(item.chip || item.group || '')}</span>
+                <span class="command-palette-chip">${escapeHtml(item.chip || item.group || 'Команда')}</span>
             </button>`;
     }).join('');
 }
@@ -960,7 +1175,7 @@ async function commandPaletteSearch(query) {
     commandPaletteSelectedIndex = 0;
     commandPaletteRender();
     const q = String(query || '').trim();
-    if (!q || q.length < 2) return;
+    if (!q) return;
     try {
         const server = await apiCall(`/search?q=${encodeURIComponent(q)}&limit=8`);
         if (seq !== commandPaletteSeq || !server || !Array.isArray(server.items)) return;
@@ -995,8 +1210,9 @@ function ensureCommandPalette() {
             <div class="command-palette" role="dialog" aria-modal="true" aria-label="Командная палитра">
                 <div class="command-palette-header">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--secondary)" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.3-4.3"></path></svg>
-                    <input id="commandPaletteInput" class="command-palette-input" autocomplete="off" placeholder="Команда или запись: документ, оплата, проект, задача...">
+                    <input id="commandPaletteInput" class="command-palette-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Команда или запись: документ, оплата, проект, задача...">
                     <span id="commandPaletteShortcut" class="command-palette-shortcut"></span>
+                    <button id="commandPaletteCloseBtn" class="command-palette-close" type="button" aria-label="Закрыть палитру">×</button>
                 </div>
                 <div id="commandPaletteList" class="command-palette-list"></div>
                 <div class="command-palette-footer">
@@ -1018,6 +1234,7 @@ function ensureCommandPalette() {
         const item = commandPaletteResults[Number(button.dataset.commandIndex || 0)];
         if (item && typeof item.action === 'function') commandPaletteRunSafely(item.action);
     });
+    document.getElementById('commandPaletteCloseBtn')?.addEventListener('click', () => closeCommandPalette());
     input.addEventListener('input', () => commandPaletteSearch(input.value));
     input.addEventListener('keydown', event => {
         if (event.key === 'ArrowDown') {
@@ -1043,15 +1260,21 @@ function ensureCommandPalette() {
 window.openCommandPalette = function(initialQuery = '') {
     ensureCommandPalette();
     closeOmniSearchResults();
+    closeNotificationDropdown();
     const overlay = document.getElementById('commandPaletteOverlay');
     const input = document.getElementById('commandPaletteInput');
     overlay.style.display = 'flex';
+    overlay.setAttribute('aria-hidden', 'false');
     input.value = initialQuery || '';
     commandPaletteSearch(input.value);
     window.setTimeout(() => {
         input.focus();
         input.select();
     }, 0);
+};
+
+window.previewCommandPalette = function(query = '') {
+    openCommandPalette(String(query || ''));
 };
 
 function omniSearchActionFor(item) {
@@ -1101,8 +1324,67 @@ function omniSearchIconFor(item) {
 
 function closeOmniSearchResults() {
     const box = document.getElementById('omniSearchResults');
+    omniSearchResults = [];
+    omniSearchSelectedIndex = -1;
     setFloatingPanelVisibility(box, false, 'flex');
 }
+
+function closeNotificationDropdown() {
+    if (typeof setNotificationDropdownState === 'function') setNotificationDropdownState(false);
+}
+
+window.handleOmniSearchEscape = function(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        writeTopbarSearchQuery('');
+        searchInput.blur();
+    }
+    closeOmniSearchResults();
+    filterProjects();
+};
+
+window.handleOmniSearchKeydown = function(event) {
+    if (!event) return;
+    if (event.key === 'Escape') {
+        window.handleOmniSearchEscape(event);
+        return;
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) return;
+    const box = document.getElementById('omniSearchResults');
+    const isOpen = Boolean(box && !box.classList.contains('krd-is-hidden'));
+    if (!isOpen && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+        event.preventDefault();
+        window.openOmniSearchSuggestions();
+        return;
+    }
+    if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        moveOmniSearchSelection(1);
+        return;
+    }
+    if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        moveOmniSearchSelection(-1);
+        return;
+    }
+    if (event.key === 'Enter' && isOpen) {
+        event.preventDefault();
+        activateOmniSearchSelection();
+    }
+};
+
+window.handleOmniSearchBlur = function() {
+    window.setTimeout(() => {
+        const wrapper = document.querySelector('.search-bar, .krd-topbar-search');
+        const activeEl = document.activeElement;
+        if (wrapper && activeEl && wrapper.contains(activeEl)) return;
+        closeOmniSearchResults();
+    }, 120);
+};
 
 function omniStarterResults() {
     const quickActions = quickSearchActionCatalog().slice(0, 4).map((action, index) => ({
@@ -1120,6 +1402,35 @@ function omniStarterResults() {
         icon: section.icon || 'NAV',
     }));
     return [...quickActions, ...sections];
+}
+
+function clampOmniSearchSelection(index = 0) {
+    if (!omniSearchResults.length) return -1;
+    return Math.max(0, Math.min(Number(index || 0), omniSearchResults.length - 1));
+}
+
+function syncOmniSearchSelectionIntoView() {
+    const box = document.getElementById('omniSearchResults');
+    if (!box || omniSearchSelectedIndex < 0) return;
+    const active = box.querySelector(`.omni-search-item[data-omni-index="${omniSearchSelectedIndex}"]`);
+    if (active && typeof active.scrollIntoView === 'function') active.scrollIntoView({ block: 'nearest' });
+}
+
+function moveOmniSearchSelection(direction = 1) {
+    if (!omniSearchResults.length) return;
+    const current = omniSearchSelectedIndex >= 0 ? omniSearchSelectedIndex : 0;
+    omniSearchSelectedIndex = clampOmniSearchSelection(current + Number(direction || 0));
+    const box = document.getElementById('omniSearchResults');
+    if (box) renderOmniResults(box, omniSearchResults);
+}
+
+function activateOmniSearchSelection() {
+    if (omniSearchSelectedIndex < 0) return false;
+    const box = document.getElementById('omniSearchResults');
+    const active = box?.querySelector(`.omni-search-item[data-omni-index="${omniSearchSelectedIndex}"]`);
+    if (!active) return false;
+    active.click();
+    return true;
 }
 
 function workflowFocusForSearchType(type) {
@@ -1243,142 +1554,237 @@ window.openOmniSearchResult = async function(entityType, entityId, viewName = ''
 };
 
 function renderOmniResults(resBox, results) {
+    omniSearchResults = Array.isArray(results) ? [...results] : [];
+    omniSearchSelectedIndex = clampOmniSearchSelection(omniSearchSelectedIndex >= 0 ? omniSearchSelectedIndex : 0);
+    resBox.dataset.state = results.length ? 'results' : 'empty';
     if (results.length === 0) {
-        resBox.innerHTML = '<div style="color:var(--secondary); font-size:12px; text-align:center; padding:10px;">Ничего не найдено</div>';
-    } else {
-        resBox.innerHTML = results.map(r => `
-            <div onclick="${r.link}" style="padding: 8px 10px; background: var(--bg); border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 10px; border: 1px solid transparent;" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='transparent'">
-                <div style="font-size: 10px; min-width: 36px; height: 26px; display:flex; align-items:center; justify-content:center; border-radius: 999px; background: rgba(31,79,209,0.08); color: var(--primary); font-weight: 800; letter-spacing: 0.06em;">${escapeHtml(r.icon)}</div>
-                <div>
-                    <div style="font-size: 12px; font-weight: bold; color: var(--text);">${escapeHtml(r.title)}</div>
-                    <div style="font-size: 10px; color: var(--secondary);">${escapeHtml(`${r.type} • ${(r.desc || '').substring(0, 40)}`)}</div>
-                </div>
+        omniSearchSelectedIndex = -1;
+        resBox.innerHTML = `
+            <div class="omni-search-empty">
+                <div class="omni-search-empty__title">Ничего не найдено</div>
+                <div class="omni-search-empty__text">Попробуй название раздела, номер договора, клиента или задачу.</div>
             </div>
+        `;
+    } else {
+        const groups = results.reduce((acc, item) => {
+            const type = String(item.type || 'Результаты').trim() || 'Результаты';
+            if (!acc.has(type)) acc.set(type, []);
+            acc.get(type).push(item);
+            return acc;
+        }, new Map());
+
+        let renderIndex = 0;
+        resBox.innerHTML = Array.from(groups.entries()).map(([type, items]) => `
+            <section class="omni-search-section">
+                <div class="omni-search-group">
+                    <span>${escapeHtml(type)}</span>
+                    <span class="omni-search-group__count">${items.length}</span>
+                </div>
+                <div class="omni-search-section__items">
+                    ${items.map(r => {
+                        const itemIndex = renderIndex++;
+                        const desc = escapeHtml((r.desc || '').substring(0, 160));
+                        return `
+                        <button class="omni-search-item ${itemIndex === omniSearchSelectedIndex ? 'is-active' : ''}" data-omni-index="${itemIndex}" type="button" onclick="${r.link}">
+                            <span class="omni-search-item__icon">${escapeHtml(r.icon)}</span>
+                            <span class="omni-search-item__body">
+                                <span class="omni-search-item__title">${escapeHtml(r.title)}</span>
+                                ${desc ? `<span class="omni-search-item__desc">${desc}</span>` : ''}
+                            </span>
+                        </button>
+                    `;
+                    }).join('')}
+                </div>
+            </section>
         `).join('');
     }
     setFloatingPanelVisibility(resBox, true, 'flex');
+    syncOmniSearchSelectionIntoView();
 }
 
-window.handleOmniSearch = async function() {
-    const searchInput = document.getElementById('searchInput');
-    const resBox = document.getElementById('omniSearchResults');
-    if (!searchInput || !resBox) return;
-    const q = String(searchInput.value || '').toLowerCase().trim();
+function collectLocalOmniSearchResults(q) {
     const seq = ++omniSearchSeq;
-    if (!q) {
-        closeOmniSearchResults();
-        filterProjects();
-        return;
-    }
-
-    filterProjects();
-
-    const results = [];
+    const bucket = new Map();
+    const push = (item, values, boost = 0) => {
+        const score = searchMatchScore(values, q);
+        mergeRankedSearchResult(bucket, item, score >= 0 ? score + boost : score);
+    };
     quickSearchActionCatalog().forEach((action, index) => {
-        if (q.startsWith('/') || matchesSearchNeedle([action.title, action.desc, action.chip || '', action.type || ''], q)) {
-            results.push({
-                type: 'Команда',
-                title: action.title,
-                desc: action.desc,
-                link: `runQuickSearchCommand(${index})`,
-                icon: action.icon || 'GO',
-            });
-        }
+        const score = q.startsWith('/')
+            ? 900 - index
+            : searchMatchScore([action.title, action.desc, action.chip || '', action.type || ''], q);
+        mergeRankedSearchResult(bucket, {
+            type: 'Команда',
+            title: action.title,
+            desc: action.desc,
+            link: `runQuickSearchCommand(${index})`,
+            icon: action.icon || 'GO',
+            entityType: `command:${index}`,
+            entityId: index,
+        }, score);
     });
     sectionSearchMatches(q).forEach(section => {
         const navItem = navigationSearchCatalog().find(item => item.title === section.title);
-        results.push({
+        push({
             type: 'Раздел',
             title: section.title,
             desc: section.desc,
             link: navItem?.view ? `openSearchSection('${navItem.view}')` : "closeOmniSearchResults();",
             icon: section.icon,
-        });
+            entityType: 'section',
+            entityId: navItem?.view || section.title,
+        }, [section.title, section.desc, section.view]);
     });
     projectsDB.forEach(p => {
-        if (matchesSearchNeedle([p.name, p.contract, p.client, p.manager], q)) {
-            results.push({ type: 'Проект', title: p.name, desc: p.contract, link: `openProject(${p.id}); closeOmniSearchResults();`, icon: 'PR' });
-        }
+        push(
+            { type: 'Проект', title: p.name, desc: p.contract, link: `openProject(${p.id}); closeOmniSearchResults();`, icon: 'PR', entityType: 'project', entityId: Number(p.id || 0) },
+            [p.name, p.contract, p.client, p.manager],
+            String(p.contract || '').toLowerCase() === q ? 140 : 0,
+        );
     });
     clientsDB.forEach(c => {
-        if (matchesSearchNeedle([c.name, c.inn, c.contact], q)) {
-            results.push({ type: 'Клиент', title: c.name, desc: c.inn || c.contact || 'контрагент', link: `openOmniSearchResult('client', ${Number(c.id || 0)}, 'clients')`, icon: 'CL' });
-        }
+        push(
+            { type: 'Клиент', title: c.name, desc: c.inn || c.contact || 'контрагент', link: `openOmniSearchResult('client', ${Number(c.id || 0)}, 'clients')`, icon: 'CL', entityType: 'client', entityId: Number(c.id || 0) },
+            [c.name, c.inn, c.contact],
+        );
     });
     documentsDB.forEach(d => {
-        if (matchesSearchNeedle([d.number, d.subject, d.correspondent, d.type, d.status], q)) {
-            results.push({ type: 'Документ', title: `№ ${d.number}`, desc: d.subject, link: `openOmniSearchResult('document', ${Number(d.id || 0)}, 'documents')`, icon: 'DOC' });
-        }
+        push(
+            { type: 'Документ', title: `№ ${d.number}`, desc: d.subject, link: `openOmniSearchResult('document', ${Number(d.id || 0)}, 'documents')`, icon: 'DOC', entityType: 'document', entityId: Number(d.id || 0) },
+            [d.number, d.subject, d.correspondent, d.type, d.status],
+        );
     });
     tasksDB.forEach(t => {
-        if (matchesSearchNeedle([t.title, t.executor, t.description, t.status], q)) {
-            results.push({ type: 'Поручение', title: t.title, desc: `Исполнитель: ${t.executor}`, link: `openOmniSearchResult('task', ${Number(t.id || 0)}, 'tasks')`, icon: 'TSK' });
-        }
+        push(
+            { type: 'Поручение', title: t.title, desc: `Исполнитель: ${t.executor}`, link: `openOmniSearchResult('task', ${Number(t.id || 0)}, 'tasks')`, icon: 'TSK', entityType: 'task', entityId: Number(t.id || 0) },
+            [t.title, t.executor, t.description, t.status],
+        );
     });
     (crmLeadsDB || []).forEach(lead => {
-        if (matchesSearchNeedle([lead.title, lead.client_name, lead.contact_name, lead.contact_email, lead.contact_phone, lead.next_action, lead.source], q)) {
-            results.push({ type: 'Лид', title: lead.title || `Лид #${lead.id}`, desc: `${lead.client_name || 'без компании'} · ${lead.contact_name || lead.source || 'без контакта'}`, link: `openOmniSearchResult('lead', ${Number(lead.id || 0)}, 'leads')`, icon: 'LEAD' });
-        }
+        push(
+            { type: 'Лид', title: lead.title || `Лид #${lead.id}`, desc: `${lead.client_name || 'без компании'} · ${lead.contact_name || lead.source || 'без контакта'}`, link: `openOmniSearchResult('lead', ${Number(lead.id || 0)}, 'leads')`, icon: 'LEAD', entityType: 'lead', entityId: Number(lead.id || 0) },
+            [lead.title, lead.client_name, lead.contact_name, lead.contact_email, lead.contact_phone, lead.next_action, lead.source],
+        );
     });
     (crmDealsDB || []).forEach(deal => {
-        if (matchesSearchNeedle([deal.title, deal.client_name, deal.contract_number, deal.next_action, deal.responsible, deal.stage], q)) {
-            results.push({ type: 'Сделка', title: deal.title || `Сделка #${deal.id}`, desc: `${deal.contract_number || 'без номера'} · ${deal.client_name || 'без клиента'}`, link: `openOmniSearchResult('deal', ${Number(deal.id || 0)}, 'deals')`, icon: 'DEAL' });
-        }
+        push(
+            { type: 'Сделка', title: deal.title || `Сделка #${deal.id}`, desc: `${deal.contract_number || 'без номера'} · ${deal.client_name || 'без клиента'}`, link: `openOmniSearchResult('deal', ${Number(deal.id || 0)}, 'deals')`, icon: 'DEAL', entityType: 'deal', entityId: Number(deal.id || 0) },
+            [deal.title, deal.client_name, deal.contract_number, deal.next_action, deal.responsible, deal.stage],
+            String(deal.contract_number || '').toLowerCase() === q ? 140 : 0,
+        );
     });
+    (typeof contractRegistryDB !== 'undefined' && Array.isArray(contractRegistryDB) ? contractRegistryDB : []).forEach(contract => {
+        push(
+            { type: 'Договор', title: contract.contract_number || contract.title || `Договор #${contract.id}`, desc: [contract.title, contract.client_name, contract.manager_name].filter(Boolean).join(' · '), link: `openOmniSearchResult('contract', ${Number(contract.id || 0)}, 'contract360')`, icon: 'CTR', entityType: 'contract', entityId: Number(contract.id || 0) },
+            [contract.contract_number, contract.title, contract.client_name, contract.project_name, contract.manager_name, contract.folder, contract.category],
+            String(contract.contract_number || '').toLowerCase() === q ? 180 : 0,
+        );
+    });
+    (typeof emailsDB !== 'undefined' && Array.isArray(emailsDB) ? emailsDB : []).forEach(mail => {
+        push(
+            { type: 'Письмо', title: mail.subject || `Письмо #${mail.id}`, desc: [mail.sender, mail.sender_email, mail.folder || mail.account_label].filter(Boolean).join(' · '), link: `openOmniSearchResult('email', ${Number(mail.id || 0)}, 'emails')`, icon: 'MAIL', entityType: 'email', entityId: Number(mail.id || 0) },
+            [mail.subject, mail.sender, mail.sender_email, mail.body_text, mail.body_preview, mail.folder, mail.account_label],
+        );
+    });
+    return { bucket, seq };
+}
 
-    renderOmniResults(resBox, results.slice(0, 12));
+function mergeServerOmniSearchResults(bucket, q, serverItems = []) {
+    serverItems.forEach(item => {
+        const normalized = {
+            type: item.type_label || item.type || item.entity_type || 'Результат',
+            title: item.title || item.id || 'Найдено',
+            desc: item.meta || item.desc || '',
+            link: `openOmniSearchResult('${String(item.entity_type || item.type || '').replace(/[^a-zA-Z0-9_]/g, '')}', ${Number(item.entity_id || item.id || 0)}, '${String(item.view || '').replace(/[^a-zA-Z0-9_]/g, '')}')`,
+            icon: omniSearchIconFor(item),
+            entityType: String(item.entity_type || item.type || ''),
+            entityId: Number(item.entity_id || item.id || 0),
+        };
+        const titleBoost = normalized.entityType === 'contract' && normalizeSearchComparable(normalized.title) === normalizeSearchComparable(q) ? 200 : 0;
+        const score = searchMatchScore([normalized.title, normalized.desc, normalized.type, normalized.entityType], q);
+        mergeRankedSearchResult(bucket, normalized, score >= 0 ? score + titleBoost : score);
+    });
+}
+
+async function renderOmniSearchQuery(rawQuery = '', options = {}) {
+    const resBox = document.getElementById('omniSearchResults');
+    if (!resBox) return [];
+    const q = String(rawQuery || '').toLowerCase().trim();
+    if (options.syncInput) writeTopbarSearchQuery(rawQuery);
+    if (!q) {
+        closeOmniSearchResults();
+        filterProjects();
+        return [];
+    }
+
+    filterProjects();
+
+    const { bucket, seq } = collectLocalOmniSearchResults(q);
+    const localResults = rankedSearchResults(bucket, 12);
+    renderOmniResults(resBox, localResults);
 
     try {
-        if (q.length < 2) return;
+        if (q.length < 1) return localResults;
         const server = await apiCall(`/search?q=${encodeURIComponent(q)}&limit=8`);
-        if (seq !== omniSearchSeq || !server || !Array.isArray(server.items)) return;
-        const existingKeys = new Set(results.map(item => `${String(item.type).toLowerCase()}:${String(item.title).toLowerCase()}`));
-        server.items.forEach(item => {
-            const normalized = {
-                type: item.type_label || item.type || item.entity_type || 'Результат',
-                title: item.title || item.id || 'Найдено',
-                desc: item.meta || item.desc || '',
-                link: `openOmniSearchResult('${String(item.entity_type || item.type || '').replace(/[^a-zA-Z0-9_]/g, '')}', ${Number(item.entity_id || item.id || 0)}, '${String(item.view || '').replace(/[^a-zA-Z0-9_]/g, '')}')`,
-                icon: omniSearchIconFor(item),
-            };
-            const key = `${String(normalized.type).toLowerCase()}:${String(normalized.title).toLowerCase()}`;
-            if (!existingKeys.has(key)) {
-                results.push(normalized);
-                existingKeys.add(key);
-            }
-        });
-        renderOmniResults(resBox, results.slice(0, 12));
+        if (seq !== omniSearchSeq || !server || !Array.isArray(server.items)) return localResults;
+        mergeServerOmniSearchResults(bucket, q, server.items);
+        const mergedResults = rankedSearchResults(bucket, 12);
+        renderOmniResults(resBox, mergedResults);
+        return mergedResults;
     } catch (error) {
         console.warn('Server search unavailable, using local omni results', error);
     }
-};
+    return localResults;
+}
 
-window.openOmniSearchSuggestions = function() {
+window.handleOmniSearch = async function(explicitQuery = null) {
     const searchInput = document.getElementById('searchInput');
     const resBox = document.getElementById('omniSearchResults');
     if (!searchInput || !resBox) return;
-    const query = String(searchInput.value || '').trim();
+    closeCommandPalette();
+    closeNotificationDropdown();
+    const query = readTopbarSearchQuery(explicitQuery);
+    if (!query) {
+        closeOmniSearchResults();
+        filterProjects();
+        return;
+    }
+    return renderOmniSearchQuery(query, { syncInput: explicitQuery !== null && explicitQuery !== undefined });
+};
+
+window.openOmniSearchSuggestions = function(explicitQuery = null) {
+    const searchInput = document.getElementById('searchInput');
+    const resBox = document.getElementById('omniSearchResults');
+    if (!searchInput || !resBox) return;
+    closeCommandPalette();
+    closeNotificationDropdown();
+    const query = readTopbarSearchQuery(explicitQuery);
     if (query) {
-        window.handleOmniSearch();
+        window.handleOmniSearch(query);
         return;
     }
     renderOmniResults(resBox, omniStarterResults());
 };
 
+window.previewOmniSearch = function(query = '') {
+    return renderOmniSearchQuery(String(query || ''), { syncInput: true });
+};
+
 document.addEventListener('keydown', (e) => {
-    if (keyboardEventMatchesShortcut(e, getShortcutConfig('commandPalette'))) {
+    const handlers = workspaceShortcutHandlers();
+    const actions = orderedWorkspaceShortcutActions();
+    for (const actionKey of actions) {
+        const handler = handlers[actionKey];
+        if (typeof handler !== 'function') continue;
+        if (!keyboardEventMatchesShortcut(e, getShortcutConfig(actionKey))) continue;
         e.preventDefault();
-        if (typeof openCommandPalette === 'function') openCommandPalette();
+        handler();
         return;
-    }
-    if (keyboardEventMatchesShortcut(e, getShortcutConfig('globalSearch'))) {
-        e.preventDefault();
-        focusGlobalSearchInput();
     }
 });
 
 document.addEventListener('click', (e) => {
-    const sb = document.querySelector('.search-bar');
+    const sb = document.querySelector('.search-bar, .krd-topbar-search');
     const box = document.getElementById('omniSearchResults');
     if (sb && !sb.contains(e.target) && box) closeOmniSearchResults();
 });

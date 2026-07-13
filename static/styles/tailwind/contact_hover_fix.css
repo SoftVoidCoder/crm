@@ -1,0 +1,48 @@
+/* Keeps phone/email cells inside registry tables from expanding into hover cards. */
+body .main-content .view-page .crm-registry-table td.crm-contact-cell,
+body .main-content .view-page .crm-registry-table tbody tr:hover td.crm-contact-cell,
+body .main-content .view-page .admin-table td.crm-contact-cell,
+body .main-content .view-page .admin-table tbody tr:hover td.crm-contact-cell {
+    position: static !important;
+    display: table-cell !important;
+    min-width: 190px !important;
+    max-width: 240px !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 12px 14px !important;
+    border: 0 !important;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.78) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    outline: 0 !important;
+    transform: none !important;
+    vertical-align: middle !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+    text-overflow: ellipsis !important;
+    z-index: auto !important;
+}
+
+body .main-content .view-page .crm-registry-table td.crm-contact-cell > *,
+body .main-content .view-page .admin-table td.crm-contact-cell > * {
+    max-width: 100% !important;
+}
+
+body .main-content .view-page .crm-registry-table td.crm-contact-cell .table-subtext,
+body .main-content .view-page .admin-table td.crm-contact-cell .table-subtext {
+    display: block !important;
+    margin-top: 4px !important;
+    padding-top: 4px !important;
+    border-top: 1px solid rgba(226, 232, 240, 0.8) !important;
+    color: #64748b !important;
+    font-size: 13px !important;
+    line-height: 1.35 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+}

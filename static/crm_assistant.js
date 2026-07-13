@@ -1,7 +1,6 @@
 /* Korda CRM Assistant — продуктовый чат-помощник.
-   Полностью клиентский: использует projectsDB, clientsDB, documentsDB,
-   tasksDB, approvalsDB, financePaymentsDB, productionOrdersDB, stockMovementsDB,
-   executiveSummaryDB и currentUser. Никаких серверных вызовов. */
+   Основной режим: серверный Gemini через /api/assistant/ask.
+   Резервный режим: локальные ответы из уже загруженных CRM-данных. */
 (function () {
     'use strict';
 
@@ -15,9 +14,14 @@
     const VIEW_LABELS = {
         dashboard: 'Все проекты',
         clients: 'База клиентов',
+        prospecting: 'База развития',
+        leads: 'Лиды',
+        deals: 'Сделки',
+        client360: 'Клиент 360',
+        contract360: 'Договоры 360',
         contacts: 'Контакты',
         documents: 'Документы',
-        tasks: 'Задачи и поручения',
+        tasks: 'Поручения',
         approvals: 'Согласования',
         claims: 'Претензии',
         knowledge: 'База знаний',
@@ -57,9 +61,16 @@
         ['снабжен', 'supply'],
         ['закуп', 'supply'],
         ['поставщик', 'supply'],
+        ['мессендж', 'messenger'],
+        ['переписк', 'messenger'],
+        ['чат', 'messenger'],
+        ['чаты', 'messenger'],
         ['продаж', 'sales'],
         ['воронк', 'sales'],
-        ['сделк', 'sales'],
+        ['сделк', 'deals'],
+        ['лид', 'leads'],
+        ['база развития', 'prospecting'],
+        ['обзвон', 'prospecting'],
         ['цех', 'production'],
         ['расход', 'expenses'],
         ['затрат', 'expenses'],
@@ -105,8 +116,6 @@
         ['рекламац', 'claims'],
         ['знани', 'knowledge'],
         ['wiki', 'knowledge'],
-        ['мессендж', 'messenger'],
-        ['переписк', 'messenger'],
         ['почт', 'emails'],
         ['email', 'emails'],
         ['письм', 'emails'],
@@ -130,7 +139,12 @@
     const SECTION_HELP = {
         clients: 'База клиентов — справочник контрагентов с ИНН и контактами. Из карточки откроется досье 360.',
         documents: 'Документы — единый реестр входящих, исходящих и внутренних: версии, регистрация, подписи.',
-        tasks: 'Задачи и поручения — личный список + командные: дедлайны, ответственные, статусы.',
+        prospecting: 'База развития — отдельный контур для холодной базы: импорт, назначение менеджерам, статусы обработки, план-факт и отчёты.',
+        leads: 'Лиды — первичные обращения и потенциальные клиенты перед переводом в сделки.',
+        deals: 'Сделки — коммерческий pipeline: карточки сделок, этапы, ответственные и следующие действия.',
+        client360: 'Клиент 360 — досье клиента: проекты, документы, сделки, финансы и коммуникации по одному контрагенту.',
+        contract360: 'Договоры 360 — реестр и карточки договоров, задачи, документы и контроль исполнения.',
+        tasks: 'Поручения — рабочий список задач: ответственные, дедлайны, статусы и контроль сроков.',
         approvals: 'Согласования — маршруты с визами: входящие, мои, завершённые. Можно запустить процесс из шаблона BPMN.',
         claims: 'Претензии — учёт рекламаций и реакций: сроки ответа, статусы, ответственные.',
         knowledge: 'База знаний — внутренние статьи, инструкции, регламенты с поиском.',
@@ -141,7 +155,7 @@
         accounting: 'Бухгалтерия — проводки, акты, счета, синхронизация с 1С.',
         integrations: 'Интеграции — подключённые системы и состояние обмена.',
         supply: 'Снабжение — заявки, заказы поставщикам, графики поставок.',
-        sales: 'Продажи — воронка сделок, конверсия, прогноз.',
+        sales: 'Продажи — документы реализации: счета, акты, УПД, отгрузка, оплата и закрывающие документы.',
         production: 'Производство — заказы-наряды, цеха, производственный план.',
         expenses: 'Расходы — бюджет, согласования трат, факт.',
         requests: 'Заявки — внутренние и клиентские обращения.',
@@ -155,6 +169,57 @@
         profile: 'Мой профиль — личные данные, права, уведомления.',
         admin: 'Администрирование — пользователи, роли, права, настройки системы.',
         dashboard: 'Все проекты / главный дашборд — реестр сделок и лента входящих, мои дела, быстрые действия.',
+    };
+
+    const SYSTEM_GUIDE = {
+        tasks: {
+            title: 'Поручения',
+            contains: 'Задачи, поручители, исполнители, дедлайны, статусы, чат задачи и контроль просрочек.',
+            buttons: 'Верхняя кнопка «Поручение» создает новую задачу. Внутри раздела доступны фильтры, карточка задачи и статусы.',
+            create: 'Нажми верхнюю кнопку «Поручение», заполни название, исполнителя, срок и описание.',
+            search: 'Ищи через глобальный поиск сверху или фильтры в разделе «Поручения».',
+            access: 'Доступ есть у рабочих ролей; видимость зависит от роли и назначения.',
+        },
+        messenger: {
+            title: 'Мессенджер',
+            contains: 'Лента компании, объявления, опросы и корпоративные чаты.',
+            buttons: 'Вверху есть «Лента», «Чаты» и «+ Чат». Для переписки открой вкладку «Корпоративные чаты».',
+            create: 'Нажми «+ Чат», задай название и участников.',
+            search: 'Открой «Мессенджер» и выбери чат слева.',
+            access: 'Доступ к чатам зависит от роли, отдела и участников чата.',
+        },
+        deals: {
+            title: 'Сделки',
+            contains: 'Карточки сделок, этапы pipeline, сумма, маржа, ответственный, следующее действие.',
+            buttons: 'Кнопка «+ Новая сделка», поиск по сделкам, фильтр стадий, ответственных, режим реестр/канбан.',
+            create: 'Открой «Сделки» и нажми «+ Новая сделка».',
+            search: 'Ищи по названию сделки, клиенту или номеру КП в строке поиска раздела или глобальном поиске.',
+            access: 'Обычно доступен коммерческому контуру, менеджерам и руководителям.',
+        },
+        sales: {
+            title: 'Продажи',
+            contains: 'Документы реализации: счета, акты, УПД, статусы оплаты, отправки и отгрузки.',
+            buttons: 'Быстрые кнопки «Счёт», «Акт», «УПД», форма нового документа и реестр документов реализации.',
+            create: 'Выбери тип документа, проект/контрагента, сумму, статус и нажми «Сохранить».',
+            search: 'Ищи документ реализации в реестре продаж или через глобальный поиск.',
+            access: 'Доступ зависит от роли и прав на продажи/финансы.',
+        },
+        prospecting: {
+            title: 'База развития',
+            contains: 'Холодная база, импорт Bitrix/Excel, назначение менеджерам, статусы обработки, отчеты и контроль качества базы.',
+            buttons: 'Импорт, предпросмотр импорта, фильтры, быстрые действия по строке, отчет менеджера, директорская сводка.',
+            create: 'Загрузи файл или создай запись вручную, затем назначь менеджера и дату следующего контакта.',
+            search: 'Ищи по компании, контакту, телефону, email, заметкам.',
+            access: 'Менеджеры видят рабочую базу, руководители и директор видят контроль и сводки.',
+        },
+        executive: {
+            title: 'Директорский кабинет',
+            contains: 'Управленческие сводки, риски, узкие места, просрочки, финансы, производство и операционный контроль.',
+            buttons: 'Переходы в финансы, производство, склад/НСИ, операционный центр и проблемные зоны.',
+            create: 'Раздел не для создания записей, а для контроля и перехода к источнику проблемы.',
+            search: 'Используй карточки проблем и кнопки перехода в связанные разделы.',
+            access: 'Доступен директору и руководителям с соответствующими правами.',
+        },
     };
 
     const QUICK_DEFAULT = [
@@ -302,6 +367,12 @@
         if ((wantsAll || tags.includes('clients')) && !asArray(readVar('clientsDB')).length) {
             tasks.push(apiFetch('/clients').then(r => { if (Array.isArray(r)) window.clientsDB = r; }));
         }
+        if ((wantsAll || tags.includes('leads')) && !asArray(readVar('crmLeadsDB')).length) {
+            tasks.push(apiFetch('/crm/leads').then(r => { if (Array.isArray(r)) window.crmLeadsDB = r; }));
+        }
+        if ((wantsAll || tags.includes('deals')) && !asArray(readVar('crmDealsDB')).length) {
+            tasks.push(apiFetch('/crm/deals').then(r => { if (Array.isArray(r)) window.crmDealsDB = r; }));
+        }
         if ((wantsAll || tags.includes('documents')) && !asArray(readVar('documentsDB')).length) {
             tasks.push(apiFetch('/documents').then(r => { if (Array.isArray(r)) window.documentsDB = r; }));
         }
@@ -338,6 +409,12 @@
         if ((wantsAll || tags.includes('notifications')) && !asArray(readVar('notificationsDB')).length) {
             tasks.push(apiFetch('/notifications?limit=80').then(r => { if (Array.isArray(r)) window.notificationsDB = r; }));
         }
+        if ((wantsAll || tags.includes('outreach')) && !asArray(readVar('outreachProspectsDB')).length) {
+            tasks.push(apiFetch('/outreach/prospects').then(r => { if (Array.isArray(r)) window.outreachProspectsDB = r; }));
+        }
+        if ((wantsAll || tags.includes('outreach-control')) && !asArray(readVar('outreachControlDB')).length) {
+            tasks.push(apiFetch('/outreach/manager_control').then(r => { if (Array.isArray(r)) window.outreachControlDB = r; }));
+        }
         await Promise.all(tasks);
     }
 
@@ -354,6 +431,10 @@
             tags.add('finance'); tags.add('finance-payments');
         }
         if (/проект/.test(lower)) tags.add('projects');
+        if (/сделк|pipeline|воронк/.test(lower)) tags.add('deals');
+        if (/лид/.test(lower)) tags.add('leads');
+        if (/база развития|обзвон|менеджер|отчет|отчёт|перв(ый|ого) контакт|sla/.test(lower)) { tags.add('outreach'); tags.add('outreach-control'); }
+        if (/контролировать|директору|кто просрочил|не сдал|сдали отчет|сдали отчёт|показать директору/.test(lower)) { tags.add('outreach-control'); tags.add('tasks'); tags.add('finance'); tags.add('executive'); tags.add('approvals'); }
         if (/клиент|контрагент|заказчик/.test(lower)) tags.add('clients');
         if (/документ|файл|реестр/.test(lower)) tags.add('documents');
         if (/задач|поруч/.test(lower)) tags.add('tasks');
@@ -367,12 +448,18 @@
         if (/сервис|обслужив|наряд/.test(lower)) tags.add('service');
         if (/договор|контракт/.test(lower)) tags.add('contracts');
         if (/уведомлен|нотификац|непрочитан/.test(lower)) tags.add('notifications');
+        if (/найд|найти|покаж|где .*|карточк|открой/.test(lower)) {
+            tags.add('projects'); tags.add('clients'); tags.add('documents'); tags.add('tasks');
+            tags.add('contracts'); tags.add('deals'); tags.add('leads'); tags.add('outreach');
+        }
         return Array.from(tags);
     }
 
     function dataSnapshot() {
         return {
             projects: asArray(readVar('projectsDB')),
+            leads: asArray(readVar('crmLeadsDB')),
+            deals: asArray(readVar('crmDealsDB')),
             clients: asArray(readVar('clientsDB')),
             documents: asArray(readVar('documentsDB')),
             tasks: asArray(readVar('tasksDB')),
@@ -400,8 +487,98 @@
             workflows: asArray(readVar('workflowDefinitionsDB')),
             workflowInstances: asArray(readVar('workflowInstancesDB')),
             notifications: asArray(readVar('notificationsDB')),
+            outreachProspects: asArray(readVar('outreachProspectsDB')),
+            outreachControl: asArray(readVar('outreachControlDB')),
             user: readVar('currentUser') || null,
+            currentView: readVar('__navCurrentView') || '',
         };
+    }
+
+    function pickFields(row, fields) {
+        const result = {};
+        fields.forEach(field => {
+            const value = row?.[field];
+            if (value !== undefined && value !== null && value !== '') result[field] = value;
+        });
+        return result;
+    }
+
+    function compactAssistantContext(question, tags) {
+        const d = dataSnapshot();
+        const limit = 12;
+        return {
+            question: String(question || '').slice(0, 500),
+            tags: asArray(tags).slice(0, 12),
+            user: pickFields(d.user || {}, ['name', 'email', 'role', 'is_head']),
+            navigation: {
+                tasks: 'Левое меню: «Поручения». Верхняя кнопка «Поручение» создает новое поручение.',
+                messenger: 'Левое меню: «Мессенджер», внутри вкладка «Корпоративные чаты».',
+                deals: 'Левое меню: «Сделки». Это карточки сделок и pipeline.',
+                sales: 'Левое меню: «Продажи». Это счета, акты, УПД, отгрузка и реализация.',
+                prospecting: 'Левое меню: «База развития». Это импорт базы, обзвон, менеджеры и отчеты.',
+                executive: 'Левое меню: «Директор». Это директорский кабинет, риски и управленческие сводки.',
+            },
+            counts: {
+                projects: d.projects.length,
+                clients: d.clients.length,
+                documents: d.documents.length,
+                tasks: d.tasks.length,
+                approvals: d.approvals.length,
+                payments: d.payments.length,
+                contracts: d.contracts.length,
+                meetings: d.meetings.length,
+                notifications: d.notifications.length,
+                leads: d.leads.length,
+                deals: d.deals.length,
+                outreachProspects: d.outreachProspects.length,
+                currentView: d.currentView || '',
+            },
+            financeSummary: d.financeSummary || null,
+            executive: d.executive || null,
+            projects: d.projects.slice(0, limit).map(row => pickFields(row, ['id', 'name', 'client', 'manager', 'status', 'progress', 'budget', 'costs'])),
+            leads: d.leads.slice(0, limit).map(row => pickFields(row, ['id', 'title', 'client_name', 'contact_name', 'status', 'source', 'next_action'])),
+            deals: d.deals.slice(0, limit).map(row => pickFields(row, ['id', 'title', 'client_name', 'contract_number', 'stage', 'amount', 'responsible', 'next_action'])),
+            tasks: d.tasks.slice(0, limit).map(row => pickFields(row, ['id', 'title', 'executor', 'deadline', 'status', 'priority'])),
+            approvals: d.approvals.slice(0, limit).map(row => pickFields(row, ['id', 'title', 'status', 'created_by', 'current_stage', 'updated_at'])),
+            documents: d.documents.slice(0, limit).map(row => pickFields(row, ['id', 'title', 'type', 'status', 'number', 'date', 'author'])),
+            payments: d.payments.slice(0, limit).map(row => pickFields(row, ['id', 'title', 'kind', 'amount', 'currency', 'due_date', 'status', 'client_id', 'project_id'])),
+            clients: d.clients.slice(0, limit).map(row => pickFields(row, ['id', 'name', 'inn', 'contact'])),
+            contracts: d.contracts.slice(0, limit).map(row => pickFields(row, ['id', 'contract_number', 'title', 'status', 'amount', 'currency', 'manager_name'])),
+            outreachControl: d.outreachControl.slice(0, limit).map(row => pickFields(row, ['name', 'email', 'plan', 'processed', 'calls', 'emails', 'overdue', 'first_contact_overdue', 'warm', 'leads', 'submitted'])),
+            notifications: d.notifications.slice(0, limit).map(row => pickFields(row, ['id', 'title', 'message', 'is_read', 'created_at'])),
+        };
+    }
+
+    function assistantOutOfScopeAnswer() {
+        return {
+            html: '<p>Я отвечаю только по Korda CRM: разделы, задачи, сроки, документы, проекты, клиенты, финансы и рабочие процессы. Сформулируй вопрос по системе.</p>',
+        };
+    }
+
+    function isAssistantDomainQuestion(lower, tags) {
+        if (asArray(tags).length) return true;
+        if (findRoute(lower)) return true;
+        if (/^(привет|здрав|добр|hello|hi|hey|йоу)\b/.test(lower)) return true;
+        if (/помощь|help|что ты умеешь|какие команды|справка|спасиб|благодар|thanks/.test(lower)) return true;
+        return /korda|корда|crm|црм|систем|раздел|карточк|создать|сделать|добавить|загруз|импорт|экспорт|отчет|отчёт|срок|дедлайн|задач|поруч|проект|клиент|контрагент|документ|договор|соглас|финанс|платеж|оплат|менеджер|директор|база|лид|bitrix|битрикс|1с|права|роль|пользоват|настрой|уведомл|встреч|почт|склад|производ|сервис|просроч|найд|покаж|открой/.test(lower);
+    }
+
+    async function askServerAi(question, tags) {
+        if (!apiAvailable()) return null;
+        try {
+            const result = await window.apiCall('/assistant/ask', 'POST', {
+                question,
+                context: compactAssistantContext(question, tags),
+            });
+            if (!result || result.error || !result.answer) return null;
+            return {
+                html: `<p>${escapeHtml(result.answer).replace(/\n/g, '<br>')}</p>`,
+                actions: [],
+                ai: true,
+            };
+        } catch (_) {
+            return null;
+        }
     }
 
     function fmNum(value) { return Number(value || 0); }
@@ -445,6 +622,7 @@
 
     function findRoute(text) {
         const lower = normalize(text);
+        if (/чат|мессендж|переписк|написать|поговорить|связаться/.test(lower)) return 'messenger';
         let best = null;
         let bestLen = 0;
         for (const [needle, view] of VIEW_ALIASES) {
@@ -453,6 +631,57 @@
             }
         }
         return best;
+    }
+
+    function routeGuide(view) {
+        const label = VIEW_LABELS[view] || view;
+        const guides = {
+            tasks: {
+                title: 'Поручения',
+                text: 'Поручения находятся в левом меню: пункт «Поручения». Там список задач, ответственные, дедлайны и статусы. Быстро создать поручение можно верхней кнопкой «Поручение».',
+            },
+            messenger: {
+                title: 'Мессенджер и чаты',
+                text: 'Чаты находятся в левом меню: «Мессенджер». Внутри открой вкладку «Корпоративные чаты». Там можно выбрать существующий чат или нажать «+ Чат».',
+            },
+            deals: {
+                title: 'Сделки',
+                text: 'Сделки находятся в левом меню в коммерческом контуре: пункт «Сделки». Для конкретной сделки также используй глобальный поиск сверху: введи название сделки, клиента или номер.',
+            },
+            sales: {
+                title: 'Продажи',
+                text: 'Раздел «Продажи» в левом меню отвечает за документы реализации: счета, акты, УПД, отгрузку и оплату. Это не то же самое, что карточки сделок.',
+            },
+            executive: {
+                title: 'Директорский кабинет',
+                text: 'Директорский кабинет находится в левом меню: пункт «Директор». Там карта проблем, план-факт, риски и управленческие сводки.',
+            },
+            prospecting: {
+                title: 'База развития',
+                text: 'База развития находится в левом меню рядом с клиентским контуром: пункт «База развития». Там импорт Bitrix/Excel, назначение менеджерам, статусы обработки и отчёты.',
+            },
+        };
+        const guide = guides[view] || { title: label, text: `Открой левое меню и выбери раздел «${label}». Если раздел скрыт, проверь роль и права доступа в профиле или у администратора.` };
+        return {
+            html: `<p class="ka-msg-lead">${escapeHtml(guide.title)}</p><p>${escapeHtml(guide.text)}</p>`,
+            actions: viewExistsInRoute(view) ? [{ label: `Открыть «${label}»`, target: view }] : [],
+        };
+    }
+
+    function answerSystemNavigation(question) {
+        const lower = normalize(question);
+        const wantsLocation = /где|куда|как найти|как открыть|где находится|где это|путь|в каком раздел|открой|перейди|поговорить|написать|связаться/.test(lower);
+        if (!wantsLocation) return null;
+        const route = findRoute(lower);
+        if (route) return routeGuide(route);
+        return {
+            html: '<p>Уточни, какой именно раздел или объект нужно найти: поручения, сделки, чаты, документы, финансы, клиент, договор или база развития.</p>',
+            actions: [
+                { label: 'Поручения', target: 'tasks' },
+                { label: 'Сделки', target: 'deals' },
+                { label: 'Чаты', target: 'messenger' },
+            ],
+        };
     }
 
     function fuzzyMatchRows(rows, query, fields) {
@@ -470,6 +699,264 @@
         }).filter(x => x.score > 0);
         scored.sort((a, b) => b.score - a.score);
         return scored.slice(0, 6).map(x => x.row);
+    }
+
+    function currentViewKey() {
+        const fromNav = String(readVar('__navCurrentView') || '').trim();
+        if (fromNav) return fromNav;
+        const visible = $$('.view-page').find(el => {
+            try { return getComputedStyle(el).display !== 'none' && !el.hidden; } catch (_) { return false; }
+        });
+        return String(visible?.id || '').replace(/View$/, '');
+    }
+
+    function cleanObjectSearchQuery(question) {
+        return normalize(question)
+            .replace(/(^|\s)(найди|найти|покажи|показать|где|находится|находятся|открой|открыть|карточка|карточку|есть|у|меня|мой|мои|мою|мое|моё|это|этот|эта|эти|по|номер|номеру|раздел|разделе)(?=\s|$)/g, ' ')
+            .replace(/(^|\s)(сделка|сделку|сделки|лид|лида|лиды|клиент|клиента|клиенты|контрагент|контрагента|контрагенты|договор|договора|договоры|контракт|контракты|документ|документа|документы|задача|задачу|задачи|поручение|поручения|проект|проекта|проекты)(?=\s|$)/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function objectSearchTokens(value) {
+        return normalize(value).split(' ').filter(token => token.length >= 2);
+    }
+
+    function rowTitle(row, fallback) {
+        return row?.title || row?.name || row?.contract_number || row?.number || row?.company_name || fallback;
+    }
+
+    function rowSearchScore(row, fields, query) {
+        const term = normalize(query);
+        const tokens = objectSearchTokens(term);
+        if (!tokens.length) return 0;
+        const haystack = fields.map(field => normalize(row?.[field] || '')).join(' ');
+        let score = haystack.includes(term) ? 8 : 0;
+        tokens.forEach(token => {
+            if (haystack.includes(token)) score += token.length >= 4 ? 2 : 1;
+        });
+        return score;
+    }
+
+    function objectSearchCollections(lower, d) {
+        const collections = [];
+        const add = item => {
+            if (asArray(item.rows).length) collections.push(item);
+        };
+        const explicit = /сделк|лид|клиент|контрагент|договор|контракт|документ|задач|поруч|проект/.test(lower);
+        if (/сделк|воронк|pipeline/.test(lower) || !explicit) add({
+            type: 'deal', view: 'deals', label: 'Сделка', rows: d.deals,
+            fields: ['title', 'client_name', 'contract_number', 'stage', 'responsible', 'next_action'],
+            meta: row => [row.contract_number ? `№ ${row.contract_number}` : null, row.client_name, row.stage || row.status].filter(Boolean).join(' · '),
+        });
+        if (/лид/.test(lower) || !explicit) add({
+            type: 'lead', view: 'leads', label: 'Лид', rows: d.leads,
+            fields: ['title', 'client_name', 'contact_name', 'phone', 'email', 'source', 'next_action'],
+            meta: row => [row.client_name, row.contact_name, row.source || row.status].filter(Boolean).join(' · '),
+        });
+        if (/клиент|контрагент|заказчик/.test(lower) || !explicit) add({
+            type: 'client', view: 'clients', label: 'Клиент', rows: d.clients,
+            fields: ['name', 'inn', 'contact', 'contacts', 'email', 'phone'],
+            meta: row => [row.inn ? `ИНН ${row.inn}` : null, row.contact || row.email || row.phone].filter(Boolean).join(' · '),
+        });
+        if (/договор|контракт/.test(lower) || !explicit) add({
+            type: 'contract', view: 'contract360', label: 'Договор', rows: d.contracts,
+            fields: ['contract_number', 'number', 'title', 'name', 'client_name', 'counterparty', 'manager_name', 'status'],
+            meta: row => [row.contract_number || row.number ? `№ ${row.contract_number || row.number}` : null, row.client_name || row.counterparty, row.status].filter(Boolean).join(' · '),
+        });
+        if (/документ|файл|реестр/.test(lower) || !explicit) add({
+            type: 'document', view: 'documents', label: 'Документ', rows: d.documents,
+            fields: ['title', 'name', 'subject', 'number', 'type', 'status', 'author', 'client_name', 'correspondent'],
+            meta: row => [row.number ? `№ ${row.number}` : null, row.type, row.status].filter(Boolean).join(' · '),
+        });
+        if (/задач|поруч/.test(lower) || !explicit) add({
+            type: 'task', view: 'tasks', label: 'Поручение', rows: d.tasks,
+            fields: ['title', 'name', 'description', 'executor', 'author', 'deadline', 'status', 'project_name'],
+            meta: row => [row.executor, row.deadline, row.status].filter(Boolean).join(' · '),
+        });
+        if (/проект/.test(lower) || !explicit) add({
+            type: 'project', view: 'dashboard', label: 'Проект', rows: d.projects,
+            fields: ['name', 'contract', 'client', 'client_name', 'manager', 'responsible', 'status', 'stage'],
+            meta: row => [row.client_name || row.client, row.manager || row.responsible, row.status || row.stage].filter(Boolean).join(' · '),
+        });
+        return collections;
+    }
+
+    function answerObjectSearch(question) {
+        const lower = normalize(question);
+        if (!/(найд|найти|покаж|показать|где|находится|открой|карточк)/.test(lower)) return null;
+        const query = cleanObjectSearchQuery(question);
+        if (!objectSearchTokens(query).length) return null;
+        const d = dataSnapshot();
+        const matches = objectSearchCollections(lower, d).flatMap(collection => {
+            return asArray(collection.rows).map(row => ({
+                row,
+                collection,
+                score: rowSearchScore(row, collection.fields, query),
+            })).filter(item => item.score > 0);
+        }).sort((a, b) => b.score - a.score).slice(0, 6);
+        if (!matches.length) return {
+            html: `<p class="ka-msg-lead">Поиск по CRM</p><p>По запросу «${escapeHtml(query)}» ничего не нашёл в сделках, лидах, клиентах, договорах, документах, поручениях и проектах.</p><p class="ka-hint">Проверь написание или попробуй искать по ИНН, номеру договора, названию компании или части названия.</p>`,
+            actions: [
+                { label: 'Глобальный поиск', target: 'dashboard' },
+                { label: 'База клиентов', target: 'clients' },
+                { label: 'Сделки', target: 'deals' },
+            ],
+        };
+        const items = matches.map(match => ({
+            title: `${match.collection.label}: ${rowTitle(match.row, `#${match.row?.id || ''}`)}`,
+            meta: match.collection.meta(match.row) || `ID ${match.row?.id || ''}`,
+            tag: VIEW_LABELS[match.collection.view] || match.collection.view,
+            tagTone: 'primary',
+        }));
+        const actions = matches.filter(match => match.row?.id).slice(0, 3).map(match => ({
+            label: `Открыть ${match.collection.label.toLowerCase()}`,
+            action: 'openEntity',
+            entity: match.collection.type,
+            id: match.row.id,
+            view: match.collection.view,
+        }));
+        return {
+            html: renderListAnswer(matches.length === 1 ? 'Нашёл объект' : `Нашёл ${matches.length} вариантов`, items),
+            actions,
+        };
+    }
+
+    function answerSystemGuide(question) {
+        const lower = normalize(question);
+        if (!/как|что нажать|что тут|что здесь|что внутри|кому доступ|где искать|создать/.test(lower)) return null;
+        const view = findRoute(lower) || currentViewKey();
+        const guide = SYSTEM_GUIDE[view];
+        if (!guide) return null;
+        return {
+            html: `<p class="ka-msg-lead">${escapeHtml(guide.title)}</p>
+<ul class="ka-bullets">
+<li><strong>Что внутри:</strong> ${escapeHtml(guide.contains)}</li>
+<li><strong>Основные кнопки:</strong> ${escapeHtml(guide.buttons)}</li>
+<li><strong>Как создать:</strong> ${escapeHtml(guide.create)}</li>
+<li><strong>Где искать:</strong> ${escapeHtml(guide.search)}</li>
+<li><strong>Доступ:</strong> ${escapeHtml(guide.access)}</li>
+</ul>`,
+            actions: viewExistsInRoute(view) ? [{ label: `Открыть «${VIEW_LABELS[view] || guide.title}»`, target: view }] : [],
+        };
+    }
+
+    function answerCurrentScreenQuestion(question) {
+        const lower = normalize(question);
+        if (!/тут|здесь|на этом экране|что нажать|что делать|как работать|что дальше/.test(lower)) return null;
+        const view = currentViewKey();
+        if (!view) return null;
+        const guide = SYSTEM_GUIDE[view];
+        if (guide) return answerSystemGuide(question);
+        const label = VIEW_LABELS[view] || view;
+        const help = SECTION_HELP[view] || `Ты сейчас в разделе «${label}».`;
+        return {
+            html: `<p class="ka-msg-lead">Ты сейчас в разделе «${escapeHtml(label)}»</p><p>${escapeHtml(help)}</p><p class="ka-hint">Задай вопрос по этому экрану: что создать, где искать или что контролировать.</p>`,
+            actions: viewExistsInRoute(view) ? [{ label: `Открыть «${label}»`, target: view }] : [],
+        };
+    }
+
+    function crmDateDaysUntil(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return null;
+        const normalized = raw.includes('.') ? raw.split('.').reverse().join('-') : raw.slice(0, 10);
+        const date = new Date(`${normalized}T00:00:00`);
+        if (Number.isNaN(date.getTime())) return null;
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        return Math.round((date - today) / 86400000);
+    }
+
+    function answerManagementCoach(question) {
+        const lower = normalize(question);
+        if (!/контролировать|директору|кто просрочил|не сдал|не сдали|сдали отчет|сдали отчёт|менеджер|sla|перв(ый|ого) контакт|причин|потер|дожать/.test(lower)) return null;
+        const d = dataSnapshot();
+        const managers = d.outreachControl;
+        const missingReports = managers.filter(row => !row.submitted);
+        const openTasks = d.tasks.filter(row => !['completed', 'done', 'closed'].includes(statusLower(row)));
+        const overdueTasks = openTasks.filter(row => {
+            const days = crmDateDaysUntil(row.deadline || row.due_date);
+            return days !== null && days < 0;
+        });
+        const pendingApprovals = d.approvals.filter(row => ['pending', 'rework'].includes(statusLower(row)));
+        const prospects = d.outreachProspects;
+        const dueProspects = prospects.filter(row => ['warm', 'meeting', 'follow_up'].includes(String(row.status || '')) || row.is_due_today || row.is_overdue).slice(0, 6);
+
+        if (/не сдал|не сдали|сдали отчет|сдали отчёт/.test(lower)) {
+            const items = missingReports.slice(0, 8).map(row => ({
+                title: row.name || row.email || 'Менеджер',
+                meta: `${fmtNumber(row.overdue || 0)} просрочено · ${fmtNumber(row.warm || 0)} тёплых · SLA ${fmtNumber(row.first_contact_overdue || row.firstContactOverdue || 0)}`,
+                tag: 'отчёт не сдан',
+                tagTone: 'danger',
+            }));
+            return {
+                html: renderListAnswer('Кто не сдал отчёт сегодня', items, { empty: 'По менеджерской сводке все отчёты за сегодня сданы.' }),
+                actions: [{ label: 'Открыть базу развития', target: 'prospecting' }],
+            };
+        }
+
+        if (/причин|потер|почему/.test(lower)) {
+            const reasons = [
+                ['Нет ответа', prospects.filter(row => String(row.status || '') === 'no_answer').length],
+                ['Не интересно / отказ', prospects.filter(row => /do_not_contact|archived/.test(String(row.status || ''))).length],
+                ['Нет контактов', prospects.filter(row => !String(row.phone || '').trim() && !String(row.email || '').trim()).length],
+                ['Дубли', prospects.filter(row => String(row.status || '') === 'duplicate').length],
+                ['В архиве', prospects.filter(row => String(row.status || '') === 'archived').length],
+            ];
+            return {
+                html: renderListAnswer('Причины потерь по базе развития', reasons.map(([title, count]) => ({ title, meta: `${fmtNumber(count)} записей` }))),
+                actions: [{ label: 'Открыть базу развития', target: 'prospecting' }],
+            };
+        }
+
+        if (/дожать/.test(lower)) {
+            const items = dueProspects.map(row => ({
+                title: row.company_name || row.contact_name || `Запись #${row.id || ''}`,
+                meta: [row.manager_name || row.manager_email, row.next_action_date || row.planned_contact_date, row.next_action].filter(Boolean).join(' · '),
+                tag: row.status || 'к контакту',
+                tagTone: row.is_overdue ? 'danger' : 'warning',
+            }));
+            return {
+                html: renderListAnswer('Кого надо дожать сегодня', items, { empty: 'На сегодня нет тёплых/follow-up записей в загруженной базе.' }),
+                actions: [{ label: 'Открыть базу развития', target: 'prospecting' }],
+            };
+        }
+
+        const dept = managers.reduce((acc, row) => {
+            acc.plan += Number(row.plan || 0);
+            acc.processed += Number(row.processed || 0);
+            acc.calls += Number(row.calls || 0);
+            acc.emails += Number(row.emails || 0);
+            acc.overdue += Number(row.overdue || 0);
+            acc.sla += Number(row.first_contact_overdue || row.firstContactOverdue || 0);
+            acc.warm += Number(row.warm || 0);
+            acc.leads += Number(row.leads || 0);
+            return acc;
+        }, { plan: 0, processed: 0, calls: 0, emails: 0, overdue: 0, sla: 0, warm: 0, leads: 0 });
+        const items = [
+            { title: 'Менеджеры без отчёта', meta: `${fmtNumber(missingReports.length)} человек` },
+            { title: 'SLA первого контакта 24ч', meta: `${fmtNumber(dept.sla)} нарушений` },
+            { title: 'Просрочки менеджеров', meta: `${fmtNumber(dept.overdue)} записей` },
+            { title: 'Просроченные поручения', meta: `${fmtNumber(overdueTasks.length)} задач` },
+            { title: 'Висящие согласования', meta: `${fmtNumber(pendingApprovals.length)} согласований` },
+        ];
+        return {
+            html: `<p class="ka-msg-lead">Что контролировать сегодня</p><p>Для директора важнее всего: отчёты менеджеров, SLA первого контакта, просрочки, тёплые клиенты и перевод в лиды.</p>` + renderListAnswer('', items),
+            stats: [
+                { label: 'План отдела', value: fmtNumber(dept.plan), tone: 'neutral' },
+                { label: 'Обработано', value: fmtNumber(dept.processed), tone: dept.plan && dept.processed < dept.plan ? 'warning' : 'success' },
+                { label: 'Звонки', value: fmtNumber(dept.calls), tone: 'neutral' },
+                { label: 'Письма', value: fmtNumber(dept.emails), tone: 'neutral' },
+                { label: 'Тёплые', value: fmtNumber(dept.warm), tone: 'primary' },
+                { label: 'Лиды', value: fmtNumber(dept.leads), tone: 'success' },
+                { label: 'SLA 24ч', value: fmtNumber(dept.sla), tone: dept.sla ? 'danger' : 'success' },
+            ],
+            actions: [
+                { label: 'База развития', target: 'prospecting' },
+                { label: 'Директорский кабинет', target: 'executive' },
+                { label: 'Поручения', target: 'tasks' },
+            ],
+        };
     }
 
     /* ---------- ответы ---------- */
@@ -490,7 +977,7 @@
     function renderActions(actions) {
         if (!actions?.length) return '';
         return `<div class="ka-actions">${actions.map(a =>
-            `<button type="button" class="ka-action" data-action="${escapeHtml(a.action || 'navigate')}" data-target="${escapeHtml(a.target || '')}" data-query="${escapeHtml(a.query || '')}">${escapeHtml(a.label)}</button>`
+            `<button type="button" class="ka-action" data-action="${escapeHtml(a.action || 'navigate')}" data-target="${escapeHtml(a.target || '')}" data-query="${escapeHtml(a.query || '')}" data-entity="${escapeHtml(a.entity || '')}" data-id="${escapeHtml(a.id || '')}" data-view="${escapeHtml(a.view || '')}">${escapeHtml(a.label)}</button>`
         ).join('')}</div>`;
     }
 
@@ -1348,12 +1835,29 @@
         const action = btn.dataset.action || 'navigate';
         const target = btn.dataset.target;
         const query = btn.dataset.query;
+        const entity = btn.dataset.entity;
+        const id = Number(btn.dataset.id || 0);
+        const view = btn.dataset.view || target || '';
         if (action === 'navigate' && target) {
             navigateAndAnnounce(target);
+        } else if (action === 'openEntity' && entity && id) {
+            openAssistantEntity(entity, id, view);
         } else if (action === 'guide' && query) {
             ask(query);
         } else if (query) {
             ask(query);
+        }
+    }
+
+    function openAssistantEntity(entity, id, view) {
+        if (typeof window.openOmniSearchResult === 'function') {
+            try {
+                window.openOmniSearchResult(entity, Number(id), view || '');
+                return;
+            } catch (_) { /* fallback ниже */ }
+        }
+        if (view && typeof window.navigateTo === 'function') {
+            try { window.navigateTo(view); } catch (_) { /* noop */ }
         }
     }
 
@@ -1485,8 +1989,49 @@
         showThinking();
         try {
             const lower = normalize(value);
-            await ensureLoaded(tagsForQuery(lower));
-            const answer = buildAnswer(value);
+            const tags = tagsForQuery(lower);
+            if (lower === 'помощь' || lower === 'help' || /что ты умеешь|какие команды|справка/.test(lower) || /^(привет|здрав|добр|hello|hi|hey|йоу)\b/.test(lower) || /спасиб|благодар|thanks|пока|до встречи|bye/.test(lower)) {
+                hideThinking();
+                pushBot(buildAnswer(value));
+                return;
+            }
+            const currentScreenAnswer = answerCurrentScreenQuestion(value);
+            if (currentScreenAnswer) {
+                hideThinking();
+                pushBot(currentScreenAnswer);
+                return;
+            }
+            if (!isAssistantDomainQuestion(lower, tags)) {
+                hideThinking();
+                pushBot(assistantOutOfScopeAnswer());
+                return;
+            }
+            await ensureLoaded(tags);
+            const objectAnswer = answerObjectSearch(value);
+            if (objectAnswer) {
+                hideThinking();
+                pushBot(objectAnswer);
+                return;
+            }
+            const managementAnswer = answerManagementCoach(value);
+            if (managementAnswer) {
+                hideThinking();
+                pushBot(managementAnswer);
+                return;
+            }
+            const guideAnswer = answerSystemGuide(value);
+            if (guideAnswer) {
+                hideThinking();
+                pushBot(guideAnswer);
+                return;
+            }
+            const deterministicAnswer = answerSystemNavigation(value);
+            if (deterministicAnswer) {
+                hideThinking();
+                pushBot(deterministicAnswer);
+                return;
+            }
+            const answer = await askServerAi(value, tags) || buildAnswer(value);
             hideThinking();
             pushBot(answer);
         } catch (err) {

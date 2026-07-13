@@ -1,8 +1,8 @@
-import os, asyncio, datetime, time, json, traceback, html
+import os, asyncio, datetime, time, json, traceback, html, mimetypes
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
+from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from database import (
     create_notification,
@@ -15,11 +15,14 @@ from database import (
     finish_background_job_run,
 )
 from app_logging import init_app_logging, get_logger
-from settings import using_insecure_defaults
+from auth_security import SESSION_COOKIE_NAME
+from database import get_session_user
+from permissions import has_permission
+from settings import APP_ENV, COOKIE_SECURE, using_insecure_defaults
 from utils import manager, verify_document_qr_token  # Подключаем наш менеджер WebSockets
 
 # Импортируем наши роутеры из папки routers
-from routers import users, projects, docs, communications, accounting, erp_deep, erp_ops_plus, workbench, integration_1c
+from routers import users, projects, docs, communications, accounting, erp_deep, erp_ops_plus, workbench, integration_1c, assistant
 
 PROJECT_JSON_OBJECT_FIELDS = {
     "checkedState",
@@ -52,6 +55,33 @@ UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 BACKUPS_DIR = os.path.join(BASE_DIR, "backups")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+BLOCKED_UPLOAD_EXTENSIONS = {
+    ".app",
+    ".bat",
+    ".cmd",
+    ".com",
+    ".dll",
+    ".dmg",
+    ".exe",
+    ".hta",
+    ".htm",
+    ".html",
+    ".jar",
+    ".js",
+    ".jse",
+    ".mjs",
+    ".msi",
+    ".ps1",
+    ".reg",
+    ".scr",
+    ".sh",
+    ".svg",
+    ".vb",
+    ".vbe",
+    ".vbs",
+    ".wsf",
+}
+INLINE_UPLOAD_EXTENSIONS = {".avif", ".gif", ".jpeg", ".jpg", ".pdf", ".png", ".txt", ".webp"}
 
 
 def _load_json_value(raw_value, default):
@@ -102,6 +132,58 @@ def _is_public_document_file_url(file_url: str) -> bool:
         local_path = os.path.join(UPLOADS_DIR, raw.removeprefix("/uploads/"))
         return os.path.exists(local_path)
     return False
+
+
+def _safe_upload_disk_path(relative_path: str) -> str:
+    raw = str(relative_path or "").replace("\\", "/").strip().lstrip("/")
+    if not raw or "\x00" in raw:
+        raise HTTPException(status_code=400, detail="Некорректный путь файла")
+    parts = [part for part in raw.split("/") if part]
+    if any(part in {".", ".."} or part.startswith(".") for part in parts):
+        raise HTTPException(status_code=400, detail="Некорректный путь файла")
+    disk_path = os.path.abspath(os.path.join(UPLOADS_DIR, *parts))
+    uploads_root = os.path.abspath(UPLOADS_DIR)
+    if os.path.commonpath([uploads_root, disk_path]) != uploads_root:
+        raise HTTPException(status_code=400, detail="Некорректный путь файла")
+    if not os.path.isfile(disk_path):
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    ext = os.path.splitext(disk_path)[1].lower()
+    if ext in BLOCKED_UPLOAD_EXTENSIONS:
+        raise HTTPException(status_code=403, detail="Тип файла запрещён к выдаче")
+    return disk_path
+
+
+def _secure_file_response(disk_path: str) -> FileResponse:
+    filename = os.path.basename(disk_path)
+    ext = os.path.splitext(filename)[1].lower()
+    media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    disposition = "inline" if ext in INLINE_UPLOAD_EXTENSIONS else "attachment"
+    response = FileResponse(
+        disk_path,
+        media_type=media_type,
+        filename=filename,
+        content_disposition_type=disposition,
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Cache-Control"] = "private, no-store, max-age=0"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    return response
+
+
+def _secure_upload_response_from_url(file_url: str) -> FileResponse | None:
+    raw = str(file_url or "").strip()
+    if not raw.startswith("/uploads/"):
+        return None
+    return _secure_file_response(_safe_upload_disk_path(raw.removeprefix("/uploads/")))
+
+
+def _can_access_upload_path(actor: dict, relative_path: str) -> bool:
+    raw = str(relative_path or "").replace("\\", "/").strip().lstrip("/")
+    if raw.startswith("email_attachments/"):
+        return has_permission(actor, "emails", "read")
+    if raw.startswith(("document_packages/", "signatures/")):
+        return has_permission(actor, "documents", "read")
+    return True
 
 
 def _parse_ru_date(value: str):
@@ -308,7 +390,6 @@ logger = get_logger("main")
 # Создаем папки для файлов и монтируем статику
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 os.makedirs(BACKUPS_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # Настраиваем шаблонизатор Jinja2
@@ -334,6 +415,23 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "same-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://cdn.sheetjs.com https://npmcdn.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://npmcdn.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "img-src 'self' data: blob:; "
+        "connect-src 'self' ws: wss:; "
+        "media-src 'self' blob:; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "frame-ancestors 'none'; "
+        "form-action 'self'"
+    )
+    if COOKIE_SECURE or APP_ENV == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
     sensitive_prefixes = (
         "/app",
@@ -348,6 +446,16 @@ async def security_headers_middleware(request: Request, call_next):
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
     return response
+
+
+@app.get("/uploads/{relative_path:path}")
+def protected_upload(relative_path: str, request: Request):
+    actor = get_session_user(request.cookies.get(SESSION_COOKIE_NAME, ""))
+    if not actor or actor.get("status") != "approved":
+        raise HTTPException(status_code=403, detail="Требуется авторизация")
+    if not _can_access_upload_path(actor, relative_path):
+        raise HTTPException(status_code=403, detail="Нет доступа к файлу")
+    return _secure_file_response(_safe_upload_disk_path(relative_path))
 
 
 @app.exception_handler(Exception)
@@ -392,6 +500,9 @@ def open_document_by_qr(doc_id: int, token: str = ""):
         return HTMLResponse("<h1>404</h1><p>Документ не найден.</p>", status_code=404)
     file_url = str(document.get("file_url") or "").strip()
     if _is_public_document_file_url(file_url):
+        secure_response = _secure_upload_response_from_url(file_url)
+        if secure_response:
+            return secure_response
         return RedirectResponse(url=file_url, status_code=307)
     title = html.escape(document.get("number") or f"#{doc_id}")
     subject = html.escape(document.get("subject") or "Тема не указана")
@@ -499,6 +610,11 @@ def read_guest_portal(request: Request, token: str):
 # === НОВЫЙ ЭНДПОИНТ WEBSOCKET ===
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    session_id = websocket.cookies.get(SESSION_COOKIE_NAME, "")
+    actor = get_session_user(session_id)
+    if not actor or actor.get("status") != "approved":
+        await websocket.close(code=1008)
+        return
     await manager.connect(websocket)
     try:
         while True:
@@ -520,3 +636,4 @@ app.include_router(erp_deep.router)
 app.include_router(erp_ops_plus.router)
 app.include_router(workbench.router)
 app.include_router(integration_1c.router)
+app.include_router(assistant.router)

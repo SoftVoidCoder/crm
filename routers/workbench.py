@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from datetime import datetime
 
@@ -30,6 +31,32 @@ def _safe_int(value) -> int:
 
 def _safe_text(value) -> str:
     return str(value or "").strip()
+
+
+def _format_search_numeric(value) -> str:
+    text = _safe_text(value)
+    if not text:
+        return ""
+    normalized = text.replace(" ", "").replace(",", ".")
+    if not re.fullmatch(r"-?\d+(?:\.\d+)?(?:e[+-]?\d+)?", normalized, re.IGNORECASE):
+        return text
+    try:
+        number = float(normalized)
+    except Exception:
+        return text
+    if number.is_integer():
+        return f"{int(number):,}".replace(",", " ")
+    return f"{number:,.2f}".replace(",", " ").replace(".", ",")
+
+
+def _search_meta_field_value(field_name: str, value) -> str:
+    text = _safe_text(value)
+    if not text:
+        return ""
+    key = _safe_text(field_name).lower()
+    if any(marker in key for marker in ("amount", "sum", "qty", "price", "cost", "budget", "total")):
+        return _format_search_numeric(text)
+    return text
 
 
 def _json_load(value, default):
@@ -709,7 +736,7 @@ def _search_rows(
     result = []
     for row in rows[:limit]:
         title = next((_safe_text(row.get(field)) for field in title_fields if _safe_text(row.get(field))), f"{entity_type} #{row.get('id')}")
-        meta = " · ".join(_safe_text(row.get(field)) for field in meta_fields if _safe_text(row.get(field)))
+        meta = " · ".join(_search_meta_field_value(field, row.get(field)) for field in meta_fields if _safe_text(row.get(field)))
         result.append({
             "type": entity_type,
             "type_label": type_label or entity_type,
@@ -998,86 +1025,106 @@ def global_search(request: Request, q: str = "", limit: int = 8):
     if not actor:
         return {"error": "forbidden"}
     query = _safe_text(q).lower()
-    if len(query) < 2:
+    if len(query) < 1:
         return {"items": []}
-    like = f"%{query}%"
+    search_terms = [query]
+    for token in query.split():
+        token = _safe_text(token).lower()
+        if token and token not in search_terms:
+            search_terms.append(token)
     max_rows = max(1, min(_safe_int(limit) or 8, 20))
     conn = get_connection(row_factory=True)
     try:
         items = []
-        if has_permission(actor, "projects", "read"):
-            items += _search_rows(
-                conn,
-                "SELECT id, name, contract, client, manager FROM projects WHERE LOWER(COALESCE(name,'') || ' ' || COALESCE(contract,'') || ' ' || COALESCE(client,'') || ' ' || COALESCE(manager,'')) LIKE ? ORDER BY id DESC LIMIT ?",
-                (like, max_rows),
-                "project",
-                "dashboard",
-                ("name", "contract"),
-                ("contract", "client", "manager"),
-                max_rows,
-            )
-        if has_permission(actor, "clients", "read"):
-            items += _search_rows(
-                conn,
-                "SELECT id, name, inn, contact FROM clients WHERE LOWER(COALESCE(name,'') || ' ' || COALESCE(inn,'') || ' ' || COALESCE(contact,'')) LIKE ? ORDER BY id DESC LIMIT ?",
-                (like, max_rows),
-                "client",
-                "clients",
-                ("name",),
-                ("inn", "contact"),
-                max_rows,
-            )
-        if has_permission(actor, "documents", "read"):
-            items += _search_rows(
-                conn,
-                "SELECT id, number, subject, correspondent, type, status FROM documents WHERE LOWER(COALESCE(number,'') || ' ' || COALESCE(subject,'') || ' ' || COALESCE(correspondent,'')) LIKE ? ORDER BY id DESC LIMIT ?",
-                (like, max_rows),
-                "document",
-                "documents",
-                ("number", "subject"),
-                ("type", "status", "correspondent"),
-                max_rows,
-            )
-            for row in search_document_content(conn, query, max_rows):
-                title = _safe_text(row.get("number")) or _safe_text(row.get("subject")) or f"Документ #{row.get('id')}"
-                filename = _safe_text(row.get("original_filename")) or "вложение"
-                excerpt = _safe_text(row.get("content_excerpt"))
-                items.append({
-                    "type": "document",
-                    "type_label": "Текст вложения",
-                    "entity_type": "document",
-                    "entity_id": _safe_int(row.get("id")),
-                    "title": title,
-                    "desc": " · ".join(part for part in (filename, excerpt[:180]) if part),
-                    "view": "documents",
-                    "match_source": "document_content_index",
-                })
-        if has_permission(actor, "tasks", "read"):
-            items += _search_rows(
-                conn,
-                "SELECT id, title, executor, status, deadline FROM tasks WHERE LOWER(COALESCE(title,'') || ' ' || COALESCE(executor,'')) LIKE ? ORDER BY id DESC LIMIT ?",
-                (like, max_rows),
-                "task",
-                "tasks",
-                ("title",),
-                ("executor", "status", "deadline"),
-                max_rows,
-            )
-        for source in SEARCH_SOURCES:
-            module, action = source["permission"]
-            if not has_permission(actor, module, action):
-                continue
-            items += _search_rows(
-                conn,
-                source["sql"],
-                (like, max_rows),
-                source["entity_type"],
-                source["view"],
-                source["title_fields"],
-                source["meta_fields"],
-                max_rows,
-                source["type_label"],
-            )
+        seen: set[tuple[str, int, str]] = set()
+
+        def merge_rows(found_rows: list[dict]):
+            for item in found_rows:
+                key = (
+                    _safe_text(item.get("entity_type") or item.get("type")),
+                    _safe_int(item.get("entity_id") or item.get("id")),
+                    _safe_text(item.get("view")),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                items.append(item)
+
+        for term in search_terms:
+            like = f"%{term}%"
+            if has_permission(actor, "projects", "read"):
+                merge_rows(_search_rows(
+                    conn,
+                    "SELECT id, name, contract, client, manager FROM projects WHERE LOWER(COALESCE(name,'') || ' ' || COALESCE(contract,'') || ' ' || COALESCE(client,'') || ' ' || COALESCE(manager,'')) LIKE ? ORDER BY id DESC LIMIT ?",
+                    (like, max_rows),
+                    "project",
+                    "dashboard",
+                    ("name", "contract"),
+                    ("contract", "client", "manager"),
+                    max_rows,
+                ))
+            if has_permission(actor, "clients", "read"):
+                merge_rows(_search_rows(
+                    conn,
+                    "SELECT id, name, inn, contact FROM clients WHERE LOWER(COALESCE(name,'') || ' ' || COALESCE(inn,'') || ' ' || COALESCE(contact,'')) LIKE ? ORDER BY id DESC LIMIT ?",
+                    (like, max_rows),
+                    "client",
+                    "clients",
+                    ("name",),
+                    ("inn", "contact"),
+                    max_rows,
+                ))
+            if has_permission(actor, "documents", "read"):
+                merge_rows(_search_rows(
+                    conn,
+                    "SELECT id, number, subject, correspondent, type, status FROM documents WHERE LOWER(COALESCE(number,'') || ' ' || COALESCE(subject,'') || ' ' || COALESCE(correspondent,'')) LIKE ? ORDER BY id DESC LIMIT ?",
+                    (like, max_rows),
+                    "document",
+                    "documents",
+                    ("number", "subject"),
+                    ("type", "status", "correspondent"),
+                    max_rows,
+                ))
+                for row in search_document_content(conn, term, max_rows):
+                    title = _safe_text(row.get("number")) or _safe_text(row.get("subject")) or f"Документ #{row.get('id')}"
+                    filename = _safe_text(row.get("original_filename")) or "вложение"
+                    excerpt = _safe_text(row.get("content_excerpt"))
+                    merge_rows([{
+                        "type": "document",
+                        "type_label": "Текст вложения",
+                        "entity_type": "document",
+                        "entity_id": _safe_int(row.get("id")),
+                        "title": title,
+                        "desc": " · ".join(part for part in (filename, excerpt[:180]) if part),
+                        "view": "documents",
+                        "match_source": "document_content_index",
+                    }])
+            if has_permission(actor, "tasks", "read"):
+                merge_rows(_search_rows(
+                    conn,
+                    "SELECT id, title, executor, status, deadline FROM tasks WHERE LOWER(COALESCE(title,'') || ' ' || COALESCE(executor,'')) LIKE ? ORDER BY id DESC LIMIT ?",
+                    (like, max_rows),
+                    "task",
+                    "tasks",
+                    ("title",),
+                    ("executor", "status", "deadline"),
+                    max_rows,
+                ))
+            for source in SEARCH_SOURCES:
+                module, action = source["permission"]
+                if not has_permission(actor, module, action):
+                    continue
+                merge_rows(_search_rows(
+                    conn,
+                    source["sql"],
+                    (like, max_rows),
+                    source["entity_type"],
+                    source["view"],
+                    source["title_fields"],
+                    source["meta_fields"],
+                    max_rows,
+                    source["type_label"],
+                ))
         return {"items": items[:max_rows * (4 + len(SEARCH_SOURCES))]}
     finally:
         conn.close()

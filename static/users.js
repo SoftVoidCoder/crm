@@ -868,8 +868,7 @@ function renderSelfServiceMetric(title, value, subtitle = '') {
     `;
 }
 
-function profileShortcutRead(actionKey) {
-    const prefix = `profileShortcut_${actionKey}_`;
+function profileShortcutRead(prefix) {
     const keyValue = String(document.getElementById(`${prefix}key`)?.value || '').trim();
     return {
         ctrl: Boolean(document.getElementById(`${prefix}ctrl`)?.checked),
@@ -889,19 +888,46 @@ function renderWorkspacePreferencePanel() {
         ? resolveWorkspaceShortcutPlatform(preference)
         : 'windows';
     const defs = window.WORKSPACE_SHORTCUT_DEFS || {};
-    const rows = Object.entries(defs).map(([actionKey, definition]) => {
+    const shortcutOrder = Array.isArray(config?.shortcutOrder) && config.shortcutOrder.length
+        ? config.shortcutOrder.filter(actionKey => defs[actionKey])
+        : Object.keys(defs);
+    const actionOptions = Object.entries(defs).map(([optionKey, optionDefinition]) => ({
+        key: optionKey,
+        label: optionDefinition.label || optionKey,
+    }));
+    const rows = shortcutOrder.map((actionKey, slotIndex) => {
+        const definition = defs[actionKey];
         const shortcut = typeof getWorkspaceShortcutConfig === 'function'
             ? getWorkspaceShortcutConfig(actionKey, config)
             : { ctrl: false, meta: true, alt: false, shift: false, key: 'k' };
         const preview = typeof formatWorkspaceShortcutLabel === 'function'
             ? formatWorkspaceShortcutLabel(shortcut, resolvedPlatform)
             : shortcut.key;
-        const prefix = `profileShortcut_${actionKey}_`;
+        const slotLabel = `Сочетание ${slotIndex + 1}`;
+        const prefix = `profileShortcut_slot${slotIndex}_`;
+        const optionsHtml = actionOptions.map(option => `
+            <option value="${profileEscape(option.key)}" ${option.key === actionKey ? 'selected' : ''}>${profileEscape(option.label)}</option>
+        `).join('');
         return `
             <div class="profile-shortcut-row">
                 <div class="profile-shortcut-copy">
-                    <div class="profile-shortcut-title">${profileEscape(definition.label || actionKey)}</div>
-                    <div class="profile-shortcut-text">${profileEscape(definition.description || '')}</div>
+                    <div class="profile-shortcut-head">
+                        <div>
+                            <div class="profile-shortcut-keylabel">${profileEscape(slotLabel)}</div>
+                            <div class="profile-shortcut-title">Действие сочетания</div>
+                        </div>
+                        <span class="profile-shortcut-preview">${profileEscape(preview)}</span>
+                    </div>
+                    <div class="profile-shortcut-actionwrap">
+                        <span class="profile-shortcut-keylabel">Что делает сочетание</span>
+                        <select id="${prefix}action" class="auth-input profile-shortcut-action" onchange="changeProfileShortcutAction(${slotIndex}, this.value)">
+                            ${optionsHtml}
+                        </select>
+                    </div>
+                    <div class="profile-shortcut-text">
+                        <strong>${profileEscape(definition.label || actionKey)}</strong>.<br>
+                        Сначала выбери действие, потом выставь модификаторы и клавишу. ${profileEscape(definition.description || '')}
+                    </div>
                 </div>
                 <div class="profile-shortcut-form">
                     <label class="profile-shortcut-toggle">
@@ -920,10 +946,14 @@ function renderWorkspacePreferencePanel() {
                         <input id="${prefix}shift" type="checkbox" ${shortcut.shift ? 'checked' : ''}>
                         <span>Shift</span>
                     </label>
-                    <input id="${prefix}key" class="auth-input profile-shortcut-key" type="text" maxlength="1" value="${profileEscape(shortcut.key || '')}" placeholder="K">
-                    <span class="profile-shortcut-preview">${profileEscape(preview)}</span>
-                    <button class="btn-primary" type="button" onclick="saveProfileShortcut('${actionKey}')">Сохранить</button>
-                    <button class="btn-secondary" type="button" onclick="resetProfileShortcut('${actionKey}')">По умолчанию</button>
+                    <div class="profile-shortcut-keywrap">
+                        <span class="profile-shortcut-keylabel">Клавиша</span>
+                        <input id="${prefix}key" class="auth-input profile-shortcut-key" type="text" maxlength="1" value="${profileEscape(shortcut.key || '')}" placeholder="K">
+                    </div>
+                    <div class="profile-shortcut-actions">
+                        <button class="btn-primary" type="button" onclick="saveProfileShortcutSlot(${slotIndex})">Сохранить сочетание</button>
+                        <button class="btn-secondary" type="button" onclick="resetProfileShortcutSlot(${slotIndex})">Вернуть шаблон</button>
+                    </div>
                 </div>
             </div>
         `;
@@ -932,7 +962,7 @@ function renderWorkspacePreferencePanel() {
         <div class="section-header">
             <div>
                 <h3 class="section-title">Поиск и горячие клавиши</h3>
-                <p class="section-subtitle">Выберите платформу и настройте сочетания так, как привыкли работать в Windows или macOS.</p>
+                <p class="section-subtitle">Сначала выбери платформу. Затем настрой каждую комбинацию отдельно: что она открывает, какие модификаторы использует и какая у неё основная клавиша.</p>
             </div>
             <span class="ops-section-chip ops-section-chip--primary">${resolvedPlatform === 'mac' ? 'macOS' : 'Windows/PC'}</span>
         </div>
@@ -946,6 +976,7 @@ function renderWorkspacePreferencePanel() {
                 </select>
                 <div class="profile-platform-note">Сейчас используется: ${resolvedPlatform === 'mac' ? 'macOS' : 'Windows/PC'}.</div>
             </div>
+            <div class="profile-platform-note">Одна строка = одно сочетание. Если выберешь для строки уже занятое действие, система просто поменяет назначения местами.</div>
             <div class="profile-shortcut-grid">${rows}</div>
         </div>
     `;
@@ -958,8 +989,34 @@ window.saveProfilePlatformPreference = function(value) {
     if (typeof showToast === 'function') showToast('Рабочая среда', 'Платформа сочетаний сохранена');
 };
 
-window.saveProfileShortcut = function(actionKey) {
-    const shortcut = profileShortcutRead(actionKey);
+window.changeProfileShortcutAction = function(slotIndex, nextActionKey) {
+    const defs = window.WORKSPACE_SHORTCUT_DEFS || {};
+    if (!defs[nextActionKey]) return;
+    const config = typeof loadWorkspaceConfig === 'function' ? loadWorkspaceConfig() : null;
+    const fallbackOrder = Object.keys(defs);
+    const order = Array.isArray(config?.shortcutOrder) && config.shortcutOrder.length
+        ? [...config.shortcutOrder]
+        : [...fallbackOrder];
+    const currentActionKey = order[slotIndex];
+    if (!currentActionKey || currentActionKey === nextActionKey) return;
+    const existingIndex = order.indexOf(nextActionKey);
+    if (existingIndex >= 0) {
+        [order[slotIndex], order[existingIndex]] = [order[existingIndex], order[slotIndex]];
+    } else {
+        order[slotIndex] = nextActionKey;
+    }
+    if (typeof saveWorkspaceShortcutOrder === 'function') saveWorkspaceShortcutOrder(order);
+    renderWorkspacePreferencePanel();
+    if (typeof showToast === 'function') showToast('Горячие клавиши', 'Назначение действия обновлено');
+};
+
+window.saveProfileShortcutSlot = function(slotIndex) {
+    const actionKey = String(document.getElementById(`profileShortcut_slot${slotIndex}_action`)?.value || '').trim();
+    const shortcut = profileShortcutRead(`profileShortcut_slot${slotIndex}_`);
+    if (!actionKey) {
+        if (typeof customAlert === 'function') customAlert('Выбери действие для сочетания.');
+        return;
+    }
     if (!shortcut.key) {
         if (typeof customAlert === 'function') customAlert('Укажи клавишу для сочетания.');
         return;
@@ -974,7 +1031,9 @@ window.saveProfileShortcut = function(actionKey) {
     if (typeof showToast === 'function') showToast('Горячие клавиши', 'Сочетание сохранено');
 };
 
-window.resetProfileShortcut = function(actionKey) {
+window.resetProfileShortcutSlot = function(slotIndex) {
+    const actionKey = String(document.getElementById(`profileShortcut_slot${slotIndex}_action`)?.value || '').trim();
+    if (!actionKey) return;
     if (typeof resetWorkspaceShortcutConfig === 'function') resetWorkspaceShortcutConfig(actionKey);
     if (typeof updateCommandPaletteShortcutHints === 'function') updateCommandPaletteShortcutHints();
     renderWorkspacePreferencePanel();
@@ -1420,6 +1479,9 @@ function renderNotifications() {
     let html = '';
     const notifications = notificationsDB || [];
     const unread = notifications.filter(n => !n.is_read).length;
+    const meta = document.getElementById('notifMetaLabel');
+    const bell = document.getElementById('notifBellBtn');
+    const bellState = document.getElementById('notifBellState');
 
     const categoryLabel = (category) => ({
         task: 'Задачи',
@@ -1492,7 +1554,44 @@ function renderNotifications() {
 
     if (notifications.length === 0) html = '<div class="notif-empty">Пока нет серверных уведомлений</div>';
     const list = document.getElementById('notifList'); if(list) list.innerHTML = html;
-    const badge = document.getElementById('notifBadge'); if(badge) { if(unread > 0) { badge.style.display = 'flex'; badge.innerText = unread > 99 ? '99+' : unread; } else { badge.style.display = 'none'; } }
+    const badge = document.getElementById('notifBadge');
+    if (meta) {
+        meta.innerText = unread > 0
+            ? `${unread} непрочитанных ${unread === 1 ? 'событие' : unread < 5 ? 'события' : 'событий'}`
+            : notifications.length
+                ? `Все события просмотрены`
+                : 'Нет новых событий';
+    }
+    if(badge) {
+        if(unread > 0) {
+            badge.classList.remove('krd-is-hidden');
+            badge.style.display = 'flex';
+            badge.innerText = unread > 99 ? '99+' : unread;
+        } else {
+            badge.classList.add('krd-is-hidden');
+            badge.style.display = 'none';
+            badge.innerText = '0';
+        }
+    }
+    if (bell) {
+        bell.classList.toggle('notif-bell--has-unread', unread > 0);
+        bell.classList.toggle('notif-bell--is-empty', unread === 0 && notifications.length === 0);
+        bell.dataset.notifState = unread > 0 ? 'unread' : (notifications.length ? 'read' : 'empty');
+        const bellLabel = unread > 0
+            ? `Уведомления: ${unread} непрочитанных`
+            : notifications.length
+                ? 'Уведомления: всё прочитано'
+                : 'Уведомления: новых событий нет';
+        bell.setAttribute('title', bellLabel);
+        bell.setAttribute('aria-label', bellLabel);
+    }
+    if (bellState) {
+        bellState.innerText = unread > 0
+            ? `${unread} новых`
+            : notifications.length
+                ? 'Просмотрено'
+                : 'Пусто';
+    }
     isFirstLoad = false;
 }
 
@@ -1521,11 +1620,7 @@ function showToast(title, action, proj_id) {
 async function markNotificationRead(notificationId, closeAfter = false) {
     if (!notificationId || String(notificationId).startsWith('live-')) {
         if (closeAfter) {
-            const dropdown = document.getElementById('notifDropdown');
-            if (dropdown) {
-                dropdown.classList.add('krd-is-hidden');
-                dropdown.style.display = 'none';
-            }
+            setNotificationDropdownState(false);
         }
         return;
     }
@@ -1533,11 +1628,7 @@ async function markNotificationRead(notificationId, closeAfter = false) {
     if (typeof loadNotifications === 'function') await loadNotifications();
     renderNotifications();
     if (closeAfter) {
-        const dropdown = document.getElementById('notifDropdown');
-        if (dropdown) {
-            dropdown.classList.add('krd-is-hidden');
-            dropdown.style.display = 'none';
-        }
+        setNotificationDropdownState(false);
     }
 }
 
@@ -1564,26 +1655,41 @@ window.openNotificationItem = async function(entityType, entityId, notificationI
     }
 };
 
-async function toggleNotifications(forceToggle = true) {
+function setNotificationDropdownState(isOpen) {
+    const dropdown = document.getElementById('notifDropdown');
+    const bell = document.getElementById('notifBellBtn');
+    if (!dropdown) return;
+    dropdown.classList.toggle('krd-is-hidden', !isOpen);
+    dropdown.style.display = isOpen ? 'flex' : 'none';
+    dropdown.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    if (bell) {
+        bell.classList.toggle('is-open', isOpen);
+        bell.dataset.open = isOpen ? 'true' : 'false';
+        bell.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        bell.setAttribute('aria-pressed', isOpen ? 'true' : 'false');
+    }
+}
+
+async function toggleNotifications(forceToggle = true, desiredState = null) {
     const dropdown = document.getElementById('notifDropdown');
     if(!dropdown) return;
     const isOpen = !dropdown.classList.contains('krd-is-hidden') && dropdown.style.display === 'flex';
-    if (isOpen && forceToggle) {
-        dropdown.classList.add('krd-is-hidden');
-        dropdown.style.display = 'none';
+    const nextOpen = typeof desiredState === 'boolean' ? desiredState : (forceToggle ? !isOpen : true);
+    if (!nextOpen) {
+        setNotificationDropdownState(false);
     } else {
+        if (typeof closeOmniSearchResults === 'function') closeOmniSearchResults();
+        if (typeof closeCommandPalette === 'function') closeCommandPalette();
         if (typeof loadNotifications === 'function') await loadNotifications();
         renderNotifications();
-        dropdown.classList.remove('krd-is-hidden');
-        dropdown.style.display = 'flex';
+        setNotificationDropdownState(true);
     }
 }
 document.addEventListener('click', (e) => {
     const wrap = document.querySelector('.notif-wrapper');
     const drop = document.getElementById('notifDropdown');
     if (wrap && !wrap.contains(e.target) && drop && drop.style.display === 'flex') {
-        drop.classList.add('krd-is-hidden');
-        drop.style.display = 'none';
+        setNotificationDropdownState(false);
     }
 });
 

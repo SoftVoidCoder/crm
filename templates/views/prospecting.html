@@ -12,8 +12,9 @@
         </div>
 
         <div id="outreachSummaryStrip" class="crm-summary-strip"></div>
+        <div id="outreachDirectorPanel" class="prospecting-director-panel"></div>
 
-        <div class="client360-grid" style="margin-bottom:20px;">
+        <div class="client360-grid prospecting-top-grid">
             <section class="surface-card prospecting-panel">
                 <div class="section-header">
                     <div>
@@ -26,8 +27,11 @@
                     <input id="outreachImportSource" class="auth-input" type="text" placeholder="Источник списка: сайт, тендер, вручную">
                     <select id="outreachImportManager" class="auth-input"></select>
                     <input id="outreachImportPlanDate" class="auth-input" type="text" placeholder="План контакта: дд.мм.гггг">
+                    <button class="btn-secondary" onclick="previewOutreachImport()">Предпросмотр Bitrix</button>
                     <button class="btn-secondary" onclick="importOutreachFile()">Импортировать список</button>
                 </div>
+                <div id="outreachImportPreview" class="prospecting-import-preview"></div>
+                <div id="outreachImportResult" class="prospecting-import-result"></div>
             </section>
             <section class="surface-card prospecting-panel" id="outreachReportPanel"></section>
         </div>
@@ -66,9 +70,13 @@
             <div class="crm-toolbar__group">
                 <button id="outreachOverdueBtn" class="btn-secondary" onclick="toggleOutreachOverdueFilter()">Только просроченные</button>
                 <button id="outreachTodayBtn" class="btn-secondary" onclick="toggleOutreachTodayFilter()">План на сегодня</button>
+                <button id="outreachProblemsBtn" class="btn-secondary" onclick="toggleOutreachProblemFilter()">Проблемная база</button>
                 <button class="btn-secondary" onclick="resetOutreachFilters()">Сбросить</button>
             </div>
         </div>
+
+        <div id="outreachEditorPanel" class="crm-editor-panel" style="display:none;"></div>
+        <div id="prospectingContentMount"></div>
 
         <div class="prospecting-bulkbar">
             <div class="prospecting-bulkbar__title">Массовые действия</div>
@@ -88,8 +96,5 @@
                 <button class="btn-primary" onclick="applyOutreachBulkAction()">Применить к выбранным</button>
             </div>
         </div>
-
-        <div id="outreachEditorPanel" class="crm-editor-panel" style="display:none;"></div>
-        <div id="prospectingContentMount"></div>
     </div>
 </div>

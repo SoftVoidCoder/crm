@@ -437,7 +437,7 @@ function renderContractRegistry() {
     const allSelected = rows.length > 0 && rows.every(row => contractRegistrySelection.has(Number(row.id || 0)));
     registry.innerHTML = `
         <div class="table-shell contract-registry-table-shell">
-            <table class="admin-table admin-table--dense">
+            <table class="admin-table admin-table--dense crm-registry-table">
                 <thead>
                     <tr>
                         <th style="width:44px;"><input type="checkbox" ${allSelected ? 'checked' : ''} onchange="toggleContractRegistryAll(this.checked)"></th>
@@ -459,30 +459,30 @@ function renderContractRegistry() {
                             <td onclick="event.stopPropagation()">
                                 <input type="checkbox" ${contractRegistrySelection.has(Number(contract.id || 0)) ? 'checked' : ''} onchange="toggleContractRegistryRow(${contract.id}, this.checked)">
                             </td>
-                            <td>
+                            <td class="crm-title-cell">
                                 <div class="contract-registry-title-cell">
                                     <strong>${contract.contract_number || 'Без номера'}</strong>
                                     <div class="table-subtext">${contract.title || 'Без названия'}</div>
                                 </div>
                             </td>
-                            <td>
+                            <td class="crm-contact-cell">
                                 <div>${contract.client_name || 'Без контрагента'}</div>
                                 <div class="table-subtext">${contract.project_name || 'Без проекта'}</div>
                             </td>
-                            <td>
+                            <td class="crm-meta-cell">
                                 <div>${contract.folder || 'Все договоры'}</div>
                                 <div class="table-subtext">${contractTypeLabel(contract.contract_type)}${contract.category ? ` · ${contract.category}` : ''}</div>
                             </td>
-                            <td>
+                            <td class="crm-action-cell">
                                 <div>${contract.start_date || '—'} → ${contract.end_date || '—'}</div>
                                 <div class="table-subtext">${isContractOverdue(contract) ? 'Есть просрочка' : 'Срок в норме'}</div>
                             </td>
-                            <td class="amount">${formatMoney(Number(contract.amount || 0), contract.currency || 'RUB')}</td>
-                            <td>${contractVatLabel(contract.vat_mode)}</td>
+                            <td class="amount is-num crm-amount-cell">${formatMoney(Number(contract.amount || 0), contract.currency || 'RUB')}</td>
+                            <td class="crm-meta-cell">${contractVatLabel(contract.vat_mode)}</td>
                             <td><span class="contract-risk contract-risk--${contractRiskClass(contract.risk_level)}">${contractRiskLabel(contract.risk_level)}</span></td>
                             <td><span class="crm-inline-pill crm-inline-pill--${isContractOverdue(contract) ? 'critical' : 'neutral'}">${contractStateLabel(contract.status)}</span></td>
-                            <td>${contract.manager_name || '—'}</td>
-                            <td onclick="event.stopPropagation()">
+                            <td class="crm-meta-cell">${contract.manager_name || '—'}</td>
+                            <td class="crm-action-cell" onclick="event.stopPropagation()">
                                 <div class="contract-row-actions">
                                     <button class="btn-secondary" onclick="openContractCard(${contract.id})">Открыть</button>
                                     <button class="btn-secondary" onclick="assignContractManager(${contract.id})">Назначить</button>

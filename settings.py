@@ -19,6 +19,9 @@ MAIL_IMAP_TIMEOUT = max(5, int(os.getenv("KORDA_MAIL_IMAP_TIMEOUT", "20")))
 MAIL_SMTP_TIMEOUT = max(5, int(os.getenv("KORDA_MAIL_SMTP_TIMEOUT", "20")))
 DADATA_TOKEN = os.getenv("KORDA_DADATA_TOKEN", "").strip()
 DADATA_SECRET = os.getenv("KORDA_DADATA_SECRET", "").strip()
+KORDA_GEMINI_API_KEYS = os.getenv("KORDA_GEMINI_API_KEYS", "").strip()
+KORDA_AI_MODEL = os.getenv("KORDA_AI_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash"
+KORDA_AI_TIMEOUT_SECONDS = max(5, int(os.getenv("KORDA_AI_TIMEOUT_SECONDS", "8")))
 
 
 def using_insecure_defaults() -> bool:
