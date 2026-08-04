@@ -11922,6 +11922,78 @@ body.workspace-config-open {
     text-align: center;
 }
 
+#bitrixImportView .bitrix-import-page {
+    display: grid;
+    gap: 18px;
+}
+
+#bitrixImportView .crm-summary-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+#bitrixImportView .bitrix-import-grid {
+    display: grid;
+    grid-template-columns: minmax(260px, 1.4fr) minmax(130px, 170px) minmax(160px, 210px) minmax(140px, 170px) minmax(150px, 190px) minmax(140px, 180px) minmax(140px, 180px);
+    gap: 12px;
+    align-items: start;
+}
+
+#bitrixImportView .bitrix-import-grid > .auth-input,
+#bitrixImportView .bitrix-import-grid > .btn-primary,
+#bitrixImportView .bitrix-import-grid > .btn-secondary {
+    min-width: 0;
+    min-height: 48px;
+}
+
+#bitrixImportView .prospecting-bitrix-results {
+    margin-top: 14px;
+}
+
+#bitrixImportView .bitrix-search-table {
+    max-height: 420px;
+    overflow: auto;
+}
+
+#bitrixImportView .bitrix-search-table .admin-table th,
+#bitrixImportView .bitrix-search-table .admin-table td {
+    white-space: nowrap;
+}
+
+#bitrixImportView .empty-state {
+    min-height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+#bitrixImportView .bitrix-import-action-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+}
+
+#bitrixImportView .bitrix-import-action-grid > div {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    background: color-mix(in srgb, var(--surface) 92%, var(--primary) 8%);
+}
+
+#bitrixImportView .bitrix-import-action-grid strong,
+#bitrixImportView .bitrix-import-action-grid span {
+    display: block;
+}
+
+#bitrixImportView .bitrix-import-action-grid span {
+    margin-top: 5px;
+    color: var(--secondary);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
 .crm-intelligence-panel:empty {
     display: none;
 }
@@ -12816,6 +12888,12 @@ body.workspace-config-open {
 }
 
 @media (max-width: 1280px) {
+    #bitrixImportView .crm-summary-strip,
+    #bitrixImportView .bitrix-import-grid,
+    #bitrixImportView .bitrix-import-action-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     #prospectingView .prospecting-inline-grid,
     #prospectingView .prospecting-bulkbar__controls {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -12872,6 +12950,9 @@ body.workspace-config-open {
 }
 
 @media (max-width: 720px) {
+    #bitrixImportView .crm-summary-strip,
+    #bitrixImportView .bitrix-import-grid,
+    #bitrixImportView .bitrix-import-action-grid,
     #prospectingView .prospecting-inline-grid,
     #prospectingView .prospecting-bulkbar__controls,
     #prospectingView .prospecting-control-layout,

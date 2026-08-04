@@ -1008,6 +1008,34 @@ function bitrixSelectionKey(item) {
     return `${String(item?.type || '')}:${String(item?.id || '')}`;
 }
 
+function renderBitrixImportStats() {
+    const mount = document.getElementById('bitrixImportStats');
+    if (!mount) return;
+    const rows = (Array.isArray(outreachProspectsDB) ? outreachProspectsDB : []).filter(row => String(row.source_name || '') === 'Bitrix24 API');
+    const withContacts = rows.filter(row => String(row.phone || row.email || row.contact_name || '').trim()).length;
+    const emptyContacts = rows.length - withContacts;
+    const lastImport = (Array.isArray(outreachImportsDB) ? outreachImportsDB : [])
+        .filter(row => String(row.source_name || '') === 'Bitrix24 API')
+        .sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))[0];
+    mount.innerHTML = `
+        <div class="crm-summary-card"><div class="crm-summary-label">В базе из Bitrix24</div><div class="crm-summary-value">${rows.length}</div></div>
+        <div class="crm-summary-card"><div class="crm-summary-label">С контактами</div><div class="crm-summary-value">${withContacts}</div></div>
+        <div class="crm-summary-card"><div class="crm-summary-label">Без контактов</div><div class="crm-summary-value">${emptyContacts}</div></div>
+        <div class="crm-summary-card"><div class="crm-summary-label">Последний импорт</div><div class="crm-summary-value">${lastImport ? Number(lastImport.rows_total || 0) : 0}</div></div>
+    `;
+}
+
+async function renderBitrixImport() {
+    const view = document.getElementById('bitrixImportView');
+    if (view) {
+        view.style.display = 'block';
+        view.classList.add('fade-in');
+    }
+    await Promise.all([loadOutreachProspects(), loadOutreachImports()]);
+    renderBitrixImportStats();
+    renderOutreachBitrixPanel();
+}
+
 function renderOutreachBitrixPanel() {
     const mount = document.getElementById('outreachBitrixResults');
     if (!mount) return;
@@ -1087,6 +1115,7 @@ async function searchBitrixClients() {
     outreachBitrixSelected = new Set(outreachBitrixResults.map(item => bitrixSelectionKey(item)));
     renderOutreachBitrixPanel();
     showToast('Bitrix24', `Найдено: ${outreachBitrixResults.length}`);
+    renderBitrixImportStats();
 }
 
 function toggleBitrixClientSelection(key, checked) {
@@ -1115,6 +1144,7 @@ async function importSelectedBitrixClients() {
     };
     showToast('Bitrix24', `Загружено: ${Number(res.rows_total || 0)}, создано ${Number(res.created || 0)}, обновлено ${Number(res.updated || 0)}`);
     await renderProspecting(true);
+    renderBitrixImportStats();
     renderOutreachBitrixPanel();
 }
 
@@ -1143,6 +1173,7 @@ async function runBitrixSync(actionLabel) {
     };
     showToast('Bitrix24', `Получено: ${Number(res.rows_total || 0)}, новых ${Number(res.created || 0)}, обновлено ${Number(res.updated || 0)}`);
     await renderProspecting(true);
+    renderBitrixImportStats();
     renderOutreachBitrixPanel();
 }
 
@@ -1179,6 +1210,7 @@ async function clearBitrixClientList() {
     };
     showToast('Bitrix24', `Очищено записей: ${Number(res.removed || 0)}`);
     await renderProspecting(true);
+    renderBitrixImportStats();
     renderOutreachBitrixPanel();
 }
 
@@ -1774,6 +1806,7 @@ async function renderProspecting(forceReload = false) {
 }
 
 window.renderProspecting = renderProspecting;
+window.renderBitrixImport = renderBitrixImport;
 window.openOutreachEditor = openOutreachEditor;
 window.closeOutreachEditor = closeOutreachEditor;
 window.saveOutreachProspect = saveOutreachProspect;
@@ -1794,6 +1827,9 @@ window.importOutreachFile = importOutreachFile;
 window.searchBitrixClients = searchBitrixClients;
 window.toggleBitrixClientSelection = toggleBitrixClientSelection;
 window.importSelectedBitrixClients = importSelectedBitrixClients;
+window.syncBitrixClientsNow = syncBitrixClientsNow;
+window.updateBitrixClientsNow = updateBitrixClientsNow;
+window.clearBitrixClientList = clearBitrixClientList;
 window.exportOutreachDirectorReport = exportOutreachDirectorReport;
 window.askOutreachAssistant = askOutreachAssistant;
 window.applyOutreachBulkAction = applyOutreachBulkAction;

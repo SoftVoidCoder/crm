@@ -65,6 +65,7 @@ const VIEW_NAV_MAP = {
     operations: 'navOperations',
     clients: 'navClients',
     prospecting: 'navProspecting',
+    bitrixImport: 'navBitrixImport',
     leads: 'navLeads',
     deals: 'navDeals',
     client360: 'navClient360',
@@ -136,7 +137,7 @@ function filterByDepartment(role, el) {
     if (titleEl) titleEl.innerText = `ВХОДЯЩИЕ: ${role.toUpperCase()}`;
     
     const viewsToHide = [
-        'analyticsView', 'adminView', 'projectView', 'clientsView', 'prospectingView', 'leadsView', 'dealsView',
+        'analyticsView', 'adminView', 'projectView', 'clientsView', 'bitrixImportView', 'prospectingView', 'leadsView', 'dealsView',
         'profileView', 'emailsView', 'meetingsView', 'messengerView', 
         'tasksView', 'knowledgeView', 'approvalsView', 'documentsView', 'claimsView', 'kpiView',
         'nomenclatureView', 'contactsView', 'financeView', 'accountingView', 'integrationsView', 'client360View', 'contract360View', 'supplyView', 'salesView', 'productionView', 'expensesView', 'requestsView', 'resourcesView', 'serviceView', 'executiveView', 'operationsView'
@@ -191,7 +192,7 @@ function navigateTo(view, triggerRender = true) {
     // 1. Скрываем вообще все экраны
     const views = [
         'dashboardView', 'analyticsView', 'adminView', 'projectView', 
-        'clientsView', 'prospectingView', 'leadsView', 'dealsView', 'profileView', 'emailsView', 'meetingsView', 
+        'clientsView', 'bitrixImportView', 'prospectingView', 'leadsView', 'dealsView', 'profileView', 'emailsView', 'meetingsView', 
         'messengerView', 'tasksView', 'knowledgeView', 'approvalsView', 
         'documentsView', 'claimsView', 'kpiView', 'nomenclatureView', 'contactsView', 'financeView', 'accountingView', 'integrationsView', 'client360View', 'contract360View', 'supplyView', 'salesView', 'productionView', 'expensesView', 'requestsView', 'resourcesView', 'serviceView', 'executiveView', 'operationsView'
     ];
@@ -348,6 +349,12 @@ function navigateTo(view, triggerRender = true) {
         const nav = document.getElementById('navProspecting');
         if (nav) nav.classList.add('active');
         if (typeof renderProspecting === 'function') renderProspecting();
+    }
+    else if (nextView === 'bitrixImport') {
+        clearDepartmentFilter(false);
+        const nav = document.getElementById('navBitrixImport');
+        if (nav) nav.classList.add('active');
+        if (typeof renderBitrixImport === 'function') renderBitrixImport();
     }
     else if (nextView === 'leads') {
         clearDepartmentFilter(false);

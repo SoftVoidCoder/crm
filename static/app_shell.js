@@ -792,6 +792,7 @@ function navigationSearchCatalog() {
         navExecutive: 'Панель директора и сводные риски',
         navClients: 'База клиентов и карточки контрагентов',
         navProspecting: 'База развития и обработка клиентского пула',
+        navBitrixImport: 'Выгрузка клиентов из Bitrix24',
         navLeads: 'Лиды и первичная воронка',
         navDeals: 'Сделки и коммерческий контур',
         navClient360: 'Контрагент 360 и клиентское досье',
@@ -820,6 +821,7 @@ function navigationSearchCatalog() {
     const keywords = {
         navDashboard: 'главная проекты портфель рабочий стол',
         navProspecting: 'база развития prospecting обзвон клиенты',
+        navBitrixImport: 'bitrix битрикс выгрузка импорт клиенты загрузить обновить',
         navLeads: 'лиды входящие запросы crm',
         navDeals: 'сделки продажи pipeline коммерция',
         navClient360: 'контрагент 360 досье клиент',
@@ -841,6 +843,7 @@ function navigationSearchCatalog() {
         navExecutive: 'executive',
         navClients: 'clients',
         navProspecting: 'prospecting',
+        navBitrixImport: 'bitrixImport',
         navLeads: 'leads',
         navDeals: 'deals',
         navClient360: 'client360',

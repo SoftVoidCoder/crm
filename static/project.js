@@ -217,7 +217,7 @@ function openProject(id) {
     if (mainContent) mainContent.scrollTop = 0;
     window.scrollTo(0, 0);
 
-    ['dashboardView', 'analyticsView', 'adminView', 'clientsView', 'prospectingView', 'leadsView', 'dealsView', 'profileView', 'emailsView', 'meetingsView', 'messengerView', 'documentsView', 'financeView', 'accountingView', 'client360View', 'contract360View', 'supplyView', 'salesView', 'productionView', 'expensesView', 'requestsView', 'resourcesView', 'serviceView', 'executiveView', 'operationsView'].forEach(v => { const e = document.getElementById(v); if(e) e.style.display = 'none'; });
+    ['dashboardView', 'analyticsView', 'adminView', 'clientsView', 'bitrixImportView', 'prospectingView', 'leadsView', 'dealsView', 'profileView', 'emailsView', 'meetingsView', 'messengerView', 'documentsView', 'financeView', 'accountingView', 'client360View', 'contract360View', 'supplyView', 'salesView', 'productionView', 'expensesView', 'requestsView', 'resourcesView', 'serviceView', 'executiveView', 'operationsView'].forEach(v => { const e = document.getElementById(v); if(e) e.style.display = 'none'; });
     
     const pView = document.getElementById('projectView'); if(pView) { pView.classList.remove('krd-is-hidden'); pView.style.display = 'block'; }
     if (typeof mountSectionGuideForView === 'function') mountSectionGuideForView('projectView');

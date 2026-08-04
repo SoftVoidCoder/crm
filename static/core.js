@@ -532,7 +532,7 @@ function getRoleUiConfig(roleName = '') {
             showDeptFilters: true,
             visibleNav: [
                 'navDashboard', 'navDocuments', 'navTasks', 'navApprovals', 'navClaims', 'navFinance', 'navAccounting', 'navIntegrations',
-                'navSupply', 'navSales', 'navProspecting', 'navLeads', 'navDeals', 'navProduction', 'navRequests', 'navService', 'navExecutive',
+                'navSupply', 'navSales', 'navProspecting', 'navBitrixImport', 'navLeads', 'navDeals', 'navProduction', 'navRequests', 'navService', 'navExecutive',
                 'navOperations', 'navClients', 'navClient360', 'navContract360', 'navKnowledge', 'navMessenger',
                 'navEmails', 'navMeetings', 'navNomenclature', 'navContacts', 'navAnalytics',
                 'navKpi', 'navProfile', 'adminBtn'
@@ -546,7 +546,7 @@ function getRoleUiConfig(roleName = '') {
             quickTaskLabel: 'Задача',
             visibleNav: [
                 'navDashboard', 'navDocuments', 'navTasks', 'navApprovals', 'navClaims', 'navFinance', 'navIntegrations',
-                'navSupply', 'navSales', 'navProspecting', 'navLeads', 'navDeals', 'navExpenses', 'navRequests', 'navResources', 'navService', 'navContract360',
+                'navSupply', 'navSales', 'navProspecting', 'navBitrixImport', 'navLeads', 'navDeals', 'navExpenses', 'navRequests', 'navResources', 'navService', 'navContract360',
                 'navClients', 'navClient360', 'navKnowledge', 'navMessenger', 'navEmails', 'navMeetings', 'navProfile'
             ],
         };
@@ -649,7 +649,7 @@ window.applyRoleShell = function() {
     setRoleShellAttributes(currentUser?.role || '');
     const allNavIds = [
         'navDashboard', 'navApprovals', 'navTasks', 'navKnowledge', 'navDocuments', 'navMessenger',
-        'navEmails', 'navMeetings', 'navFinance', 'navAccounting', 'navIntegrations', 'navSupply', 'navSales', 'navProspecting', 'navLeads', 'navDeals',
+        'navEmails', 'navMeetings', 'navFinance', 'navAccounting', 'navIntegrations', 'navSupply', 'navSales', 'navProspecting', 'navBitrixImport', 'navLeads', 'navDeals',
         'navProduction', 'navExpenses', 'navRequests', 'navResources', 'navService', 'navExecutive',
         'navOperations', 'navClients', 'navClient360', 'navClaims', 'navNomenclature', 'navContacts', 'navAnalytics',
         'navContract360', 'navKpi', 'navProfile', 'adminBtn'

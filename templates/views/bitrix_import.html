@@ -1,0 +1,56 @@
+<div id="bitrixImportView" class="view-page" style="display:none;">
+    <div class="surface-card surface-card--padded crm-workspace-shell bitrix-import-page">
+        <div class="view-header">
+            <div class="view-heading">
+                <span class="view-eyebrow">CRM / Bitrix24</span>
+                <h1 class="view-title">Выгрузка клиентов из Bitrix24</h1>
+                <p class="view-subtitle">Отдельный экран для загрузки базы из Bitrix24, поиска конкретного клиента и обновления новых записей без дублей.</p>
+            </div>
+            <div class="view-actions">
+                <button class="btn-secondary" onclick="navigateTo('prospecting')">К базе развития</button>
+            </div>
+        </div>
+
+        <div id="bitrixImportStats" class="crm-summary-strip"></div>
+
+        <section class="surface-card prospecting-panel bitrix-import-control">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Загрузка из Bitrix24</h3>
+                    <p class="section-subtitle">Выбери объём, нажми выгрузку или найди одного клиента по названию, телефону или email.</p>
+                </div>
+            </div>
+            <div class="prospecting-inline-grid prospecting-bitrix-grid bitrix-import-grid">
+                <input id="outreachBitrixSearch" class="auth-input" type="search" placeholder="Название, контакт, телефон или email">
+                <button id="outreachBitrixSearchButton" class="btn-primary" onclick="searchBitrixClients()">Найти клиента</button>
+                <button id="outreachBitrixImportButton" class="btn-secondary" onclick="importSelectedBitrixClients()">Загрузить выбранных</button>
+                <select id="outreachBitrixSyncLimit" class="auth-input">
+                    <option value="0">Все клиенты</option>
+                    <option value="100">100 последних</option>
+                    <option value="50">50 последних</option>
+                    <option value="25">25 последних</option>
+                </select>
+                <button id="outreachBitrixSyncButton" class="btn-primary" onclick="syncBitrixClientsNow()">Выгрузить сейчас</button>
+                <button id="outreachBitrixUpdateButton" class="btn-secondary" onclick="updateBitrixClientsNow()">Обновить новых</button>
+                <button id="outreachBitrixClearButton" class="btn-secondary" onclick="clearBitrixClientList()">Очистить список</button>
+            </div>
+            <div id="outreachBitrixResults" class="prospecting-bitrix-results"></div>
+        </section>
+
+        <section class="surface-card prospecting-panel bitrix-import-help">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Что происходит после загрузки</h3>
+                    <p class="section-subtitle">Клиенты попадают в базу развития, где их можно обзванивать, прогревать и переводить в лиды.</p>
+                </div>
+            </div>
+            <div class="bitrix-import-action-grid">
+                <div><strong>Звонок</strong><span>Пишет активность “звонок” и переводит карточку в работу.</span></div>
+                <div><strong>Письмо</strong><span>Пишет активность “письмо” и переводит карточку в работу.</span></div>
+                <div><strong>Нет ответа</strong><span>Фиксирует попытку звонка и ставит статус “Не дозвонились”.</span></div>
+                <div><strong>Тёплый</strong><span>Фиксирует интерес и ставит статус “Тёплый”.</span></div>
+                <div><strong>В лид</strong><span>Создаёт лид в CRM и оставляет связь с исходной карточкой.</span></div>
+            </div>
+        </section>
+    </div>
+</div>

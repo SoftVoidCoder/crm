@@ -7,6 +7,7 @@
                 <p class="view-subtitle">Холодная и отложенная база клиентов: импорт списков, назначение менеджеров, прозвон, письма, ежедневные отчёты и конверсия в лиды.</p>
             </div>
             <div class="view-actions">
+                <button class="btn-secondary" onclick="navigateTo('bitrixImport')">Выгрузка Bitrix24</button>
                 <button class="btn-primary" onclick="openOutreachEditor()">+ Новый клиент в базу</button>
             </div>
         </div>
@@ -16,29 +17,6 @@
         <div id="outreachKnowledgePanel" class="prospecting-knowledge-panel"></div>
 
         <div class="client360-grid prospecting-top-grid">
-            <section class="surface-card prospecting-panel">
-                <div class="section-header">
-                    <div>
-                        <h3 class="section-title">Bitrix24</h3>
-                        <p class="section-subtitle">Поиск клиента в Bitrix24 и загрузка выбранных записей в базу развития.</p>
-                    </div>
-                </div>
-                <div class="prospecting-inline-grid prospecting-bitrix-grid">
-                    <input id="outreachBitrixSearch" class="auth-input" type="search" placeholder="Название, контакт, телефон или email">
-                    <button id="outreachBitrixSearchButton" class="btn-primary" onclick="searchBitrixClients()">Найти в Bitrix24</button>
-                    <button id="outreachBitrixImportButton" class="btn-secondary" onclick="importSelectedBitrixClients()">Загрузить выбранных</button>
-                    <select id="outreachBitrixSyncLimit" class="auth-input">
-                        <option value="0">Все клиенты</option>
-                        <option value="100">100 последних</option>
-                        <option value="50">50 последних</option>
-                        <option value="25">25 последних</option>
-                    </select>
-                    <button id="outreachBitrixSyncButton" class="btn-primary" onclick="syncBitrixClientsNow()">Выгрузить сейчас</button>
-                    <button id="outreachBitrixUpdateButton" class="btn-secondary" onclick="updateBitrixClientsNow()">Обновить новых</button>
-                    <button id="outreachBitrixClearButton" class="btn-secondary" onclick="clearBitrixClientList()">Очистить список</button>
-                </div>
-                <div id="outreachBitrixResults" class="prospecting-bitrix-results"></div>
-            </section>
             <section class="surface-card prospecting-panel">
                 <div class="section-header">
                     <div>
