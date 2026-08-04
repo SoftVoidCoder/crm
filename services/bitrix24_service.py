@@ -283,7 +283,7 @@ def fetch_bitrix24_rows(webhook_url: str = "", limit: int | None = None) -> dict
     rows.extend(_contact_to_import_row(item, company_map) for item in contacts)
     rows.extend(_company_to_import_row(item) for item in companies if "companies" in entities)
     return {
-        "rows": rows[:row_limit],
+        "rows": rows,
         "fetched": {"leads": len(leads), "contacts": len(contacts), "companies": len(companies)},
     }
 
