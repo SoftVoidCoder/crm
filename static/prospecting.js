@@ -1487,6 +1487,7 @@ function closeOutreachEditor() {
 function openOutreachEditor(id = 0) {
     outreachEditingId = Number(id || 0);
     renderOutreachEditor();
+    document.getElementById('outreachEditorPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function selectOutreachRow(id) {
@@ -1666,21 +1667,28 @@ async function applyOutreachBulkAction() {
 }
 
 async function markOutreachProcessed(prospectId) {
+    const id = Number(prospectId || 0);
+    if (!id) return customAlert('\u041d\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u0430 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430.');
+    outreachSelectedId = id;
     const res = await apiCall('/outreach/prospects/bulk', 'POST', {
-        ids: [Number(prospectId || 0)],
+        ids: [id],
         action: 'mark_processed',
         status: 'in_progress',
     });
-    if (!res || res.error) return customAlert(res?.message || 'Не удалось обновить статус.');
+    if (!res || res.error) return customAlert(res?.message || '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043e\u0442\u043c\u0435\u0442\u0438\u0442\u044c \u043a\u043b\u0438\u0435\u043d\u0442\u0430 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u0430\u043d\u043d\u044b\u043c.');
     await renderProspecting(true);
+    showToast('\u0411\u0430\u0437\u0430 \u0440\u0430\u0437\u0432\u0438\u0442\u0438\u044f', '\u041a\u043b\u0438\u0435\u043d\u0442 \u043e\u0442\u043c\u0435\u0447\u0435\u043d \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u0430\u043d\u043d\u044b\u043c');
 }
 
 async function convertOutreachProspect(prospectId) {
-    const res = await apiCall(`/outreach/prospects/${Number(prospectId || 0)}/convert`, 'POST');
-    if (!res || res.error) return customAlert(res?.message || 'Не удалось перевести запись в лид.');
+    const id = Number(prospectId || 0);
+    if (!id) return customAlert('\u041d\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u0430 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430.');
+    outreachSelectedId = id;
+    const res = await apiCall(`/outreach/prospects/${id}/convert`, 'POST');
+    if (!res || res.error) return customAlert(res?.message || '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u0435\u0440\u0435\u0432\u0435\u0441\u0442\u0438 \u043a\u043b\u0438\u0435\u043d\u0442\u0430 \u0432 \u043b\u0438\u0434.');
     await Promise.all([loadOutreachProspects(), loadCrmLeads()]);
-    showToast('База развития', 'Запись переведена в лид');
-    if (typeof navigateTo === 'function') navigateTo('leads');
+    await renderProspecting(true);
+    showToast('\u0411\u0430\u0437\u0430 \u0440\u0430\u0437\u0432\u0438\u0442\u0438\u044f', `\u041a\u043b\u0438\u0435\u043d\u0442 \u043f\u0435\u0440\u0435\u0432\u0435\u0434\u0451\u043d \u0432 \u043b\u0438\u0434 #${Number(res.lead_id || 0) || ''}`.trim());
 }
 
 async function quickOutreachAction(event, prospectId, action) {
