@@ -16,27 +16,7 @@
         <div id="outreachDirectorPanel" class="prospecting-director-panel"></div>
         <div id="outreachKnowledgePanel" class="prospecting-knowledge-panel"></div>
 
-        <div class="client360-grid prospecting-top-grid">
-            <section class="surface-card prospecting-panel">
-                <div class="section-header">
-                    <div>
-                        <h3 class="section-title">Загрузка базы</h3>
-                        <p class="section-subtitle">Поддерживаются `xlsx`, `xls`, `xlsm`, `xlsb`, `ods`, `csv`, `tsv`, `txt`, `json`. Поля маппятся автоматически.</p>
-                    </div>
-                </div>
-                <div class="prospecting-inline-grid">
-                    <input id="outreachImportFile" class="auth-input" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,.csv,.tsv,.txt,.json">
-                    <input id="outreachImportSource" class="auth-input" type="text" placeholder="Источник списка: сайт, тендер, вручную">
-                    <select id="outreachImportManager" class="auth-input"></select>
-                    <input id="outreachImportPlanDate" class="auth-input" type="text" placeholder="План контакта: дд.мм.гггг">
-                    <button class="btn-secondary" onclick="previewOutreachImport()">Предпросмотр файла</button>
-                    <button class="btn-secondary" onclick="importOutreachFile()">Импортировать список</button>
-                </div>
-                <div id="outreachImportPreview" class="prospecting-import-preview"></div>
-                <div id="outreachImportResult" class="prospecting-import-result"></div>
-            </section>
-            <section class="surface-card prospecting-panel" id="outreachReportPanel"></section>
-        </div>
+        <section class="surface-card prospecting-panel" id="outreachReportPanel"></section>
 
         <div class="crm-toolbar">
             <div class="crm-toolbar__group crm-toolbar__group--wide">
