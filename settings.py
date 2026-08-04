@@ -30,6 +30,10 @@ KORDA_AUDIO_AI_MODELS = os.getenv(
     os.getenv("KORDA_AUDIO_AI_MODEL", f"{KORDA_AI_MODEL},gemini-3.1-flash-lite,gemini-2.5-flash"),
 ).strip()
 KORDA_AI_TIMEOUT_SECONDS = max(5, int(os.getenv("KORDA_AI_TIMEOUT_SECONDS", "8")))
+BITRIX24_WEBHOOK_URL = os.getenv("KORDA_BITRIX24_WEBHOOK_URL", "").strip()
+BITRIX24_SYNC_INTERVAL_SECONDS = max(300, int(os.getenv("KORDA_BITRIX24_SYNC_INTERVAL_SECONDS", "1800")))
+BITRIX24_SYNC_LIMIT = max(1, min(2000, int(os.getenv("KORDA_BITRIX24_SYNC_LIMIT", "500"))))
+BITRIX24_SYNC_ENTITIES = os.getenv("KORDA_BITRIX24_SYNC_ENTITIES", "leads,contacts,companies").strip()
 
 
 def using_insecure_defaults() -> bool:

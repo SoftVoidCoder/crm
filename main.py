@@ -18,11 +18,12 @@ from app_logging import init_app_logging, get_logger
 from auth_security import SESSION_COOKIE_NAME
 from database import get_session_user
 from permissions import has_permission
-from settings import APP_ENV, COOKIE_SECURE, using_insecure_defaults
+from settings import APP_ENV, BITRIX24_SYNC_INTERVAL_SECONDS, COOKIE_SECURE, using_insecure_defaults
 from utils import manager, verify_document_qr_token  # Подключаем наш менеджер WebSockets
 
 # Импортируем наши роутеры из папки routers
-from routers import users, projects, docs, communications, accounting, erp_deep, erp_ops_plus, workbench, integration_1c, assistant
+from routers import users, projects, docs, communications, accounting, erp_deep, erp_ops_plus, workbench, integration_1c, assistant, bitrix24
+from services.bitrix24_service import sync_bitrix24_to_outreach
 
 PROJECT_JSON_OBJECT_FIELDS = {
     "checkedState",
@@ -364,21 +365,54 @@ async def integration_sync_runner():
             logger.exception("integration_sync_runner failed: %s", e)
 
 
+async def bitrix24_sync_runner():
+    await asyncio.sleep(90)
+    while True:
+        run_id = 0
+        try:
+            run_id = start_background_job_run(
+                "bitrix24_sync_runner",
+                "integration",
+                details={"sleep_seconds": BITRIX24_SYNC_INTERVAL_SECONDS},
+            )
+            heartbeat_background_job_run(run_id, {"phase": "bitrix24_sync"})
+            result = sync_bitrix24_to_outreach(actor={"email": "system@korda.local", "name": "Bitrix24 Sync"})
+            finish_background_job_run(run_id, "success", result)
+            if result.get("created") or result.get("updated"):
+                logger.info(
+                    "bitrix24_sync_runner created=%s updated=%s skipped=%s",
+                    result.get("created"),
+                    result.get("updated"),
+                    result.get("skipped"),
+                )
+        except Exception as e:
+            if run_id:
+                finish_background_job_run(run_id, "failed", {"error": str(e)[:500]})
+            logger.exception("bitrix24_sync_runner failed: %s", e)
+        await asyncio.sleep(BITRIX24_SYNC_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     periodic_task = asyncio.create_task(periodic_task_runner())
     integration_task = asyncio.create_task(integration_sync_runner())
+    bitrix24_task = asyncio.create_task(bitrix24_sync_runner())
     try:
         yield
     finally:
         periodic_task.cancel()
         integration_task.cancel()
+        bitrix24_task.cancel()
         try:
             await periodic_task
         except asyncio.CancelledError:
             pass
         try:
             await integration_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await bitrix24_task
         except asyncio.CancelledError:
             pass
 
@@ -636,4 +670,5 @@ app.include_router(erp_deep.router)
 app.include_router(erp_ops_plus.router)
 app.include_router(workbench.router)
 app.include_router(integration_1c.router)
+app.include_router(bitrix24.router)
 app.include_router(assistant.router)
