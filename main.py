@@ -376,7 +376,10 @@ async def bitrix24_sync_runner():
                 details={"sleep_seconds": BITRIX24_SYNC_INTERVAL_SECONDS},
             )
             heartbeat_background_job_run(run_id, {"phase": "bitrix24_sync"})
-            result = sync_bitrix24_to_outreach(actor={"email": "system@korda.local", "name": "Bitrix24 Sync"})
+            result = await asyncio.to_thread(
+                sync_bitrix24_to_outreach,
+                actor={"email": "system@korda.local", "name": "Bitrix24 Sync"},
+            )
             finish_background_job_run(run_id, "success", result)
             if result.get("created") or result.get("updated"):
                 logger.info(
