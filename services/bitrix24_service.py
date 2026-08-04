@@ -1,7 +1,9 @@
 import json
+import re
 import ssl
 import subprocess
 import time
+from difflib import SequenceMatcher
 from urllib.parse import urlparse
 
 import httpx
@@ -258,6 +260,77 @@ def _dedupe_bitrix_items(items: list[dict]) -> list[dict]:
     return result
 
 
+def _search_normalize(value: str) -> str:
+    return re.sub(r"[^0-9a-zа-яё]+", " ", str(value or "").casefold()).strip()
+
+
+def _bitrix_search_terms(query: str) -> list[str]:
+    clean_query = _normalize_spaces(query)
+    if not clean_query:
+        return []
+    terms = [clean_query]
+    tokens = [token for token in re.split(r"\s+", clean_query) if len(token) >= 3]
+    terms.extend(tokens)
+    for token in tokens:
+        if len(token) >= 5:
+            terms.append(token[: max(3, len(token) - 1)])
+            if len(token) <= 10:
+                terms.extend(token[:idx] + token[idx + 1 :] for idx in range(len(token)) if len(token[:idx] + token[idx + 1 :]) >= 3)
+    compact_digits = re.sub(r"\D+", "", clean_query)
+    if len(compact_digits) >= 5:
+        terms.append(compact_digits[-10:])
+    if "@" in clean_query:
+        terms.append(clean_query.split("@", 1)[0])
+    result = []
+    seen = set()
+    for term in terms:
+        normalized = _normalize_spaces(term)
+        key = normalized.casefold()
+        if normalized and key not in seen:
+            seen.add(key)
+            result.append(normalized)
+        if len(result) >= 6:
+            break
+    return result
+
+
+def _bitrix_search_score(item: dict, query: str) -> float:
+    if not query:
+        return 0
+    query_key = _search_normalize(query)
+    haystack = _search_normalize(
+        " ".join(
+            [
+                item.get("title", ""),
+                item.get("contact_name", ""),
+                item.get("phone", ""),
+                item.get("email", ""),
+            ]
+        )
+    )
+    if not query_key or not haystack:
+        return 0
+    score = 0.0
+    if query_key in haystack:
+        score += 100
+    query_tokens = [token for token in query_key.split() if len(token) >= 2]
+    haystack_tokens = [token for token in haystack.split() if len(token) >= 2]
+    for token in query_tokens:
+        if any(token in target or target in token for target in haystack_tokens):
+            score += 24
+        else:
+            score += max((SequenceMatcher(None, token, target).ratio() for target in haystack_tokens), default=0) * 18
+    score += SequenceMatcher(None, query_key, haystack[: max(len(query_key), 1)]).ratio() * 12
+    return score
+
+
+def _safe_fetch_filtered_list(webhook_url: str, method: str, select: list[str], filter_payload: dict, limit: int) -> list[dict]:
+    try:
+        return _fetch_filtered_list(webhook_url, method, select, filter_payload, limit)
+    except Exception:
+        return []
+
+
 def _bitrix_search_item(entity_type: str, raw: dict, company_map: dict[str, dict] | None = None) -> dict:
     company_map = company_map or {}
     if entity_type == "lead":
@@ -301,9 +374,16 @@ def search_bitrix24_clients(query: str = "", limit: int = 20, webhook_url: str =
         "DATE_MODIFY",
     ]
     if clean_query:
-        companies = _fetch_filtered_list(webhook_url, "crm.company.list", company_select, {"%TITLE": clean_query}, row_limit)
-        contacts = _fetch_filtered_list(webhook_url, "crm.contact.list", contact_select, {"%NAME": clean_query}, row_limit)
-        leads = _fetch_filtered_list(webhook_url, "crm.lead.list", lead_select, {"%TITLE": clean_query}, row_limit)
+        search_limit = max(row_limit, 20)
+        companies = []
+        contacts = []
+        leads = []
+        for term in _bitrix_search_terms(clean_query):
+            companies.extend(_safe_fetch_filtered_list(webhook_url, "crm.company.list", company_select, {"%TITLE": term}, search_limit))
+            contacts.extend(_safe_fetch_filtered_list(webhook_url, "crm.contact.list", contact_select, {"%NAME": term}, search_limit))
+            contacts.extend(_safe_fetch_filtered_list(webhook_url, "crm.contact.list", contact_select, {"%LAST_NAME": term}, search_limit))
+            leads.extend(_safe_fetch_filtered_list(webhook_url, "crm.lead.list", lead_select, {"%TITLE": term}, search_limit))
+            leads.extend(_safe_fetch_filtered_list(webhook_url, "crm.lead.list", lead_select, {"%COMPANY_TITLE": term}, search_limit))
     else:
         companies = _fetch_list(webhook_url, "crm.company.list", company_select, row_limit)
         contacts = _fetch_list(webhook_url, "crm.contact.list", contact_select, row_limit)
@@ -313,7 +393,10 @@ def search_bitrix24_clients(query: str = "", limit: int = 20, webhook_url: str =
     items.extend(_bitrix_search_item("company", item) for item in companies)
     items.extend(_bitrix_search_item("contact", item, company_map) for item in contacts)
     items.extend(_bitrix_search_item("lead", item) for item in leads)
-    return {"status": "success", "query": clean_query, "items": _dedupe_bitrix_items(items)[:row_limit]}
+    found = _dedupe_bitrix_items(items)
+    if clean_query:
+        found.sort(key=lambda item: (_bitrix_search_score(item, clean_query), item.get("date_modify", "")), reverse=True)
+    return {"status": "success", "query": clean_query, "items": found[:row_limit]}
 
 
 def _bitrix_get_entity(entity_type: str, entity_id: str, webhook_url: str = "") -> dict | None:
