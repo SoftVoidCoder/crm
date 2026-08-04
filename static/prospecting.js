@@ -12,6 +12,7 @@ let outreachProcessedFilter = '';
 let outreachOnlyOverdue = false;
 let outreachOnlyToday = false;
 let outreachOnlyProblems = false;
+let outreachQuickFilter = '';
 let outreachSelectedIds = new Set();
 let outreachReportExpanded = false;
 let outreachLastImportResult = null;
@@ -583,6 +584,11 @@ async function ensureOutreachData(force = false) {
 function filteredOutreachRows() {
     const searchNeedle = outreachSearch.trim().toLowerCase();
     return (outreachProspectsDB || []).filter(row => {
+        if (outreachQuickFilter === 'called' && String(row.last_channel || '') !== 'call') return false;
+        if (outreachQuickFilter === 'emailed' && String(row.last_channel || '') !== 'email') return false;
+        if (outreachQuickFilter === 'no_answer' && String(row.status || '') !== 'no_answer' && String(row.last_result || '') !== 'no_answer') return false;
+        if (outreachQuickFilter === 'warm' && !['warm', 'meeting'].includes(String(row.status || '')) && String(row.last_result || '') !== 'warm') return false;
+        if (outreachQuickFilter === 'converted' && String(row.status || '') !== 'converted') return false;
         if (outreachStatusFilter && String(row.status || '') !== outreachStatusFilter) return false;
         if (outreachPriorityFilter && String(row.priority || '') !== outreachPriorityFilter) return false;
         if (outreachManagerFilter && String(row.manager_email || '') !== outreachManagerFilter) return false;
@@ -1219,6 +1225,10 @@ function syncOutreachFilterControls() {
     const prioritySelect = document.getElementById('outreachPriorityFilter');
     const processedSelect = document.getElementById('outreachProcessedFilter');
     const problemsButton = document.getElementById('outreachProblemsBtn');
+    document.querySelectorAll('[data-outreach-quick-filter]').forEach(button => {
+        button.classList.toggle('btn-primary', String(button.dataset.outreachQuickFilter || '') === outreachQuickFilter);
+        button.classList.toggle('btn-secondary', String(button.dataset.outreachQuickFilter || '') !== outreachQuickFilter);
+    });
     if (statusSelect) statusSelect.value = outreachStatusFilter || '';
     if (prioritySelect) prioritySelect.value = outreachPriorityFilter || '';
     if (processedSelect) processedSelect.value = outreachProcessedFilter || '';
@@ -1544,6 +1554,11 @@ function toggleOutreachProblemFilter() {
     renderProspecting();
 }
 
+function setOutreachQuickFilter(value) {
+    outreachQuickFilter = outreachQuickFilter === value ? '' : String(value || '');
+    renderProspecting();
+}
+
 function resetOutreachFilters() {
     outreachSearch = '';
     outreachStatusFilter = '';
@@ -1553,6 +1568,7 @@ function resetOutreachFilters() {
     outreachOnlyOverdue = false;
     outreachOnlyToday = false;
     outreachOnlyProblems = false;
+    outreachQuickFilter = '';
     const searchInput = document.getElementById('outreachSearchInput');
     if (searchInput) searchInput.value = '';
     renderProspecting();
@@ -1821,6 +1837,7 @@ window.setOutreachProcessedFilter = setOutreachProcessedFilter;
 window.toggleOutreachOverdueFilter = toggleOutreachOverdueFilter;
 window.toggleOutreachTodayFilter = toggleOutreachTodayFilter;
 window.toggleOutreachProblemFilter = toggleOutreachProblemFilter;
+window.setOutreachQuickFilter = setOutreachQuickFilter;
 window.resetOutreachFilters = resetOutreachFilters;
 window.previewOutreachImport = previewOutreachImport;
 window.importOutreachFile = importOutreachFile;

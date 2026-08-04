@@ -70,6 +70,11 @@
                 </select>
             </div>
             <div class="crm-toolbar__group">
+                <button class="btn-secondary" data-outreach-quick-filter="called" onclick="setOutreachQuickFilter('called')">Позвонил</button>
+                <button class="btn-secondary" data-outreach-quick-filter="emailed" onclick="setOutreachQuickFilter('emailed')">Написал</button>
+                <button class="btn-secondary" data-outreach-quick-filter="no_answer" onclick="setOutreachQuickFilter('no_answer')">Не дозвонился</button>
+                <button class="btn-secondary" data-outreach-quick-filter="warm" onclick="setOutreachQuickFilter('warm')">Тёплые</button>
+                <button class="btn-secondary" data-outreach-quick-filter="converted" onclick="setOutreachQuickFilter('converted')">В лидах</button>
                 <button id="outreachOverdueBtn" class="btn-secondary" onclick="toggleOutreachOverdueFilter()">Только просроченные</button>
                 <button id="outreachTodayBtn" class="btn-secondary" onclick="toggleOutreachTodayFilter()">План на сегодня</button>
                 <button id="outreachProblemsBtn" class="btn-secondary" onclick="toggleOutreachProblemFilter()">Проблемная база</button>
