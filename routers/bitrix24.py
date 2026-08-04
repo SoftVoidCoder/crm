@@ -1,7 +1,14 @@
 from fastapi import APIRouter, Body, Request
 
 from permissions import has_permission, require_approved_user
-from services.bitrix24_service import bitrix24_config_status, save_bitrix24_webhook_url, sync_bitrix24_to_outreach, _bitrix_call
+from services.bitrix24_service import (
+    _bitrix_call,
+    bitrix24_config_status,
+    import_selected_bitrix24_clients,
+    save_bitrix24_webhook_url,
+    search_bitrix24_clients,
+    sync_bitrix24_to_outreach,
+)
 
 
 router = APIRouter()
@@ -63,3 +70,32 @@ def sync_bitrix24(request: Request, payload: dict = Body(default={})):
     except Exception as exc:
         return {"status": "failed", "error": str(exc)[:500], **bitrix24_config_status(webhook_url)}
     return result
+
+
+@router.post("/api/integrations/bitrix24/search")
+def search_bitrix24(request: Request, payload: dict = Body(default={})):
+    actor = require_approved_user(request)
+    if not _can_manage_bitrix(actor):
+        return {"error": "forbidden"}
+    webhook_url = str((payload or {}).get("webhook_url") or "").strip()
+    query = str((payload or {}).get("query") or "").strip()
+    limit = int((payload or {}).get("limit") or 20)
+    try:
+        return search_bitrix24_clients(query=query, limit=limit, webhook_url=webhook_url)
+    except Exception as exc:
+        return {"status": "failed", "error": str(exc)[:500], **bitrix24_config_status(webhook_url)}
+
+
+@router.post("/api/integrations/bitrix24/import_selected")
+def import_selected_bitrix24(request: Request, payload: dict = Body(default={})):
+    actor = require_approved_user(request)
+    if not _can_manage_bitrix(actor):
+        return {"error": "forbidden"}
+    webhook_url = str((payload or {}).get("webhook_url") or "").strip()
+    items = (payload or {}).get("items") or []
+    if not isinstance(items, list):
+        return {"status": "failed", "error": "items_required", "message": "Выберите клиентов из Bitrix24."}
+    try:
+        return import_selected_bitrix24_clients(items=items, actor=actor, webhook_url=webhook_url)
+    except Exception as exc:
+        return {"status": "failed", "error": str(exc)[:500], **bitrix24_config_status(webhook_url)}

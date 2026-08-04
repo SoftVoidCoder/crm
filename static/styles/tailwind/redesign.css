@@ -11550,6 +11550,28 @@ body.workspace-config-open {
     min-height: 48px;
 }
 
+#prospectingView .prospecting-bitrix-grid {
+    grid-template-columns: minmax(220px, 2fr) minmax(150px, 1fr) minmax(170px, 1fr) minmax(90px, 0.6fr) minmax(180px, 1fr);
+}
+
+#prospectingView .prospecting-bitrix-results {
+    margin-top: 12px;
+}
+
+#prospectingView .prospecting-bitrix-results:empty {
+    display: none;
+}
+
+#prospectingView .bitrix-search-table {
+    max-height: 320px;
+    overflow: auto;
+}
+
+#prospectingView .bitrix-search-table .admin-table th,
+#prospectingView .bitrix-search-table .admin-table td {
+    white-space: nowrap;
+}
+
 #prospectingView .prospecting-import-result {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));

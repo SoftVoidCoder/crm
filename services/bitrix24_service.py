@@ -221,6 +221,138 @@ def _fetch_list(webhook_url: str, method: str, select: list[str], limit: int) ->
     return rows[:limit]
 
 
+def _fetch_filtered_list(webhook_url: str, method: str, select: list[str], filter_payload: dict, limit: int) -> list[dict]:
+    rows: list[dict] = []
+    start: int | str = 0
+    while len(rows) < limit:
+        data = _bitrix_call(
+            webhook_url,
+            method,
+            {
+                "select": select,
+                "filter": filter_payload or {},
+                "order": {"DATE_MODIFY": "DESC", "ID": "DESC"},
+                "start": start,
+            },
+            timeout_seconds=20,
+        )
+        result = data.get("result") or []
+        if not isinstance(result, list):
+            break
+        rows.extend([item for item in result if isinstance(item, dict)])
+        if "next" not in data or len(result) == 0:
+            break
+        start = data.get("next")
+    return rows[:limit]
+
+
+def _dedupe_bitrix_items(items: list[dict]) -> list[dict]:
+    seen = set()
+    result = []
+    for item in items:
+        key = (item.get("type"), str(item.get("id") or ""))
+        if not key[1] or key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return result
+
+
+def _bitrix_search_item(entity_type: str, raw: dict, company_map: dict[str, dict] | None = None) -> dict:
+    company_map = company_map or {}
+    if entity_type == "lead":
+        row = _lead_to_import_row(raw)
+    elif entity_type == "contact":
+        row = _contact_to_import_row(raw, company_map)
+    else:
+        row = _company_to_import_row(raw)
+    return {
+        "type": entity_type,
+        "id": _normalize_spaces(raw.get("ID") or ""),
+        "title": _normalize_spaces(row.get("COMPANY_TITLE") or row.get("TITLE") or row.get("CONTACT_NAME") or ""),
+        "contact_name": _normalize_spaces(row.get("CONTACT_NAME") or ""),
+        "phone": _normalize_spaces(row.get("PHONE") or ""),
+        "email": _normalize_spaces(row.get("EMAIL") or ""),
+        "date_modify": _normalize_spaces(row.get("DATE_MODIFY") or ""),
+    }
+
+
+def search_bitrix24_clients(query: str = "", limit: int = 20, webhook_url: str = "") -> dict:
+    clean_query = _normalize_spaces(query)
+    row_limit = max(1, min(50, int(limit or 20)))
+    company_select = ["ID", "TITLE", "PHONE", "EMAIL", "WEB", "COMMENTS", "DATE_CREATE", "DATE_MODIFY"]
+    contact_select = ["ID", "NAME", "LAST_NAME", "SECOND_NAME", "POST", "COMPANY_ID", "PHONE", "EMAIL", "WEB", "COMMENTS", "DATE_CREATE", "DATE_MODIFY"]
+    lead_select = [
+        "ID",
+        "TITLE",
+        "NAME",
+        "LAST_NAME",
+        "SECOND_NAME",
+        "COMPANY_TITLE",
+        "PHONE",
+        "EMAIL",
+        "WEB",
+        "SOURCE_ID",
+        "SOURCE_DESCRIPTION",
+        "STATUS_ID",
+        "ASSIGNED_BY_ID",
+        "COMMENTS",
+        "DATE_CREATE",
+        "DATE_MODIFY",
+    ]
+    if clean_query:
+        companies = _fetch_filtered_list(webhook_url, "crm.company.list", company_select, {"%TITLE": clean_query}, row_limit)
+        contacts = _fetch_filtered_list(webhook_url, "crm.contact.list", contact_select, {"%NAME": clean_query}, row_limit)
+        leads = _fetch_filtered_list(webhook_url, "crm.lead.list", lead_select, {"%TITLE": clean_query}, row_limit)
+    else:
+        companies = _fetch_list(webhook_url, "crm.company.list", company_select, row_limit)
+        contacts = _fetch_list(webhook_url, "crm.contact.list", contact_select, row_limit)
+        leads = _fetch_list(webhook_url, "crm.lead.list", lead_select, row_limit)
+    company_map = {_normalize_spaces(item.get("ID") or ""): item for item in companies}
+    items = []
+    items.extend(_bitrix_search_item("company", item) for item in companies)
+    items.extend(_bitrix_search_item("contact", item, company_map) for item in contacts)
+    items.extend(_bitrix_search_item("lead", item) for item in leads)
+    return {"status": "success", "query": clean_query, "items": _dedupe_bitrix_items(items)[:row_limit]}
+
+
+def _bitrix_get_entity(entity_type: str, entity_id: str, webhook_url: str = "") -> dict | None:
+    clean_type = _normalize_spaces(entity_type).lower()
+    clean_id = _normalize_spaces(entity_id)
+    if clean_type not in {"lead", "contact", "company"} or not clean_id:
+        return None
+    method = {"lead": "crm.lead.get", "contact": "crm.contact.get", "company": "crm.company.get"}[clean_type]
+    data = _bitrix_call(webhook_url, method, {"id": clean_id}, timeout_seconds=20)
+    raw = data.get("result") if isinstance(data, dict) else None
+    return raw if isinstance(raw, dict) else None
+
+
+def import_selected_bitrix24_clients(items: list[dict], actor: dict | None = None, webhook_url: str = "") -> dict:
+    rows = []
+    company_cache: dict[str, dict] = {}
+    for item in items or []:
+        entity_type = _normalize_spaces(item.get("type") or "").lower()
+        entity_id = _normalize_spaces(item.get("id") or "")
+        raw = _bitrix_get_entity(entity_type, entity_id, webhook_url)
+        if not raw:
+            continue
+        if entity_type == "lead":
+            rows.append(_lead_to_import_row(raw))
+        elif entity_type == "contact":
+            company_id = _normalize_spaces(raw.get("COMPANY_ID") or "")
+            if company_id and company_id not in company_cache:
+                company_raw = _bitrix_get_entity("company", company_id, webhook_url)
+                if company_raw:
+                    company_cache[company_id] = company_raw
+            rows.append(_contact_to_import_row(raw, company_cache))
+        elif entity_type == "company":
+            rows.append(_company_to_import_row(raw))
+    if not rows:
+        return {"status": "failed", "error": "empty_selection", "message": "Выберите клиента из Bitrix24."}
+    imported = import_bitrix24_rows(rows, actor=actor, filename=f"bitrix24-selected-{int(time.time())}")
+    return {"status": "success", "rows_total": len(rows), **imported}
+
+
 def _lead_to_import_row(item: dict) -> dict:
     title = _normalize_spaces(item.get("TITLE") or "")
     company = _normalize_spaces(item.get("COMPANY_TITLE") or title)
