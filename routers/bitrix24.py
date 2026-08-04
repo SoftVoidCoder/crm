@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Body, Request
 
 from permissions import has_permission, require_approved_user
-from services.bitrix24_service import bitrix24_config_status, sync_bitrix24_to_outreach, _bitrix_call
+from services.bitrix24_service import bitrix24_config_status, save_bitrix24_webhook_url, sync_bitrix24_to_outreach, _bitrix_call
 
 
 router = APIRouter()
@@ -35,6 +35,20 @@ def test_bitrix24_connection(request: Request, payload: dict = Body(default={}))
     except Exception as exc:
         return {"status": "failed", "error": str(exc)[:300], **bitrix24_config_status(webhook_url)}
     return {"status": "success", "profile": profile.get("result") or profile, **bitrix24_config_status(webhook_url)}
+
+
+@router.post("/api/integrations/bitrix24/configure")
+def configure_bitrix24(request: Request, payload: dict = Body(default={})):
+    actor = require_approved_user(request)
+    if not _can_manage_bitrix(actor):
+        return {"error": "forbidden"}
+    webhook_url = str((payload or {}).get("webhook_url") or "").strip()
+    try:
+        profile = _bitrix_call(webhook_url, "profile", {})
+    except Exception as exc:
+        return {"status": "failed", "error": str(exc)[:300], **bitrix24_config_status(webhook_url)}
+    saved = save_bitrix24_webhook_url(webhook_url, actor)
+    return {**saved, "profile": profile.get("result") or profile}
 
 
 @router.post("/api/integrations/bitrix24/sync")

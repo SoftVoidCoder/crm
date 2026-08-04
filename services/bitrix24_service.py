@@ -20,7 +20,65 @@ BITRIX24_SOURCE_NAME = "Bitrix24 API"
 
 
 def _configured_webhook_url(webhook_url: str = "") -> str:
-    return (webhook_url or BITRIX24_WEBHOOK_URL or "").strip().rstrip("/")
+    return (webhook_url or BITRIX24_WEBHOOK_URL or _load_saved_webhook_url()).strip().rstrip("/")
+
+
+def _load_saved_webhook_url() -> str:
+    try:
+        conn = get_connection(row_factory=True)
+        row = conn.execute(
+            """
+            SELECT cred.secret_value
+            FROM integration_connectors con
+            JOIN integration_connector_credentials cred ON cred.connector_id=con.id
+            WHERE con.connector_type='bitrix24' AND con.status='active' AND cred.is_active=1
+            ORDER BY con.updated_at DESC, cred.updated_at DESC, cred.id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        conn.close()
+    except Exception:
+        return ""
+    return _normalize_spaces(dict(row).get("secret_value") if row else "")
+
+
+def save_bitrix24_webhook_url(webhook_url: str, actor: dict) -> dict:
+    clean_url = _normalize_spaces(webhook_url).rstrip("/")
+    if not clean_url.startswith("https://") or "/rest/" not in clean_url:
+        return {"status": "failed", "error": "invalid_webhook_url"}
+    now = int(time.time())
+    conn = get_connection(row_factory=True)
+    row = conn.execute(
+        "SELECT * FROM integration_connectors WHERE connector_type='bitrix24' ORDER BY updated_at DESC, id DESC LIMIT 1"
+    ).fetchone()
+    if row:
+        connector_id = int(dict(row).get("id") or 0)
+        conn.execute(
+            "UPDATE integration_connectors SET provider_name='Bitrix24', status='active', updated_at=?, last_error='' WHERE id=?",
+            (now, connector_id),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO integration_connectors (
+                connector_type, provider_name, status, settings, scope, last_sync_at, last_error, created_by, created_at, updated_at
+            ) VALUES ('bitrix24', 'Bitrix24', 'active', '{}', '{}', 0, '', ?, ?, ?)
+            """,
+            (actor.get("email", ""), now, now),
+        )
+        connector_id = int(conn.execute("SELECT lastval()").fetchone()[0])
+    conn.execute("UPDATE integration_connector_credentials SET is_active=0, updated_at=? WHERE connector_id=?", (now, connector_id))
+    conn.execute(
+        """
+        INSERT INTO integration_connector_credentials (
+            connector_id, credential_kind, username, secret_value, secret_ref, is_active, created_by, created_at, updated_at
+        ) VALUES (?, 'webhook', ?, ?, '', 1, ?, ?, ?)
+        """,
+        (connector_id, actor.get("email", ""), clean_url, actor.get("email", ""), now, now),
+    )
+    conn.commit()
+    conn.close()
+    return {"status": "success", "connector_id": connector_id, **bitrix24_config_status(clean_url)}
 
 
 def bitrix24_config_status(webhook_url: str = "") -> dict:
