@@ -11551,7 +11551,13 @@ body.workspace-config-open {
 }
 
 #prospectingView .prospecting-bitrix-grid {
-    grid-template-columns: minmax(260px, 1fr) minmax(150px, 180px) minmax(170px, 210px);
+    grid-template-columns: minmax(240px, 1.4fr) minmax(120px, 160px) minmax(150px, 190px) minmax(130px, 160px) minmax(140px, 180px) minmax(130px, 170px) minmax(130px, 170px);
+}
+
+#prospectingView .prospecting-bitrix-grid > .auth-input,
+#prospectingView .prospecting-bitrix-grid > .btn-primary,
+#prospectingView .prospecting-bitrix-grid > .btn-secondary {
+    min-width: 0;
 }
 
 #prospectingView .prospecting-bitrix-results {

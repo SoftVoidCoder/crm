@@ -27,6 +27,15 @@
                     <input id="outreachBitrixSearch" class="auth-input" type="search" placeholder="Название, контакт, телефон или email">
                     <button id="outreachBitrixSearchButton" class="btn-primary" onclick="searchBitrixClients()">Найти в Bitrix24</button>
                     <button id="outreachBitrixImportButton" class="btn-secondary" onclick="importSelectedBitrixClients()">Загрузить выбранных</button>
+                    <select id="outreachBitrixSyncLimit" class="auth-input">
+                        <option value="0">Все клиенты</option>
+                        <option value="100">100 последних</option>
+                        <option value="50">50 последних</option>
+                        <option value="25">25 последних</option>
+                    </select>
+                    <button id="outreachBitrixSyncButton" class="btn-primary" onclick="syncBitrixClientsNow()">Выгрузить сейчас</button>
+                    <button id="outreachBitrixUpdateButton" class="btn-secondary" onclick="updateBitrixClientsNow()">Обновить новых</button>
+                    <button id="outreachBitrixClearButton" class="btn-secondary" onclick="clearBitrixClientList()">Очистить список</button>
                 </div>
                 <div id="outreachBitrixResults" class="prospecting-bitrix-results"></div>
             </section>

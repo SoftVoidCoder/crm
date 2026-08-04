@@ -4,6 +4,7 @@ from permissions import has_permission, require_approved_user
 from services.bitrix24_service import (
     _bitrix_call,
     bitrix24_config_status,
+    clear_bitrix24_outreach_clients,
     import_selected_bitrix24_clients,
     save_bitrix24_webhook_url,
     search_bitrix24_clients,
@@ -64,12 +65,29 @@ def sync_bitrix24(request: Request, payload: dict = Body(default={})):
     if not _can_manage_bitrix(actor):
         return {"error": "forbidden"}
     webhook_url = str((payload or {}).get("webhook_url") or "").strip()
-    limit = int((payload or {}).get("limit") or 0) or None
+    raw_limit = str((payload or {}).get("limit") or "").strip()
+    try:
+        limit = int(raw_limit) if raw_limit else None
+    except ValueError:
+        limit = None
+    if limit is not None and limit <= 0:
+        limit = None
     try:
         result = sync_bitrix24_to_outreach(webhook_url=webhook_url, actor=actor, limit=limit)
     except Exception as exc:
         return {"status": "failed", "error": str(exc)[:500], **bitrix24_config_status(webhook_url)}
     return result
+
+
+@router.delete("/api/integrations/bitrix24/outreach")
+def clear_bitrix24_outreach(request: Request):
+    actor = require_approved_user(request)
+    if not _can_manage_bitrix(actor):
+        return {"error": "forbidden"}
+    try:
+        return clear_bitrix24_outreach_clients(actor=actor)
+    except Exception as exc:
+        return {"status": "failed", "error": str(exc)[:500]}
 
 
 @router.post("/api/integrations/bitrix24/search")

@@ -20,6 +20,7 @@ let outreachBitrixResults = [];
 let outreachBitrixSelected = new Set();
 let outreachBitrixLoading = false;
 let outreachBitrixImporting = false;
+let outreachBitrixAction = '';
 
 const OUTREACH_KNOWLEDGE_BLOCKS = [
     {
@@ -1012,14 +1013,25 @@ function renderOutreachBitrixPanel() {
     if (!mount) return;
     const searchButton = document.getElementById('outreachBitrixSearchButton');
     const importButton = document.getElementById('outreachBitrixImportButton');
-    if (searchButton) searchButton.disabled = outreachBitrixLoading || outreachBitrixImporting;
-    if (importButton) importButton.disabled = outreachBitrixLoading || outreachBitrixImporting || !outreachBitrixSelected.size;
+    const syncButton = document.getElementById('outreachBitrixSyncButton');
+    const updateButton = document.getElementById('outreachBitrixUpdateButton');
+    const clearButton = document.getElementById('outreachBitrixClearButton');
+    const busy = outreachBitrixLoading || outreachBitrixImporting || Boolean(outreachBitrixAction);
+    if (searchButton) searchButton.disabled = busy;
+    if (importButton) importButton.disabled = busy || !outreachBitrixSelected.size;
+    if (syncButton) syncButton.disabled = busy;
+    if (updateButton) updateButton.disabled = busy;
+    if (clearButton) clearButton.disabled = busy;
     if (outreachBitrixLoading) {
         mount.innerHTML = '<div class="empty-state">Ищу в Bitrix24...</div>';
         return;
     }
     if (outreachBitrixImporting) {
         mount.innerHTML = '<div class="empty-state">Загружаю выбранных клиентов...</div>';
+        return;
+    }
+    if (outreachBitrixAction) {
+        mount.innerHTML = `<div class="empty-state">${outreachEscape(outreachBitrixAction)}</div>`;
         return;
     }
     if (!Array.isArray(outreachBitrixResults) || !outreachBitrixResults.length) {
@@ -1106,20 +1118,68 @@ async function importSelectedBitrixClients() {
     renderOutreachBitrixPanel();
 }
 
-async function syncRecentBitrixClients() {
-    const limit = Number(document.getElementById('outreachBitrixLimit')?.value || 25);
-    const safeLimit = Math.max(1, Math.min(100, limit || 25));
-    const res = await apiCall('/integrations/bitrix24/sync', 'POST', { limit: safeLimit });
-    if (!res || res.error || res.status === 'failed') return customAlert(res?.message || res?.error || 'Не удалось синхронизировать Bitrix24.');
+function getBitrixSyncLimit() {
+    const value = Number(document.getElementById('outreachBitrixSyncLimit')?.value || 0);
+    if (!value) return 0;
+    return [25, 50, 100].includes(value) ? value : 25;
+}
+
+async function runBitrixSync(actionLabel) {
+    const limit = getBitrixSyncLimit();
+    outreachBitrixAction = limit ? `${actionLabel}: ${limit} последних клиентов из Bitrix24...` : `${actionLabel}: все клиенты из Bitrix24...`;
+    renderOutreachBitrixPanel();
+    const res = await apiCall('/integrations/bitrix24/sync', 'POST', { limit });
+    outreachBitrixAction = '';
+    if (!res || res.error || res.status === 'failed') {
+        renderOutreachBitrixPanel();
+        return customAlert(res?.message || res?.error || 'Не удалось синхронизировать Bitrix24.');
+    }
     outreachLastImportResult = {
-        filename: 'Bitrix24 sync',
+        filename: limit ? `Bitrix24 ${limit}` : 'Bitrix24 all',
         rows_total: Number(res.rows_total || 0),
         created: Number(res.created || 0),
         updated: Number(res.updated || 0),
         skipped: Number(res.skipped || 0),
     };
-    showToast('Bitrix24', `Синхронизировано: ${Number(res.rows_total || 0)}, создано ${Number(res.created || 0)}, обновлено ${Number(res.updated || 0)}`);
+    showToast('Bitrix24', `Получено: ${Number(res.rows_total || 0)}, новых ${Number(res.created || 0)}, обновлено ${Number(res.updated || 0)}`);
     await renderProspecting(true);
+    renderOutreachBitrixPanel();
+}
+
+async function syncBitrixClientsNow() {
+    await runBitrixSync('Выгружаю');
+}
+
+async function updateBitrixClientsNow() {
+    await runBitrixSync('Обновляю');
+}
+
+async function syncRecentBitrixClients() {
+    await runBitrixSync('Обновляю');
+}
+
+async function clearBitrixClientList() {
+    if (!await customConfirm('Очистить список клиентов, загруженных из Bitrix24? Настройка Bitrix24 останется.')) return;
+    outreachBitrixAction = 'Очищаю список клиентов из Bitrix24...';
+    renderOutreachBitrixPanel();
+    const res = await apiCall('/integrations/bitrix24/outreach', 'DELETE');
+    outreachBitrixAction = '';
+    if (!res || res.error || res.status === 'failed') {
+        renderOutreachBitrixPanel();
+        return customAlert(res?.message || res?.error || 'Не удалось очистить список Bitrix24.');
+    }
+    outreachBitrixResults = [];
+    outreachBitrixSelected = new Set();
+    outreachLastImportResult = {
+        filename: 'Bitrix24 cleared',
+        rows_total: Number(res.removed || 0),
+        created: 0,
+        updated: 0,
+        skipped: 0,
+    };
+    showToast('Bitrix24', `Очищено записей: ${Number(res.removed || 0)}`);
+    await renderProspecting(true);
+    renderOutreachBitrixPanel();
 }
 
 function syncOutreachFilterControls() {

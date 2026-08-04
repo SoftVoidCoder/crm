@@ -21,6 +21,7 @@ from settings import BITRIX24_SYNC_ENTITIES, BITRIX24_SYNC_LIMIT, BITRIX24_WEBHO
 
 
 BITRIX24_SOURCE_NAME = "Bitrix24 API"
+BITRIX24_FULL_SYNC_LIMIT = 2000
 
 
 def _configured_webhook_url(webhook_url: str = "") -> str:
@@ -574,7 +575,7 @@ def _company_to_import_row(item: dict) -> dict:
 
 
 def fetch_bitrix24_rows(webhook_url: str = "", limit: int | None = None) -> dict:
-    row_limit = max(1, min(2000, int(limit or BITRIX24_SYNC_LIMIT)))
+    row_limit = max(1, min(BITRIX24_FULL_SYNC_LIMIT, int(limit or BITRIX24_FULL_SYNC_LIMIT)))
     entities = {item.strip().lower() for item in BITRIX24_SYNC_ENTITIES.split(",") if item.strip()}
     companies = []
     company_map: dict[str, dict] = {}
@@ -782,3 +783,31 @@ def sync_bitrix24_to_outreach(webhook_url: str = "", actor: dict | None = None, 
     fetched = fetch_bitrix24_rows(webhook_url=webhook_url, limit=limit)
     imported = import_bitrix24_rows(fetched["rows"], actor=actor, filename=f"bitrix24-api-{int(time.time())}")
     return {"status": "success", "rows_total": len(fetched["rows"]), "fetched": fetched["fetched"], **imported}
+
+
+def clear_bitrix24_outreach_clients(actor: dict | None = None) -> dict:
+    actor = actor or {"email": "system@korda.local", "name": "Bitrix24"}
+    conn = get_connection(row_factory=True)
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM outreach_prospects WHERE source_name=?",
+            (BITRIX24_SOURCE_NAME,),
+        ).fetchone()
+        removed = int((row or {}).get("n") or 0)
+        conn.execute("DELETE FROM outreach_prospects WHERE source_name=?", (BITRIX24_SOURCE_NAME,))
+        conn.execute("DELETE FROM outreach_import_batches WHERE source_name=?", (BITRIX24_SOURCE_NAME,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    audit_log(
+        "bitrix24_outreach_cleared",
+        actor_email=actor.get("email", ""),
+        actor_name=actor.get("name", ""),
+        entity_type="outreach_import",
+        entity_id="bitrix24",
+        details={"removed": removed},
+    )
+    return {"status": "success", "removed": removed}
