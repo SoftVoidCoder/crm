@@ -157,32 +157,29 @@ def _bitrix_curl_call(url: str, method: str, payload: dict, timeout_seconds: int
 
 def _bitrix_call(webhook_url: str, method: str, payload: dict, timeout_seconds: int = 30) -> dict:
     url = _method_url(webhook_url, method)
-    curl_error: Exception | None = None
-    try:
-        return _bitrix_curl_call(url, method, payload, timeout_seconds)
-    except FileNotFoundError:
-        pass
-    except Exception as exc:
-        curl_error = exc
-    response = None
-    last_error: Exception | None = None
     request_timeout = httpx.Timeout(timeout_seconds, connect=8, write=10, pool=10)
-    for attempt in range(2):
+    last_error: Exception | None = None
+    for attempt in range(5):
+        try:
+            return _bitrix_curl_call(url, method, payload, timeout_seconds)
+        except FileNotFoundError:
+            pass
+        except Exception as exc:
+            last_error = exc
         try:
             with httpx.Client(timeout=request_timeout, follow_redirects=True) as client:
                 response = client.post(url, json=payload)
-            break
+            if response.status_code >= 400:
+                raise RuntimeError(f"{method}: http_{response.status_code}")
+            data = response.json()
+            if isinstance(data, dict) and data.get("error"):
+                raise RuntimeError(f"{method}: {data.get('error_description') or data.get('error')}")
+            return data if isinstance(data, dict) else {"result": data}
         except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError, ssl.SSLError) as exc:
             last_error = exc
-            time.sleep(1)
-    if response is None:
-        raise last_error or curl_error or RuntimeError(f"{method}: request_failed")
-    if response.status_code >= 400:
-        raise RuntimeError(f"{method}: http_{response.status_code}")
-    data = response.json()
-    if isinstance(data, dict) and data.get("error"):
-        raise RuntimeError(f"{method}: {data.get('error_description') or data.get('error')}")
-    return data if isinstance(data, dict) else {"result": data}
+        if attempt < 4:
+            time.sleep(2 + attempt * 2)
+    raise last_error or RuntimeError(f"{method}: request_failed")
 
 
 def _first_multifield(item: dict, field: str) -> str:
