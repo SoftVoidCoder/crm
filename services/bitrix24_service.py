@@ -266,6 +266,14 @@ def _search_normalize(value: str) -> str:
     return re.sub(r"[^0-9a-zа-яё]+", " ", str(value or "").casefold()).strip()
 
 
+def _safe_positive_int(value) -> int:
+    try:
+        result = int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+    return result if result > 0 else 0
+
+
 def _bitrix_search_terms(query: str) -> list[str]:
     clean_query = _normalize_spaces(query)
     if not clean_query:
@@ -349,9 +357,62 @@ def _bitrix_search_item(entity_type: str, raw: dict, company_map: dict[str, dict
     }
 
 
+def _loaded_bitrix_search_item(row: dict) -> dict:
+    extra = _json_load(row.get("extra_json"), {}) or {}
+    raw = extra.get("bitrix24") if isinstance(extra, dict) else {}
+    raw_id = _normalize_spaces(raw.get("ID") if isinstance(raw, dict) else "")
+    entity_type = "prospect"
+    entity_id = str(row.get("id") or "")
+    if ":" in raw_id:
+        entity_type, entity_id = raw_id.split(":", 1)
+    return {
+        "type": entity_type,
+        "id": entity_id,
+        "prospect_id": int(row.get("id") or 0),
+        "already_loaded": True,
+        "title": _normalize_spaces(row.get("company_name") or ""),
+        "contact_name": _normalize_spaces(row.get("contact_name") or ""),
+        "phone": _normalize_spaces(row.get("phone") or ""),
+        "email": _normalize_spaces(row.get("email") or ""),
+        "date_modify": _normalize_spaces(raw.get("DATE_MODIFY") if isinstance(raw, dict) else "") or str(row.get("updated_at") or ""),
+    }
+
+
+def _search_loaded_bitrix_clients(query: str, limit: int) -> list[dict]:
+    clean_query = _normalize_spaces(query)
+    if not clean_query:
+        return []
+    try:
+        conn = get_connection(row_factory=True)
+        rows = [
+            dict(row)
+            for row in conn.execute(
+                """
+                SELECT *
+                FROM outreach_prospects
+                WHERE source_name=?
+                ORDER BY updated_at DESC, id DESC
+                LIMIT 2000
+                """,
+                (BITRIX24_SOURCE_NAME,),
+            ).fetchall()
+        ]
+        conn.close()
+    except Exception:
+        return []
+    items = [_loaded_bitrix_search_item(row) for row in rows]
+    scored = [(item, _bitrix_search_score(item, clean_query)) for item in items]
+    scored = [pair for pair in scored if pair[1] >= 12]
+    scored.sort(key=lambda pair: (pair[1], pair[0].get("date_modify", "")), reverse=True)
+    return [item for item, _score in scored[:limit]]
+
+
 def search_bitrix24_clients(query: str = "", limit: int = 20, webhook_url: str = "") -> dict:
     clean_query = _normalize_spaces(query)
     row_limit = max(1, min(30, int(limit or 20)))
+    loaded_items = _search_loaded_bitrix_clients(clean_query, row_limit)
+    if loaded_items:
+        return {"status": "success", "query": clean_query, "items": loaded_items, "source": "crm_cache"}
     company_select = ["ID", "TITLE", "PHONE", "EMAIL", "WEB", "COMMENTS", "DATE_CREATE", "DATE_MODIFY"]
     contact_select = ["ID", "NAME", "LAST_NAME", "SECOND_NAME", "POST", "COMPANY_ID", "PHONE", "EMAIL", "WEB", "COMMENTS", "DATE_CREATE", "DATE_MODIFY"]
     lead_select = [
@@ -373,11 +434,11 @@ def search_bitrix24_clients(query: str = "", limit: int = 20, webhook_url: str =
         "DATE_MODIFY",
     ]
     if clean_query:
-        search_limit = max(row_limit, 10)
+        search_limit = max(row_limit, 8)
         companies = []
         contacts = []
         leads = []
-        for term in _bitrix_search_terms(clean_query):
+        for term in _bitrix_search_terms(clean_query)[:1]:
             companies.extend(_safe_fetch_filtered_list(webhook_url, "crm.company.list", company_select, {"%TITLE": term}, search_limit))
             contacts.extend(_safe_fetch_filtered_list(webhook_url, "crm.contact.list", contact_select, {"%NAME": term}, search_limit))
             contacts.extend(_safe_fetch_filtered_list(webhook_url, "crm.contact.list", contact_select, {"%LAST_NAME": term}, search_limit))
@@ -408,8 +469,12 @@ def _bitrix_get_entity(entity_type: str, entity_id: str, webhook_url: str = "") 
 
 def import_selected_bitrix24_clients(items: list[dict], actor: dict | None = None, webhook_url: str = "") -> dict:
     rows = []
+    already_loaded = 0
     company_cache: dict[str, dict] = {}
     for item in items or []:
+        if _safe_positive_int(item.get("prospect_id") or 0):
+            already_loaded += 1
+            continue
         entity_type = _normalize_spaces(item.get("type") or "").lower()
         entity_id = _normalize_spaces(item.get("id") or "")
         raw = _bitrix_get_entity(entity_type, entity_id, webhook_url)
@@ -426,10 +491,12 @@ def import_selected_bitrix24_clients(items: list[dict], actor: dict | None = Non
             rows.append(_contact_to_import_row(raw, company_cache))
         elif entity_type == "company":
             rows.append(_company_to_import_row(raw))
+    if not rows and already_loaded:
+        return {"status": "success", "rows_total": already_loaded, "created": 0, "updated": already_loaded, "skipped": 0}
     if not rows:
         return {"status": "failed", "error": "empty_selection", "message": "Выберите клиента из Bitrix24."}
     imported = import_bitrix24_rows(rows, actor=actor, filename=f"bitrix24-selected-{int(time.time())}")
-    return {"status": "success", "rows_total": len(rows), **imported}
+    return {"status": "success", "rows_total": len(rows) + already_loaded, **imported}
 
 
 def _lead_to_import_row(item: dict) -> dict:
