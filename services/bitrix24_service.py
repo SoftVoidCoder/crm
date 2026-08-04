@@ -94,6 +94,19 @@ def bitrix24_config_status(webhook_url: str = "") -> dict:
     }
 
 
+def _add_existing_bitrix24_keys(existing_keys: dict[str, dict], rows: list[dict]) -> None:
+    for row in rows:
+        extra = _json_load(row.get("extra_json"), {}) or {}
+        raw = extra.get("bitrix24") if isinstance(extra, dict) else {}
+        raw_id = _normalize_spaces(raw.get("ID") if isinstance(raw, dict) else "")
+        if raw_id:
+            existing_keys[f"bitrix24:{raw_id}"] = row
+
+
+def _is_generic_bitrix24_name(value: str) -> bool:
+    return _normalize_spaces(value).casefold() in {"без названия", "безназвания"}
+
+
 def _method_url(webhook_url: str, method: str) -> str:
     base = _configured_webhook_url(webhook_url)
     if not base:
@@ -345,6 +358,7 @@ def import_bitrix24_rows(rows: list[dict], actor: dict | None = None, filename: 
     c.execute("SELECT * FROM outreach_prospects")
     existing_rows = [dict(row) for row in c.fetchall()]
     existing_keys = _outreach_existing_key_map(existing_rows)
+    _add_existing_bitrix24_keys(existing_keys, existing_rows)
     created = updated = skipped = 0
     for raw in rows:
         item = {
@@ -374,6 +388,8 @@ def import_bitrix24_rows(rows: list[dict], actor: dict | None = None, filename: 
             skipped += 1
             continue
         lookup_keys = _outreach_item_lookup_keys(item)
+        if _is_generic_bitrix24_name(item["company_name"]):
+            lookup_keys = [key for key in lookup_keys if not key.startswith("company:")]
         bitrix_key = f"bitrix24:{_normalize_spaces(raw.get('ID') or '')}"
         match = next((existing_keys.get(key) for key in [bitrix_key, *lookup_keys] if key and existing_keys.get(key)), None)
         if match:
@@ -470,4 +486,4 @@ def sync_bitrix24_to_outreach(webhook_url: str = "", actor: dict | None = None, 
         return {"status": "skipped", "reason": "bitrix24_webhook_required", **bitrix24_config_status(webhook_url)}
     fetched = fetch_bitrix24_rows(webhook_url=webhook_url, limit=limit)
     imported = import_bitrix24_rows(fetched["rows"], actor=actor, filename=f"bitrix24-api-{int(time.time())}")
-    return {"status": "success", **fetched, **imported}
+    return {"status": "success", "rows_total": len(fetched["rows"]), "fetched": fetched["fetched"], **imported}
