@@ -1062,6 +1062,7 @@ function renderOutreachBitrixPanel() {
 async function searchBitrixClients() {
     const query = String(document.getElementById('outreachBitrixSearch')?.value || '').trim();
     if (!query) return customAlert('Введите название, контакт, телефон или email для поиска в Bitrix24.');
+    if (query.length < 3) return customAlert('Введите минимум 3 символа, чтобы поиск в Bitrix24 не подвисал на слишком широком запросе.');
     outreachBitrixLoading = true;
     renderOutreachBitrixPanel();
     const res = await apiCall('/integrations/bitrix24/search', 'POST', { query, limit: 12 });

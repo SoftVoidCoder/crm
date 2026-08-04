@@ -129,6 +129,48 @@ def run_export_json(target: str = ""):
     return 0
 
 
+def run_clear_business_data():
+    keep_tables = {
+        "users",
+        "schema_migrations",
+        "integration_connectors",
+        "integration_connector_credentials",
+    }
+    keep_user_email = "ilyaosipov@yandex.ru"
+    conn = get_connection(row_factory=True)
+    try:
+        rows = conn.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name"
+        ).fetchall()
+        tables = [row["table_name"] for row in rows]
+        targets = [table for table in tables if table not in keep_tables]
+        with conn.cursor() as cur:
+            for table in targets:
+                cur.execute(f'TRUNCATE TABLE "{table}" RESTART IDENTITY CASCADE')
+            cur.execute(
+                "DELETE FROM users WHERE lower(email) <> lower(?)",
+                (keep_user_email,),
+            )
+            cur.execute(
+                """
+                UPDATE users
+                SET username='Admin',
+                    status='approved'
+                WHERE lower(email)=lower(?)
+                """,
+                (keep_user_email,),
+            )
+        conn.commit()
+        print(f"cleared_tables: {len(targets)}")
+        print(f"kept_tables: {', '.join(sorted(keep_tables))}")
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="Korda DB operational tool")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -138,6 +180,7 @@ def main():
     sub.add_parser("migrate", help="Apply pending SQL migrations")
     sub.add_parser("integrity", help="Run basic PostgreSQL connectivity check")
     sub.add_parser("checkpoint", help="Show checkpoint status")
+    sub.add_parser("clear-business-data", help="Clear CRM business data but keep the director account and integrations")
     export_parser = sub.add_parser("export-json", help="Export current PostgreSQL data to JSON")
     export_parser.add_argument("--target", default="", help="Target JSON file path")
     backup_parser = sub.add_parser("backup", help="Create PostgreSQL SQL dump")
@@ -156,6 +199,8 @@ def main():
         raise SystemExit(run_integrity())
     if args.command == "checkpoint":
         raise SystemExit(run_checkpoint())
+    if args.command == "clear-business-data":
+        raise SystemExit(run_clear_business_data())
     if args.command == "export-json":
         raise SystemExit(run_export_json(args.target))
     if args.command == "backup":

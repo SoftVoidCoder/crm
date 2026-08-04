@@ -410,6 +410,14 @@ def _search_loaded_bitrix_clients(query: str, limit: int) -> list[dict]:
 def search_bitrix24_clients(query: str = "", limit: int = 20, webhook_url: str = "") -> dict:
     clean_query = _normalize_spaces(query)
     row_limit = max(1, min(30, int(limit or 20)))
+    if len(clean_query) < 3:
+        return {
+            "status": "success",
+            "query": clean_query,
+            "items": [],
+            "source": "query_too_short",
+            "message": "Введите минимум 3 символа для поиска в Bitrix24.",
+        }
     loaded_items = _search_loaded_bitrix_clients(clean_query, row_limit)
     if loaded_items:
         return {"status": "success", "query": clean_query, "items": loaded_items, "source": "crm_cache"}
