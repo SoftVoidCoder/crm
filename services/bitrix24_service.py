@@ -13,6 +13,7 @@ from routers.projects import (
     _json_load,
     _normalize_outreach_priority,
     _normalize_outreach_status,
+    _normalize_match,
     _normalize_spaces,
     _outreach_existing_key_map,
     _outreach_item_lookup_keys,
@@ -108,6 +109,73 @@ def _add_existing_bitrix24_keys(existing_keys: dict[str, dict], rows: list[dict]
 
 def _is_generic_bitrix24_name(value: str) -> bool:
     return _normalize_spaces(value).casefold() in {"без названия", "безназвания"}
+
+
+def _extract_inn_from_text(value: str) -> str:
+    match = re.search(r"(?:^|\b)(?:ИНН|INN)\D{0,8}(\d{10}|\d{12})(?:\b|$)", str(value or ""), flags=re.IGNORECASE)
+    return match.group(1) if match else ""
+
+
+def _strip_inn_from_title(value: str) -> str:
+    clean = re.sub(r"[\s,;]*(?:ИНН|INN)\D{0,8}(?:\d{10}|\d{12})(?:\b|$)", "", str(value or ""), flags=re.IGNORECASE)
+    return _normalize_spaces(clean).strip(" ,;")
+
+
+def _bitrix_row_quality(row: dict) -> int:
+    return (
+        (8 if _normalize_spaces(row.get("phone") or "") else 0)
+        + (8 if _normalize_spaces(row.get("email") or "") else 0)
+        + (5 if _normalize_spaces(row.get("contact_name") or "") else 0)
+        + (4 if _normalize_spaces(row.get("company_inn") or "") else 0)
+        + (2 if _normalize_spaces(row.get("website") or "") else 0)
+        + (1 if _normalize_spaces(row.get("notes") or "") else 0)
+    )
+
+
+def _merge_bitrix_duplicate_prospects(c) -> int:
+    rows = [dict(row) for row in c.execute("SELECT * FROM outreach_prospects WHERE source_name=?", (BITRIX24_SOURCE_NAME,)).fetchall()]
+    groups: dict[str, list[dict]] = {}
+    for row in rows:
+        inn = _normalize_match(row.get("company_inn") or "")
+        name = _normalize_match(row.get("company_name") or "")
+        key = f"inn:{inn}" if inn else f"company:{name}" if name else ""
+        if key:
+            groups.setdefault(key, []).append(row)
+    removed = 0
+    for group_rows in groups.values():
+        if len(group_rows) < 2:
+            continue
+        group_rows.sort(key=lambda row: (_bitrix_row_quality(row), int(row.get("updated_at") or 0), int(row.get("id") or 0)), reverse=True)
+        keeper = group_rows[0]
+        merged = dict(keeper)
+        for row in group_rows[1:]:
+            for field in ("company_inn", "contact_name", "position", "phone", "email", "website", "contact_method", "notes"):
+                if not _normalize_spaces(merged.get(field) or "") and _normalize_spaces(row.get(field) or ""):
+                    merged[field] = row.get(field) or ""
+        c.execute(
+            """
+            UPDATE outreach_prospects
+            SET company_inn=?, contact_name=?, position=?, phone=?, email=?, website=?, contact_method=?, notes=?
+            WHERE id=?
+            """,
+            (
+                merged.get("company_inn") or "",
+                merged.get("contact_name") or "",
+                merged.get("position") or "",
+                merged.get("phone") or "",
+                merged.get("email") or "",
+                merged.get("website") or "",
+                merged.get("contact_method") or "",
+                merged.get("notes") or "",
+                int(keeper.get("id") or 0),
+            ),
+        )
+        duplicate_ids = [int(row.get("id") or 0) for row in group_rows[1:] if int(row.get("id") or 0)]
+        if duplicate_ids:
+            placeholders = ",".join("?" for _ in duplicate_ids)
+            c.execute(f"DELETE FROM outreach_prospects WHERE id IN ({placeholders})", tuple(duplicate_ids))
+            removed += len(duplicate_ids)
+    return removed
 
 
 def _method_url(webhook_url: str, method: str) -> str:
@@ -658,8 +726,8 @@ def import_bitrix24_rows(rows: list[dict], actor: dict | None = None, filename: 
     created = updated = skipped = 0
     for raw in rows:
         item = {
-            "company_name": _normalize_spaces(raw.get("COMPANY_TITLE") or raw.get("TITLE") or ""),
-            "company_inn": _normalize_spaces(raw.get("INN") or ""),
+            "company_name": _strip_inn_from_title(raw.get("COMPANY_TITLE") or raw.get("TITLE") or ""),
+            "company_inn": _normalize_spaces(raw.get("INN") or raw.get("RQ_INN") or _extract_inn_from_text(raw.get("COMPANY_TITLE") or raw.get("TITLE") or "")),
             "contact_name": _normalize_spaces(raw.get("CONTACT_NAME") or ""),
             "position": _normalize_spaces(raw.get("POST") or ""),
             "phone": _normalize_spaces(raw.get("PHONE") or ""),
@@ -754,6 +822,7 @@ def import_bitrix24_rows(rows: list[dict], actor: dict | None = None, filename: 
             for key in [bitrix_key, *lookup_keys]:
                 if key:
                     existing_keys[key] = virtual_row
+    duplicates_removed = _merge_bitrix_duplicate_prospects(c)
     c.execute(
         """
         INSERT INTO outreach_import_batches (
@@ -772,9 +841,9 @@ def import_bitrix24_rows(rows: list[dict], actor: dict | None = None, filename: 
         actor_name=actor.get("name", ""),
         entity_type="outreach_import",
         entity_id=str(batch_id),
-        details={"rows_total": len(rows), "created": created, "updated": updated, "skipped": skipped},
+        details={"rows_total": len(rows), "created": created, "updated": updated, "skipped": skipped, "duplicates_removed": duplicates_removed},
     )
-    return {"status": "success", "batch_id": batch_id, "created": created, "updated": updated, "skipped": skipped}
+    return {"status": "success", "batch_id": batch_id, "created": created, "updated": updated, "skipped": skipped, "duplicates_removed": duplicates_removed}
 
 
 def sync_bitrix24_to_outreach(webhook_url: str = "", actor: dict | None = None, limit: int | None = None) -> dict:
