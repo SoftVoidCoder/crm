@@ -1,4 +1,5 @@
 import json
+import ssl
 import time
 from urllib.parse import urlparse
 
@@ -61,7 +62,7 @@ def save_bitrix24_webhook_url(webhook_url: str, actor: dict) -> dict:
         conn.execute(
             """
             INSERT INTO integration_connectors (
-                connector_type, provider_name, status, settings, scope, last_sync_at, last_error, created_by, created_at, updated_at
+                connector_type, provider_name, status, settings_json, scope_json, last_sync_at, last_error, created_by, created_at, updated_at
             ) VALUES ('bitrix24', 'Bitrix24', 'active', '{}', '{}', 0, '', ?, ?, ?)
             """,
             (actor.get("email", ""), now, now),
@@ -101,8 +102,18 @@ def _method_url(webhook_url: str, method: str) -> str:
 
 def _bitrix_call(webhook_url: str, method: str, payload: dict, timeout_seconds: int = 30) -> dict:
     url = _method_url(webhook_url, method)
-    with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
-        response = client.post(url, json=payload)
+    response = None
+    for attempt in range(3):
+        try:
+            with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
+                response = client.post(url, json=payload)
+            break
+        except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError, ssl.SSLError):
+            if attempt == 2:
+                raise
+            time.sleep(1 + attempt)
+    if response is None:
+        raise RuntimeError(f"{method}: request_failed")
     if response.status_code >= 400:
         raise RuntimeError(f"{method}: http_{response.status_code}")
     data = response.json()
