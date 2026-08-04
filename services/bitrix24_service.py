@@ -1,5 +1,6 @@
 import json
 import ssl
+import subprocess
 import time
 from urllib.parse import urlparse
 
@@ -103,17 +104,47 @@ def _method_url(webhook_url: str, method: str) -> str:
 def _bitrix_call(webhook_url: str, method: str, payload: dict, timeout_seconds: int = 30) -> dict:
     url = _method_url(webhook_url, method)
     response = None
+    last_error: Exception | None = None
     for attempt in range(3):
         try:
             with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
                 response = client.post(url, json=payload)
             break
-        except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError, ssl.SSLError):
-            if attempt == 2:
-                raise
+        except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError, ssl.SSLError) as exc:
+            last_error = exc
             time.sleep(1 + attempt)
     if response is None:
-        raise RuntimeError(f"{method}: request_failed")
+        try:
+            completed = subprocess.run(
+                [
+                    "curl",
+                    "-4",
+                    "-sS",
+                    "--connect-timeout",
+                    str(min(20, timeout_seconds)),
+                    "--max-time",
+                    str(max(30, timeout_seconds * 2)),
+                    "-X",
+                    "POST",
+                    url,
+                    "-H",
+                    "Content-Type: application/json",
+                    "--data-binary",
+                    "@-",
+                ],
+                input=json.dumps(payload, ensure_ascii=False),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            raise last_error or RuntimeError(f"{method}: request_failed")
+        if completed.returncode != 0:
+            raise RuntimeError(f"{method}: curl_failed {completed.stderr[:200]}")
+        data = json.loads(completed.stdout or "{}")
+        if isinstance(data, dict) and data.get("error"):
+            raise RuntimeError(f"{method}: {data.get('error_description') or data.get('error')}")
+        return data if isinstance(data, dict) else {"result": data}
     if response.status_code >= 400:
         raise RuntimeError(f"{method}: http_{response.status_code}")
     data = response.json()
