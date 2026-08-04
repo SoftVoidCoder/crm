@@ -19,6 +19,7 @@ let outreachImportPreview = null;
 let outreachBitrixResults = [];
 let outreachBitrixSelected = new Set();
 let outreachBitrixLoading = false;
+let outreachBitrixImporting = false;
 
 const OUTREACH_KNOWLEDGE_BLOCKS = [
     {
@@ -1009,8 +1010,16 @@ function bitrixSelectionKey(item) {
 function renderOutreachBitrixPanel() {
     const mount = document.getElementById('outreachBitrixResults');
     if (!mount) return;
+    const searchButton = document.getElementById('outreachBitrixSearchButton');
+    const importButton = document.getElementById('outreachBitrixImportButton');
+    if (searchButton) searchButton.disabled = outreachBitrixLoading || outreachBitrixImporting;
+    if (importButton) importButton.disabled = outreachBitrixLoading || outreachBitrixImporting || !outreachBitrixSelected.size;
     if (outreachBitrixLoading) {
         mount.innerHTML = '<div class="empty-state">Ищу в Bitrix24...</div>';
+        return;
+    }
+    if (outreachBitrixImporting) {
+        mount.innerHTML = '<div class="empty-state">Загружаю выбранных клиентов...</div>';
         return;
     }
     if (!Array.isArray(outreachBitrixResults) || !outreachBitrixResults.length) {
@@ -1051,10 +1060,11 @@ function renderOutreachBitrixPanel() {
 }
 
 async function searchBitrixClients() {
-    const query = document.getElementById('outreachBitrixSearch')?.value || '';
+    const query = String(document.getElementById('outreachBitrixSearch')?.value || '').trim();
+    if (!query) return customAlert('Введите название, контакт, телефон или email для поиска в Bitrix24.');
     outreachBitrixLoading = true;
     renderOutreachBitrixPanel();
-    const res = await apiCall('/integrations/bitrix24/search', 'POST', { query, limit: 30 });
+    const res = await apiCall('/integrations/bitrix24/search', 'POST', { query, limit: 12 });
     outreachBitrixLoading = false;
     if (!res || res.error || res.status === 'failed') {
         renderOutreachBitrixPanel();
@@ -1075,8 +1085,14 @@ function toggleBitrixClientSelection(key, checked) {
 async function importSelectedBitrixClients() {
     const items = (outreachBitrixResults || []).filter(item => outreachBitrixSelected.has(bitrixSelectionKey(item)));
     if (!items.length) return customAlert('Выберите клиента из результатов Bitrix24.');
+    outreachBitrixImporting = true;
+    renderOutreachBitrixPanel();
     const res = await apiCall('/integrations/bitrix24/import_selected', 'POST', { items });
-    if (!res || res.error || res.status === 'failed') return customAlert(res?.message || res?.error || 'Не удалось загрузить выбранных клиентов из Bitrix24.');
+    outreachBitrixImporting = false;
+    if (!res || res.error || res.status === 'failed') {
+        renderOutreachBitrixPanel();
+        return customAlert(res?.message || res?.error || 'Не удалось загрузить выбранных клиентов из Bitrix24.');
+    }
     outreachLastImportResult = {
         filename: 'Bitrix24 selected',
         rows_total: Number(res.rows_total || 0),
@@ -1717,7 +1733,6 @@ window.importOutreachFile = importOutreachFile;
 window.searchBitrixClients = searchBitrixClients;
 window.toggleBitrixClientSelection = toggleBitrixClientSelection;
 window.importSelectedBitrixClients = importSelectedBitrixClients;
-window.syncRecentBitrixClients = syncRecentBitrixClients;
 window.exportOutreachDirectorReport = exportOutreachDirectorReport;
 window.askOutreachAssistant = askOutreachAssistant;
 window.applyOutreachBulkAction = applyOutreachBulkAction;

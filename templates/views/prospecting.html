@@ -25,10 +25,8 @@
                 </div>
                 <div class="prospecting-inline-grid prospecting-bitrix-grid">
                     <input id="outreachBitrixSearch" class="auth-input" type="search" placeholder="Название, контакт, телефон или email">
-                    <button class="btn-primary" onclick="searchBitrixClients()">Найти в Bitrix24</button>
-                    <button class="btn-secondary" onclick="importSelectedBitrixClients()">Загрузить выбранных</button>
-                    <input id="outreachBitrixLimit" class="auth-input" type="number" min="1" max="100" value="25" placeholder="Лимит">
-                    <button class="btn-secondary" onclick="syncRecentBitrixClients()">Синхронизировать свежие</button>
+                    <button id="outreachBitrixSearchButton" class="btn-primary" onclick="searchBitrixClients()">Найти в Bitrix24</button>
+                    <button id="outreachBitrixImportButton" class="btn-secondary" onclick="importSelectedBitrixClients()">Загрузить выбранных</button>
                 </div>
                 <div id="outreachBitrixResults" class="prospecting-bitrix-results"></div>
             </section>

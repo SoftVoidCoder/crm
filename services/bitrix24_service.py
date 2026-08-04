@@ -126,9 +126,9 @@ def _bitrix_curl_call(url: str, method: str, payload: dict, timeout_seconds: int
                     "-4",
                     "-sS",
                     "--connect-timeout",
-                    str(max(8, min(15, timeout_seconds))),
+                    str(max(5, min(8, timeout_seconds))),
                     "--max-time",
-                    str(max(30, min(60, timeout_seconds * 2))),
+                    str(max(12, min(24, timeout_seconds * 2))),
                     "-X",
                     "POST",
                     url,
@@ -157,11 +157,12 @@ def _bitrix_curl_call(url: str, method: str, payload: dict, timeout_seconds: int
     return data if isinstance(data, dict) else {"result": data}
 
 
-def _bitrix_call(webhook_url: str, method: str, payload: dict, timeout_seconds: int = 30) -> dict:
+def _bitrix_call(webhook_url: str, method: str, payload: dict, timeout_seconds: int = 30, attempts: int = 2) -> dict:
     url = _method_url(webhook_url, method)
-    request_timeout = httpx.Timeout(timeout_seconds, connect=8, write=10, pool=10)
+    request_timeout = httpx.Timeout(timeout_seconds, connect=min(6, timeout_seconds), write=8, pool=8)
     last_error: Exception | None = None
-    for attempt in range(5):
+    max_attempts = max(1, min(3, int(attempts or 1)))
+    for attempt in range(max_attempts):
         try:
             return _bitrix_curl_call(url, method, payload, timeout_seconds)
         except FileNotFoundError:
@@ -179,8 +180,8 @@ def _bitrix_call(webhook_url: str, method: str, payload: dict, timeout_seconds: 
             return data if isinstance(data, dict) else {"result": data}
         except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError, ssl.SSLError) as exc:
             last_error = exc
-        if attempt < 4:
-            time.sleep(2 + attempt * 2)
+        if attempt < max_attempts - 1:
+            time.sleep(1 + attempt)
     raise last_error or RuntimeError(f"{method}: request_failed")
 
 
@@ -223,7 +224,7 @@ def _fetch_list(webhook_url: str, method: str, select: list[str], limit: int) ->
     return rows[:limit]
 
 
-def _fetch_filtered_list(webhook_url: str, method: str, select: list[str], filter_payload: dict, limit: int) -> list[dict]:
+def _fetch_filtered_list(webhook_url: str, method: str, select: list[str], filter_payload: dict, limit: int, timeout_seconds: int = 8) -> list[dict]:
     rows: list[dict] = []
     start: int | str = 0
     while len(rows) < limit:
@@ -236,7 +237,8 @@ def _fetch_filtered_list(webhook_url: str, method: str, select: list[str], filte
                 "order": {"DATE_MODIFY": "DESC", "ID": "DESC"},
                 "start": start,
             },
-            timeout_seconds=20,
+            timeout_seconds=timeout_seconds,
+            attempts=1,
         )
         result = data.get("result") or []
         if not isinstance(result, list):
@@ -270,12 +272,9 @@ def _bitrix_search_terms(query: str) -> list[str]:
         return []
     terms = [clean_query]
     tokens = [token for token in re.split(r"\s+", clean_query) if len(token) >= 3]
-    terms.extend(tokens)
-    for token in tokens:
-        if len(token) >= 5:
-            terms.append(token[: max(3, len(token) - 1)])
-            if len(token) <= 10:
-                terms.extend(token[:idx] + token[idx + 1 :] for idx in range(len(token)) if len(token[:idx] + token[idx + 1 :]) >= 3)
+    terms.extend(tokens[:1])
+    if tokens and len(tokens[0]) >= 5:
+        terms.append(tokens[0][: max(3, len(tokens[0]) - 1)])
     compact_digits = re.sub(r"\D+", "", clean_query)
     if len(compact_digits) >= 5:
         terms.append(compact_digits[-10:])
@@ -289,7 +288,7 @@ def _bitrix_search_terms(query: str) -> list[str]:
         if normalized and key not in seen:
             seen.add(key)
             result.append(normalized)
-        if len(result) >= 6:
+        if len(result) >= 3:
             break
     return result
 
@@ -326,7 +325,7 @@ def _bitrix_search_score(item: dict, query: str) -> float:
 
 def _safe_fetch_filtered_list(webhook_url: str, method: str, select: list[str], filter_payload: dict, limit: int) -> list[dict]:
     try:
-        return _fetch_filtered_list(webhook_url, method, select, filter_payload, limit)
+        return _fetch_filtered_list(webhook_url, method, select, filter_payload, limit, timeout_seconds=8)
     except Exception:
         return []
 
@@ -352,7 +351,7 @@ def _bitrix_search_item(entity_type: str, raw: dict, company_map: dict[str, dict
 
 def search_bitrix24_clients(query: str = "", limit: int = 20, webhook_url: str = "") -> dict:
     clean_query = _normalize_spaces(query)
-    row_limit = max(1, min(50, int(limit or 20)))
+    row_limit = max(1, min(30, int(limit or 20)))
     company_select = ["ID", "TITLE", "PHONE", "EMAIL", "WEB", "COMMENTS", "DATE_CREATE", "DATE_MODIFY"]
     contact_select = ["ID", "NAME", "LAST_NAME", "SECOND_NAME", "POST", "COMPANY_ID", "PHONE", "EMAIL", "WEB", "COMMENTS", "DATE_CREATE", "DATE_MODIFY"]
     lead_select = [
@@ -374,7 +373,7 @@ def search_bitrix24_clients(query: str = "", limit: int = 20, webhook_url: str =
         "DATE_MODIFY",
     ]
     if clean_query:
-        search_limit = max(row_limit, 20)
+        search_limit = max(row_limit, 10)
         companies = []
         contacts = []
         leads = []
@@ -383,11 +382,8 @@ def search_bitrix24_clients(query: str = "", limit: int = 20, webhook_url: str =
             contacts.extend(_safe_fetch_filtered_list(webhook_url, "crm.contact.list", contact_select, {"%NAME": term}, search_limit))
             contacts.extend(_safe_fetch_filtered_list(webhook_url, "crm.contact.list", contact_select, {"%LAST_NAME": term}, search_limit))
             leads.extend(_safe_fetch_filtered_list(webhook_url, "crm.lead.list", lead_select, {"%TITLE": term}, search_limit))
-            leads.extend(_safe_fetch_filtered_list(webhook_url, "crm.lead.list", lead_select, {"%COMPANY_TITLE": term}, search_limit))
     else:
-        companies = _fetch_list(webhook_url, "crm.company.list", company_select, row_limit)
-        contacts = _fetch_list(webhook_url, "crm.contact.list", contact_select, row_limit)
-        leads = _fetch_list(webhook_url, "crm.lead.list", lead_select, row_limit)
+        return {"status": "success", "query": clean_query, "items": []}
     company_map = {_normalize_spaces(item.get("ID") or ""): item for item in companies}
     items = []
     items.extend(_bitrix_search_item("company", item) for item in companies)

@@ -399,23 +399,17 @@ async def bitrix24_sync_runner():
 async def lifespan(_app: FastAPI):
     periodic_task = asyncio.create_task(periodic_task_runner())
     integration_task = asyncio.create_task(integration_sync_runner())
-    bitrix24_task = asyncio.create_task(bitrix24_sync_runner())
     try:
         yield
     finally:
         periodic_task.cancel()
         integration_task.cancel()
-        bitrix24_task.cancel()
         try:
             await periodic_task
         except asyncio.CancelledError:
             pass
         try:
             await integration_task
-        except asyncio.CancelledError:
-            pass
-        try:
-            await bitrix24_task
         except asyncio.CancelledError:
             pass
 
