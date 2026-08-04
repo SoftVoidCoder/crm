@@ -114,57 +114,69 @@ def _method_url(webhook_url: str, method: str) -> str:
     return f"{base}/{method}.json"
 
 
+def _bitrix_curl_call(url: str, method: str, payload: dict, timeout_seconds: int) -> dict:
+    completed = None
+    for attempt in range(2):
+        try:
+            completed = subprocess.run(
+                [
+                    "curl",
+                    "-4",
+                    "-sS",
+                    "--connect-timeout",
+                    str(max(8, min(15, timeout_seconds))),
+                    "--max-time",
+                    str(max(30, min(60, timeout_seconds * 2))),
+                    "-X",
+                    "POST",
+                    url,
+                    "-H",
+                    "Content-Type: application/json",
+                    "--data-binary",
+                    "@-",
+                ],
+                input=json.dumps(payload, ensure_ascii=False),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            raise
+        if completed.returncode == 0:
+            break
+        if attempt < 1:
+            time.sleep(1)
+    if completed is None or completed.returncode != 0:
+        stderr = completed.stderr[:200] if completed else ""
+        raise RuntimeError(f"{method}: curl_failed {stderr}")
+    data = json.loads(completed.stdout or "{}")
+    if isinstance(data, dict) and data.get("error"):
+        raise RuntimeError(f"{method}: {data.get('error_description') or data.get('error')}")
+    return data if isinstance(data, dict) else {"result": data}
+
+
 def _bitrix_call(webhook_url: str, method: str, payload: dict, timeout_seconds: int = 30) -> dict:
     url = _method_url(webhook_url, method)
+    curl_error: Exception | None = None
+    try:
+        return _bitrix_curl_call(url, method, payload, timeout_seconds)
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        curl_error = exc
     response = None
     last_error: Exception | None = None
-    for attempt in range(3):
+    request_timeout = httpx.Timeout(timeout_seconds, connect=8, write=10, pool=10)
+    for attempt in range(2):
         try:
-            with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
+            with httpx.Client(timeout=request_timeout, follow_redirects=True) as client:
                 response = client.post(url, json=payload)
             break
         except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError, ssl.SSLError) as exc:
             last_error = exc
-            time.sleep(1 + attempt)
+            time.sleep(1)
     if response is None:
-        completed = None
-        for attempt in range(3):
-            try:
-                completed = subprocess.run(
-                    [
-                        "curl",
-                        "-4",
-                        "-sS",
-                        "--connect-timeout",
-                        str(max(20, min(30, timeout_seconds))),
-                        "--max-time",
-                        str(max(90, timeout_seconds * 3)),
-                        "-X",
-                        "POST",
-                        url,
-                        "-H",
-                        "Content-Type: application/json",
-                        "--data-binary",
-                        "@-",
-                    ],
-                    input=json.dumps(payload, ensure_ascii=False),
-                    text=True,
-                    capture_output=True,
-                    check=False,
-                )
-            except FileNotFoundError:
-                raise last_error or RuntimeError(f"{method}: request_failed")
-            if completed.returncode == 0:
-                break
-            if attempt < 2:
-                time.sleep(2 + attempt)
-        if completed is None or completed.returncode != 0:
-            stderr = completed.stderr[:200] if completed else ""
-            raise RuntimeError(f"{method}: curl_failed {stderr}")
-        data = json.loads(completed.stdout or "{}")
-        if isinstance(data, dict) and data.get("error"):
-            raise RuntimeError(f"{method}: {data.get('error_description') or data.get('error')}")
-        return data if isinstance(data, dict) else {"result": data}
+        raise last_error or curl_error or RuntimeError(f"{method}: request_failed")
     if response.status_code >= 400:
         raise RuntimeError(f"{method}: http_{response.status_code}")
     data = response.json()
