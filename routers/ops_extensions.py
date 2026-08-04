@@ -1536,7 +1536,14 @@ def register_extended_ops_routes(router, helpers: dict):
                 COALESCE(SUM(CASE WHEN layer_type IN ('material','labor') THEN actual_amount ELSE 0 END), 0)
                 + COALESCE(SUM(CASE WHEN layer_type='overhead' THEN overhead_amount ELSE 0 END), 0) AS actual_cost
             FROM production_cost_layers
-            WHERE production_order_id=? AND layer_type IN ('material', 'labor', 'overhead')
+            WHERE production_order_id=?
+              AND layer_type IN ('material', 'labor', 'overhead')
+              AND EXISTS (
+                  SELECT 1
+                  FROM production_operations operation
+                  WHERE operation.id=production_cost_layers.operation_id
+                    AND operation.order_id=production_cost_layers.production_order_id
+              )
             """,
             (order_id,),
         ).fetchone() or {})

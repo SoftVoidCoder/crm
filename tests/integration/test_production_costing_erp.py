@@ -101,6 +101,19 @@ class ProductionCostingERPIntegrationTests(unittest.TestCase):
             self.assertEqual(order_res.status_code, 200)
             order_id = int(order_res.json()["id"])
 
+            conn = get_connection()
+            conn.execute(
+                """
+                INSERT INTO production_cost_layers (
+                    production_order_id, operation_id, layer_type, actual_amount,
+                    source_type, source_id, created_by, created_at, updated_at
+                ) VALUES (?, ?, 'labor', 200, 'deleted_operation', 0, ?, ?, ?)
+                """,
+                (order_id, 1_900_000_001, self.user["email"], int(time.time()), int(time.time())),
+            )
+            conn.commit()
+            conn.close()
+
             bom_item = self.client.post("/api/production/bom", json={
                 "order_id": order_id,
                 "article": article,
@@ -175,6 +188,7 @@ class ProductionCostingERPIntegrationTests(unittest.TestCase):
                 c.execute("DELETE FROM production_operations WHERE id=?", (operation_id,))
             if order_id:
                 c.execute("DELETE FROM production_semifinished WHERE order_id=?", (order_id,))
+                c.execute("DELETE FROM production_cost_layers WHERE production_order_id=?", (order_id,))
                 c.execute("DELETE FROM production_bom_items WHERE id=?", (bom_item_id,))
                 c.execute("DELETE FROM integration_sync_log WHERE entity_type='production_order' AND entity_id=?", (order_id,))
                 c.execute("DELETE FROM integration_sync_queue WHERE entity_type='production_order' AND entity_id=?", (order_id,))

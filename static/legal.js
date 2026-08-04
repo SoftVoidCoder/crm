@@ -65,7 +65,7 @@ function initClaimsUI() {
     const mainContent = document.querySelector('.main-content');
     if (mainContent && !document.getElementById('claimsView')) {
         const claimsView = document.createElement('div');
-        claimsView.id = "claimsView"; claimsView.className = "fade-in legal-shell"; claimsView.style.display = "none";
+        claimsView.id = "claimsView"; claimsView.className = "view-page fade-in legal-shell"; claimsView.style.display = "none";
         claimsView.innerHTML = `
             <div class="legal-hero">
                 ${getLegalSectionTitle('Претензии и Суды', 'Единый реестр досудебной и судебной работы')}

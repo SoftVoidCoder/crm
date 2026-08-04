@@ -928,11 +928,20 @@ function salesSentClass(status) {
 }
 
 function productionStageLabel(stage) {
-    return { queue: 'Очередь', in_work: 'В работе', otk: 'ОТК', done: 'Готово' }[stage] || stage || 'Статус';
+    return { queue: 'Очередь', in_work: 'В работе', in_progress: 'В работе', otk: 'ОТК', done: 'Готово' }[stage] || opsDisplayStatus(stage, 'Статус');
 }
 
 function productionPriorityLabel(priority) {
     return { normal: 'Обычный', high: 'Высокий', critical: 'Критичный' }[priority] || priority || 'Приоритет';
+}
+
+function opsEscape(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function opsParseDate(value) {
@@ -1005,6 +1014,117 @@ function getVisibleProductionOrders() {
         if (productionListFilter !== 'all') return item.stage === productionListFilter;
         return true;
     });
+}
+
+function productionOrderExecutionState(order) {
+    const orderId = Number(order?.id || 0);
+    const operations = productionOperationsDB.filter(item => Number(item.order_id) === orderId);
+    const bomItems = productionBomDB.filter(item => Number(item.order_id) === orderId);
+    const progress = Math.max(0, Math.min(100, Number(order?.progress || 0)));
+    const plannedQty = Number(order?.planned_qty_total || order?.planned_qty || 0);
+    const producedQty = Number(order?.produced_qty_total || order?.produced_qty || 0);
+    const completedOperations = operations.filter(item => ['done', 'completed', 'otk'].includes(item.status || '')).length;
+    const late = order?.stage !== 'done' && opsIsPastDate(order?.planned_finish);
+    const materialGaps = bomItems.filter(item => {
+        const planned = Number(item.planned_qty || 0);
+        const actual = Number(item.actual_qty || 0);
+        return planned > 0 && actual > 0 && actual < planned;
+    }).length;
+    const blockers = [];
+    if (late) blockers.push('срыв срока');
+    if (!order?.responsible) blockers.push('нет ответственного');
+    if (Number(order?.scrap_qty_total || order?.scrap_qty || 0) > 0) blockers.push('есть брак');
+    if (materialGaps) blockers.push(`материалы ${materialGaps}`);
+    if (operations.length && completedOperations < operations.length && progress >= 80 && order?.stage !== 'done') blockers.push('ОТК/закрытие');
+    if (!operations.length) blockers.push('нет операций');
+    const materialReady = bomItems.length ? Math.round((bomItems.length - materialGaps) / bomItems.length * 100) : 100;
+    const operationReady = operations.length ? Math.round(completedOperations / operations.length * 100) : progress;
+    const tone = late || blockers.length > 2 ? 'risk' : (order?.stage === 'done' ? 'stable' : (progress >= 70 ? 'active' : 'attention'));
+    return {
+        progress,
+        plannedQty,
+        producedQty,
+        operationsTotal: operations.length,
+        completedOperations,
+        materialReady,
+        operationReady,
+        late,
+        materialGaps,
+        blockers,
+        tone,
+    };
+}
+
+function renderOrderExecutionDashboard() {
+    const mount = document.getElementById('orderExecutionDashboardMount');
+    if (!mount) return;
+    const states = productionOrdersDB.map(order => ({ order, state: productionOrderExecutionState(order) }));
+    const activeOrders = states.filter(item => item.order.stage !== 'done');
+    const lateOrders = activeOrders.filter(item => item.state.late);
+    const otkOrders = states.filter(item => item.order.stage === 'otk');
+    const materialRisk = activeOrders.filter(item => item.state.materialGaps > 0);
+    const avgProgress = activeOrders.length ? Math.round(activeOrders.reduce((sum, item) => sum + item.state.progress, 0) / activeOrders.length) : 0;
+    const stageRows = ['queue', 'in_work', 'otk', 'done'].map(stage => ({
+        stage,
+        label: productionStageLabel(stage),
+        count: states.filter(item => item.order.stage === stage).length,
+    }));
+    const focusRows = activeOrders
+        .sort((a, b) => {
+            const ar = (a.state.late ? 1000 : 0) + a.state.blockers.length * 100 - a.state.progress;
+            const br = (b.state.late ? 1000 : 0) + b.state.blockers.length * 100 - b.state.progress;
+            return br - ar;
+        })
+        .slice(0, 6);
+    mount.innerHTML = `
+        <section class="ops-intelligence-card order-execution-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Дашборд выполнения заказа в реальном времени</h3>
+                    <p class="section-subtitle">Сводка для директора: стадия, процент выполнения, сроки, материалы, ОТК и блокеры по активным заказам.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary" onclick="focusProductionQueue()">Очередь</button>
+                    <button class="btn-secondary" onclick="renderProduction()">Обновить</button>
+                </div>
+            </div>
+            <div class="ops-intelligence-metrics order-execution-metrics">
+                <div><span>Активные</span><strong>${activeOrders.length}</strong></div>
+                <div><span>Средний прогресс</span><strong>${avgProgress}%</strong></div>
+                <div><span>Срыв срока</span><strong>${lateOrders.length}</strong></div>
+                <div><span>ОТК</span><strong>${otkOrders.length}</strong></div>
+                <div><span>Мат. риски</span><strong>${materialRisk.length}</strong></div>
+                <div><span>Всего заказов</span><strong>${productionOrdersDB.length}</strong></div>
+            </div>
+            <div class="order-stage-strip">
+                ${stageRows.map(item => `
+                    <div class="order-stage-pill">
+                        <span>${item.label}</span>
+                        <strong>${item.count}</strong>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="ops-intelligence-list order-execution-list">
+                ${focusRows.length ? focusRows.map(({ order, state }) => `
+                    <div class="ops-intelligence-item order-execution-item">
+                        <div>
+                            <strong>${opsEscape(order.order_name || `Заказ #${order.id}`)}</strong>
+                            <span>${opsEscape(order.client_name || 'Клиент не указан')} · ${opsEscape(order.project_contract || order.project_name || 'без проекта')} · ${opsEscape(order.responsible || 'нет ответственного')}</span>
+                            <div class="order-progress-line">
+                                <i style="width:${state.progress}%"></i>
+                            </div>
+                            <small>План/факт: ${Number(state.plannedQty || 0).toLocaleString('ru-RU')} / ${Number(state.producedQty || 0).toLocaleString('ru-RU')} · операции ${state.completedOperations}/${state.operationsTotal} · материалы ${state.materialReady}%</small>
+                            <em>${state.blockers.length ? state.blockers.map(opsEscape).join(' · ') : 'без критичных блокеров'}</em>
+                        </div>
+                        <div class="order-execution-side">
+                            <span class="status-badge ${opsHealthBadgeClass(state.tone)}">${productionStageLabel(order.stage)}</span>
+                            <button class="btn-secondary" onclick="selectProductionOrder(${Number(order.id || 0)}); renderProduction();">Открыть</button>
+                        </div>
+                    </div>
+                `).join('') : '<div class="empty-state">Активных производственных заказов нет. Когда появятся заказы, здесь будет реальный контроль исполнения.</div>'}
+            </div>
+        </section>
+    `;
 }
 
 function registerOpsSavedFilters(scope, mountId, defaultTitle, getFilter, setFilter, renderFn, presets) {
@@ -2473,6 +2593,7 @@ async function renderProduction() {
         `;
     }
     const selectedOrder = getSelectedProductionOrder();
+    renderOrderExecutionDashboard();
     if (cockpitTarget) {
         const selectedOperations = selectedOrder ? productionOperationsDB.filter(item => Number(item.order_id) === Number(selectedOrder.id)) : [];
         const selectedBomItems = selectedOrder ? productionBomDB.filter(item => Number(item.order_id) === Number(selectedOrder.id)) : [];

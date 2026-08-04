@@ -431,6 +431,17 @@ async function releaseEplWaybillLock(waybillId = 0, silent = true) {
     return true;
 }
 
+window.addEventListener('pagehide', () => {
+    const targetId = Number(eplLockedWaybillId || 0);
+    if (!targetId) return;
+    fetch(`/api/epl/waybills/${targetId}/unlock`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        keepalive: true,
+    }).catch(() => {});
+    eplLockedWaybillId = 0;
+});
+
 async function processEplSyncQueue() {
     if (typeof guardDangerousAction === 'function') {
         const guard = await guardDangerousAction('accounting', 'epl_waybill', 'sync_1c');

@@ -4,16 +4,16 @@
 
 const TASK_CENTER_COLUMN_META = [
     { key: 'select', label: '', width: 44, sticky: true, hidden: false, system: true },
-    { key: 'status', label: 'Статус', width: 140, sticky: true, hidden: false },
-    { key: 'title', label: 'Задача', width: 320, sticky: true, hidden: false },
-    { key: 'project', label: 'Проект', width: 180, hidden: false },
-    { key: 'author', label: 'Поручил', width: 180, hidden: false },
-    { key: 'executor', label: 'Исполнитель', width: 190, hidden: false },
-    { key: 'priority', label: 'Приоритет', width: 150, hidden: false },
-    { key: 'deadline', label: 'Срок', width: 170, hidden: false },
-    { key: 'timeleft', label: 'Осталось', width: 180, hidden: false },
-    { key: 'comments', label: 'Комментарии', width: 120, hidden: false },
-    { key: 'updated_at', label: 'Обновлено', width: 160, hidden: false },
+    { key: 'status', label: 'Статус', width: 110, sticky: true, hidden: false },
+    { key: 'title', label: 'Задача', width: 240, sticky: true, hidden: false },
+    { key: 'project', label: 'Проект', width: 140, hidden: false },
+    { key: 'author', label: 'Поручил', width: 160, hidden: true },
+    { key: 'executor', label: 'Исполнитель', width: 150, hidden: false },
+    { key: 'priority', label: 'Приоритет', width: 130, hidden: true },
+    { key: 'deadline', label: 'Срок', width: 130, hidden: false },
+    { key: 'timeleft', label: 'Осталось', width: 120, hidden: false },
+    { key: 'comments', label: 'Комментарии', width: 110, hidden: true },
+    { key: 'updated_at', label: 'Обновлено', width: 150, hidden: true },
 ];
 
 let currentTaskTab = 'active';

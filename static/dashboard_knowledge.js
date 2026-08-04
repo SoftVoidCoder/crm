@@ -15,8 +15,10 @@ function renderKnowledge() {
     }
     
     container.innerHTML = knowledgeDB.map(k => {
-        const isRequired = k.required_roles.includes(currentUser.role) || k.required_roles.includes('Все');
-        const isRead = k.read_by.includes(currentUser.name);
+        const requiredRoles = Array.isArray(k.required_roles) ? k.required_roles : [];
+        const readBy = Array.isArray(k.read_by) ? k.read_by : [];
+        const isRequired = requiredRoles.includes(currentUser.role) || requiredRoles.includes('Все');
+        const isRead = readBy.includes(currentUser.name);
         
         let badge = '';
         if (isRequired && !isRead) {
@@ -25,14 +27,20 @@ function renderKnowledge() {
             badge = `<span style="background: rgba(16,185,129,0.1); color: var(--success); padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: bold;">Ознакомлен(а)</span>`;
         }
         
+        const excerpt = String(k.content || '').replace(/\s+/g, ' ').trim().slice(0, 180);
         return `
-        <div style="background:var(--card-bg); border:1px solid var(--border); padding:20px; border-radius:16px; cursor:pointer; transition:all 0.2s;" onclick="openKnowledgeDoc(${k.id})" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <b style="font-size:16px;">${k.title}</b> 
+        <article class="knowledge-card" tabindex="0" role="button" onclick="openKnowledgeDoc(${Number(k.id)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openKnowledgeDoc(${Number(k.id)});}">
+            <div class="knowledge-header">
+                <b class="knowledge-title">${escapeHtml(k.title || 'Регламент')}</b> 
                 ${badge}
             </div>
-            <div style="font-size:12px; color:var(--secondary); margin-top:8px;">Опубликовал: ${k.author} | ${k.created_at}</div>
-        </div>`;
+            <div class="knowledge-meta">Опубликовал: ${escapeHtml(k.author || 'Система')} · ${escapeHtml(k.created_at || '')}</div>
+            <div class="knowledge-excerpt">${escapeHtml(excerpt || 'Откройте карточку, чтобы посмотреть содержание.')}</div>
+            <div class="knowledge-actions">
+                <button class="btn-secondary" type="button" onclick="event.stopPropagation(); openKnowledgeDoc(${Number(k.id)})">Открыть</button>
+                <button class="btn-secondary" type="button" onclick="event.stopPropagation(); downloadKnowledgeDoc(${Number(k.id)})">Скачать текст</button>
+            </div>
+        </article>`;
     }).join('');
 }
 
@@ -74,29 +82,36 @@ function openKnowledgeDoc(id) {
     const k = knowledgeDB.find(x => x.id === id);
     if (!k) return;
     
-    document.getElementById('readKnowTitle').innerText = k.title;
-    document.getElementById('readKnowMeta').innerText = `Опубликовал: ${k.author} | Дата: ${k.created_at}`;
-    document.getElementById('readKnowContent').innerText = k.content;
+    const requiredRoles = Array.isArray(k.required_roles) ? k.required_roles : [];
+    const readBy = Array.isArray(k.read_by) ? k.read_by : [];
+    const titleEl = document.getElementById('readKnowTitle');
+    const metaEl = document.getElementById('readKnowMeta');
+    const contentEl = document.getElementById('readKnowContent');
+    if (titleEl) titleEl.innerText = k.title || 'Регламент';
+    if (metaEl) metaEl.innerText = `Опубликовал: ${k.author || 'Система'} · Дата: ${k.created_at || 'не указана'}`;
+    if (contentEl) contentEl.innerText = k.content || 'Содержимое документа пока не заполнено.';
     
     const btnRead = document.getElementById('btnMarkRead');
-    const isRequired = k.required_roles.includes(currentUser.role) || k.required_roles.includes('Все');
-    const isRead = k.read_by.includes(currentUser.name);
+    const isRequired = requiredRoles.includes(currentUser.role) || requiredRoles.includes('Все');
+    const isRead = readBy.includes(currentUser.name);
     
-    if (isRequired && !isRead) {
+    if (btnRead && isRequired && !isRead) {
         btnRead.style.display = 'flex';
-    } else {
+    } else if (btnRead) {
         btnRead.style.display = 'none';
     }
     
     const statsDiv = document.getElementById('readKnowStats');
-    if (currentUser.role === 'Директор') {
+    const usersEl = document.getElementById('readKnowUsers');
+    if (statsDiv && currentUser.role === 'Директор') {
         statsDiv.style.display = 'block';
-        document.getElementById('readKnowUsers').innerText = k.read_by.length > 0 ? k.read_by.join(', ') : 'Никто не ознакомился';
-    } else {
+        if (usersEl) usersEl.innerText = readBy.length > 0 ? readBy.join(', ') : 'Никто не ознакомился';
+    } else if (statsDiv) {
         statsDiv.style.display = 'none';
     }
     
-    document.getElementById('readKnowledgeModal').style.display = 'flex';
+    const modal = document.getElementById('readKnowledgeModal');
+    if (modal) modal.style.display = 'flex';
 }
 
 async function markKnowledgeRead() {
@@ -105,4 +120,27 @@ async function markKnowledgeRead() {
     document.getElementById('readKnowledgeModal').style.display = 'none';
     await loadKnowledge(); 
     renderKnowledge();
+}
+
+function downloadKnowledgeDoc(id = currentKnowledgeId) {
+    const k = knowledgeDB.find(x => Number(x.id) === Number(id));
+    if (!k) return customAlert('Документ базы знаний не найден.');
+    const safeTitle = String(k.title || `knowledge-${k.id || 'document'}`).replace(/[\\/:*?"<>|]+/g, '-').slice(0, 80);
+    const text = [
+        k.title || 'Регламент',
+        '',
+        `Опубликовал: ${k.author || 'Система'}`,
+        `Дата: ${k.created_at || 'не указана'}`,
+        '',
+        k.content || '',
+    ].join('\n');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${safeTitle}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
 }

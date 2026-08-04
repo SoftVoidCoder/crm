@@ -9438,6 +9438,77 @@ html, body {
     }
 }
 
+/* --- 46. Final workspace hierarchy pass ------------------------------- */
+#prospectingView .prospecting-control-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+}
+
+#prospectingView .prospecting-control-table {
+    width: 100%;
+    max-height: 360px;
+}
+
+#prospectingView .prospecting-control-table .admin-table {
+    width: 100% !important;
+    min-width: 1180px !important;
+    table-layout: auto !important;
+    font-size: 12px !important;
+}
+
+#prospectingView .prospecting-control-table .admin-table th,
+#prospectingView .prospecting-control-table .admin-table td {
+    padding: 8px 9px !important;
+}
+
+#prospectingView .prospecting-control-side {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    align-items: stretch;
+}
+
+#prospectingView .prospecting-control-side > * {
+    display: block !important;
+    min-width: 0;
+    height: 100%;
+}
+
+#prospectingView .prospecting-control-side .prospecting-quality-grid,
+#prospectingView .prospecting-control-side .prospecting-loss-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.main-content #contract360View .contract360-tablist {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
+    gap: 7px !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    scrollbar-gutter: auto !important;
+}
+
+.main-content #contract360View .contract360-tablist .krd-tab {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    min-height: 42px !important;
+    padding: 8px 10px !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    line-height: 1.2 !important;
+}
+
+@media (max-width: 1280px) {
+    #prospectingView .prospecting-control-side {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 720px) {
+    #prospectingView .prospecting-control-side,
+    .main-content #contract360View .contract360-tablist {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+}
+
 @media (max-width: 1360px) {
     .task-center-layout,
     .feed-shell {
@@ -9688,9 +9759,9 @@ html, body {
 }
 
 .dashboard-hero-title {
-    font-size: 50px !important;
-    line-height: 0.98 !important;
-    letter-spacing: -0.05em !important;
+    font-size: 34px !important;
+    line-height: 1.08 !important;
+    letter-spacing: 0 !important;
     max-width: 760px;
 }
 
@@ -11155,7 +11226,7 @@ body.workspace-config-open {
 
 #prospectingView .prospecting-dept-strip {
     display: grid;
-    grid-template-columns: repeat(8, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
     gap: 8px;
     margin-bottom: 14px;
 }
@@ -11232,6 +11303,139 @@ body.workspace-config-open {
     border-radius: 14px;
     background: #f8fbff;
     padding: 12px;
+}
+
+#prospectingView .prospecting-mini-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+#prospectingView .prospecting-mini-list span,
+#prospectingView .prospecting-mini-list button {
+    min-height: 26px;
+    padding: 5px 8px;
+    border: 1px solid rgba(207, 219, 236, 0.95);
+    border-radius: 999px;
+    background: #fff;
+    color: #52657f;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1.1;
+}
+
+#prospectingView .prospecting-mini-list button {
+    cursor: pointer;
+}
+
+#prospectingView .prospecting-mini-list button:hover {
+    border-color: rgba(37, 99, 235, 0.42);
+    color: #174ea6;
+    background: #f4f8ff;
+}
+
+#prospectingView .prospecting-knowledge-panel:empty {
+    display: none;
+}
+
+#knowledgeView .knowledge-card {
+    display: flex;
+    min-height: 198px;
+    flex-direction: column;
+    gap: 14px;
+    padding: 24px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--card-bg);
+    box-shadow: var(--shadow-card);
+    cursor: pointer;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+#knowledgeView .knowledge-card:hover,
+#knowledgeView .knowledge-card:focus-visible {
+    border-color: rgba(37, 99, 235, 0.42);
+    box-shadow: var(--shadow-soft);
+    transform: translateY(-1px);
+    outline: none;
+}
+
+#knowledgeView .knowledge-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+#knowledgeView .knowledge-title {
+    min-width: 0;
+    color: var(--text);
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1.18;
+}
+
+#knowledgeView .knowledge-meta {
+    color: var(--secondary);
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+#knowledgeView .knowledge-excerpt {
+    flex: 1;
+    color: var(--secondary);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+#knowledgeView .knowledge-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: auto;
+}
+
+#prospectingView .prospecting-knowledge-card {
+    margin: 12px 0 16px;
+    padding: 16px 18px;
+    border: 1px solid rgba(202, 214, 232, 0.95);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.05);
+}
+
+#prospectingView .prospecting-knowledge-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}
+
+#prospectingView .prospecting-knowledge-block {
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid rgba(219, 228, 241, 0.95);
+    border-radius: 14px;
+    background: #f8fbff;
+}
+
+#prospectingView .prospecting-knowledge-block--accent {
+    background: #f4f8ff;
+    border-color: rgba(128, 166, 225, 0.68);
+}
+
+#prospectingView .prospecting-knowledge-block strong {
+    display: block;
+    color: #10233f;
+    font-size: 13px;
+    font-weight: 850;
+}
+
+#prospectingView .prospecting-knowledge-block p {
+    margin: 6px 0 0;
+    color: #61718a;
+    font-size: 12px;
+    line-height: 1.45;
 }
 
 #prospectingView .prospecting-quality-grid,
@@ -11351,6 +11555,43 @@ body.workspace-config-open {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
     margin-top: 12px;
+}
+
+#prospectingView .prospecting-import-protocol {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 8px;
+    margin-top: 2px;
+    padding: 10px;
+    border: 1px solid rgba(219, 228, 241, 0.95);
+    border-radius: 12px;
+    background: #fff;
+}
+
+#prospectingView .prospecting-protocol-row {
+    display: grid;
+    grid-template-columns: 94px minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    min-width: 0;
+}
+
+#prospectingView .prospecting-protocol-row strong,
+#prospectingView .prospecting-protocol-row small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#prospectingView .prospecting-protocol-row strong {
+    color: #10233f;
+    font-size: 12px;
+}
+
+#prospectingView .prospecting-protocol-row small {
+    color: #61718a;
+    font-size: 12px;
 }
 
 #prospectingView .prospecting-import-result:empty {
@@ -11565,6 +11806,40 @@ body.workspace-config-open {
     margin-bottom: 14px;
 }
 
+#prospectingView .prospecting-dossier-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+#prospectingView .prospecting-dossier-item {
+    display: grid;
+    grid-template-columns: 70px minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid rgba(219, 228, 241, 0.95);
+    border-radius: 12px;
+    background: #fff;
+}
+
+#prospectingView .prospecting-dossier-item strong {
+    min-width: 0;
+    overflow: hidden;
+    color: #20365f;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#prospectingView .prospecting-dossier-note {
+    margin-top: 10px;
+    color: #61718a;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
 #prospectingView .table-shell {
     overflow: auto;
 }
@@ -11619,6 +11894,899 @@ body.workspace-config-open {
     text-align: center;
 }
 
+.crm-intelligence-panel:empty {
+    display: none;
+}
+
+.crm-intelligence-card,
+.documents-director-card,
+.ops-intelligence-card {
+    margin: 12px 0 16px;
+    padding: 16px 18px;
+    border: 1px solid rgba(202, 214, 232, 0.95);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.05);
+}
+
+.crm-intelligence-grid {
+    display: grid;
+    grid-template-columns: 0.75fr 1fr 1.25fr;
+    gap: 12px;
+    align-items: start;
+}
+
+.documents-director-grid {
+    display: grid;
+    grid-template-columns: 0.75fr 1.25fr;
+    gap: 12px;
+    align-items: start;
+}
+
+.crm-intelligence-metrics,
+.crm-lead-score-grid,
+.documents-director-metrics,
+.ops-intelligence-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.crm-intelligence-metrics > div,
+.crm-lead-score-grid > div,
+.documents-director-metrics > div,
+.ops-intelligence-metrics > div {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid rgba(219, 228, 241, 0.95);
+    border-radius: 12px;
+    background: #f8fbff;
+}
+
+.crm-intelligence-metrics span,
+.crm-lead-score-grid span,
+.documents-director-metrics span,
+.ops-intelligence-metrics span {
+    display: block;
+    overflow: hidden;
+    color: #657793;
+    font-size: 10px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.crm-intelligence-metrics strong,
+.crm-lead-score-grid strong,
+.documents-director-metrics strong,
+.ops-intelligence-metrics strong {
+    display: block;
+    margin-top: 4px;
+    color: #10233f;
+    font-size: 18px;
+    line-height: 1.1;
+    overflow-wrap: break-word;
+}
+
+.crm-routing-rules,
+.crm-routing-list,
+.documents-checklist,
+.documents-reception-list,
+.ops-intelligence-list {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+}
+
+.crm-routing-settings {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(185, 203, 229, 0.95);
+    border-radius: 12px;
+    background: #fff;
+}
+
+.crm-routing-settings label {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+
+.crm-routing-settings label span {
+    overflow: hidden;
+    color: #657793;
+    font-size: 10px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.crm-routing-settings .auth-input {
+    min-height: 38px;
+    font-size: 12px;
+}
+
+.crm-routing-settings__actions {
+    display: flex;
+    grid-column: 1 / -1;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.crm-routing-rule,
+.crm-routing-item,
+.documents-checklist-item,
+.documents-reception-item,
+.ops-intelligence-item {
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(219, 228, 241, 0.95);
+    border-radius: 12px;
+    background: #f8fbff;
+}
+
+.crm-routing-rule strong,
+.crm-routing-rule span,
+.crm-routing-item strong,
+.crm-routing-item span,
+.documents-checklist-item strong,
+.documents-checklist-item small,
+.documents-checklist-item em,
+.documents-reception-item strong,
+.documents-reception-item span {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.crm-routing-rule strong,
+.crm-routing-item strong,
+.documents-checklist-item strong,
+.documents-reception-item strong {
+    color: #10233f;
+    font-size: 13px;
+    font-weight: 850;
+}
+
+.crm-routing-rule span,
+.crm-routing-item span,
+.documents-checklist-item small,
+.documents-checklist-item em,
+.documents-reception-item span,
+.crm-routing-note,
+.ops-intelligence-item span,
+.ops-intelligence-item small,
+.ops-intelligence-item em {
+    color: #61718a;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.ops-intelligence-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.ops-intelligence-item strong,
+.ops-intelligence-item span,
+.ops-intelligence-item small,
+.ops-intelligence-item em {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ops-intelligence-item strong {
+    color: #10233f;
+    font-size: 13px;
+    font-weight: 850;
+    white-space: nowrap;
+}
+
+.ops-intelligence-item span,
+.ops-intelligence-item small,
+.ops-intelligence-item em {
+    margin-top: 3px;
+}
+
+.ops-intelligence-item em {
+    font-style: normal;
+    color: #35557d;
+}
+
+.order-execution-metrics {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    margin-top: 12px;
+}
+
+.order-stage-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.order-stage-pill {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+    padding: 9px 11px;
+    border: 1px solid rgba(219, 228, 241, 0.95);
+    border-radius: 12px;
+    background: #f8fbff;
+}
+
+.order-stage-pill span,
+.order-stage-pill strong {
+    overflow: hidden;
+    color: #657793;
+    font-size: 11px;
+    font-weight: 850;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.order-stage-pill strong {
+    color: #10233f;
+    font-size: 16px;
+    text-align: right;
+}
+
+.order-progress-line {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    height: 7px;
+    margin: 8px 0 6px;
+    border-radius: 999px;
+    background: #e8eef7;
+}
+
+.order-progress-line i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #1d6ec9, #38a3ff);
+}
+
+.order-execution-side {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.telephony-speech-controls {
+    display: flex;
+    grid-column: 1 / -1;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid rgba(219, 228, 241, 0.95);
+    border-radius: 12px;
+    background: #f8fbff;
+}
+
+.telephony-speech-controls span {
+    min-width: 0;
+    overflow: hidden;
+    color: #61718a;
+    font-size: 12px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.telephony-speech-controls span.is-active {
+    color: #1455a3;
+}
+
+.telephony-panel .finance-form-grid {
+    margin-top: 14px;
+}
+
+.telephony-upload-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.9fr);
+    gap: 16px;
+    align-items: center;
+    margin: 14px 0 16px;
+    padding: 16px;
+    border: 1px solid rgba(128, 166, 225, 0.78);
+    border-radius: 16px;
+    background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.telephony-upload-panel--attention {
+    border-color: rgba(220, 38, 38, 0.55);
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.08);
+}
+
+.telephony-upload-title {
+    color: #10233f;
+    font-size: 16px;
+    font-weight: 880;
+    line-height: 1.25;
+}
+
+.telephony-upload-text,
+.telephony-upload-formats,
+.telephony-upload-actions span {
+    margin-top: 5px;
+    color: #61718a;
+    font-size: 12px;
+    font-weight: 750;
+    line-height: 1.35;
+}
+
+.telephony-upload-formats {
+    color: #35557d;
+}
+
+.telephony-upload-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.telephony-upload-actions input[type="file"] {
+    display: none;
+}
+
+.telephony-upload-actions span {
+    flex-basis: 100%;
+    margin-top: 2px;
+    overflow: hidden;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.telephony-upload-actions span.is-ready {
+    color: #1455a3;
+}
+
+.telephony-recording-import {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(220px, 1fr) minmax(0, 1.2fr);
+    gap: 10px;
+    align-items: center;
+    min-width: 0;
+    padding: 10px;
+    border: 1px dashed rgba(128, 166, 225, 0.7);
+    border-radius: 12px;
+    background: #f8fbff;
+}
+
+.telephony-recording-import span {
+    min-width: 0;
+    overflow: hidden;
+    color: #61718a;
+    font-size: 12px;
+    font-weight: 750;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+}
+
+.telephony-import-result-card {
+    margin-top: 0;
+}
+
+#operationsView .client360-item .view-actions {
+    max-width: 360px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+#operationsView .client360-item .view-actions .btn-secondary {
+    min-height: 30px;
+    padding: 6px 9px;
+    font-size: 11px;
+}
+
+#operationsView .operations-header {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+#operationsView .operations-tabs {
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    margin-bottom: 18px;
+    padding: 0 4px;
+    border-bottom: 1px solid #dfe5ec;
+    scrollbar-width: thin;
+}
+
+#operationsView .operations-tab {
+    position: relative;
+    min-width: max-content;
+    min-height: 46px;
+    padding: 0 18px;
+    border: 0;
+    background: transparent;
+    color: #5d6b7e;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+#operationsView .operations-tab::after {
+    position: absolute;
+    right: 14px;
+    bottom: -1px;
+    left: 14px;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: transparent;
+    content: "";
+}
+
+#operationsView .operations-tab:hover {
+    color: #17365f;
+    background: #f6f8fb;
+}
+
+#operationsView .operations-tab.is-active {
+    color: #1463c6;
+}
+
+#operationsView .operations-tab.is-active::after {
+    background: #1463c6;
+}
+
+#operationsView .operations-panel[hidden] {
+    display: none !important;
+}
+
+#operationsView .operations-panel.is-active {
+    display: grid;
+    gap: 16px;
+}
+
+#operationsView .operations-section,
+#integrationPlusMount .ops-plus-workspace {
+    min-width: 0;
+    padding: 20px;
+    border: 1px solid #dfe5ec;
+    border-radius: 8px;
+    background: #fff;
+}
+
+#operationsView .operations-section-head,
+#operationsView .operations-subsection-head,
+#integrationPlusMount .ops-plus-workspace-head,
+#integrationPlusMount .ops-plus-section-head {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+#operationsView .operations-section-head {
+    margin-bottom: 16px;
+}
+
+#operationsView .operations-subsection-head {
+    margin: 22px 0 10px;
+    padding-top: 18px;
+    border-top: 1px solid #e7ebf0;
+}
+
+#operationsView .operations-section-head > div:first-child,
+#operationsView .operations-subsection-head > div:first-child,
+#integrationPlusMount .ops-plus-workspace-head > div:first-child,
+#integrationPlusMount .ops-plus-section-head > div:first-child {
+    min-width: 0;
+}
+
+#operationsView .operations-section .section-title,
+#integrationPlusMount .ops-plus-workspace .section-title {
+    font-size: 18px;
+    line-height: 1.3;
+}
+
+#operationsView .operations-two-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+}
+
+#operationsView .operations-list {
+    gap: 0;
+    border-top: 1px solid #e7ebf0;
+}
+
+#operationsView .operations-list > .client360-item,
+#integrationPlusMount .ops-plus-attention-panel .client360-item {
+    min-height: 58px;
+    padding: 12px 4px;
+    border: 0;
+    border-bottom: 1px solid #edf0f4;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+#operationsView .operations-list > .client360-item:last-child,
+#integrationPlusMount .ops-plus-attention-panel .client360-item:last-child {
+    border-bottom: 0;
+}
+
+#operationsView .operations-upload-zone {
+    margin: 0;
+    border: 1px dashed #aebdce;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+#operationsView .operations-section .ops-intelligence-card {
+    margin: 18px 0 0;
+    padding: 18px 0 0;
+    border: 0;
+    border-top: 1px solid #e7ebf0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+#operationsView .operations-section .ops-intelligence-metrics {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+}
+
+#operationsView .operations-section .ops-intelligence-metrics > div {
+    min-height: 66px;
+    border-radius: 8px;
+}
+
+#operationsView .operations-form-details {
+    margin-top: 18px;
+    border-top: 1px solid #e7ebf0;
+}
+
+#operationsView .operations-form-details > summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+    padding: 14px 0;
+    color: #17365f;
+    cursor: pointer;
+    list-style: none;
+}
+
+#operationsView .operations-form-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+#operationsView .operations-form-details > summary span {
+    font-size: 14px;
+    font-weight: 800;
+}
+
+#operationsView .operations-form-details > summary small {
+    color: #69778a;
+    font-size: 12px;
+}
+
+#operationsView .operations-form-body {
+    padding: 4px 0 2px;
+}
+
+#operationsView .operations-form-body textarea.auth-input {
+    min-height: 84px;
+    margin: 0;
+}
+
+#operationsView .operations-form-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 12px;
+}
+
+#operationsView #operationsCockpitMount {
+    display: block !important;
+    margin: 0 !important;
+}
+
+#operationsView .operations-exchange-summary {
+    margin: 0;
+}
+
+#integrationPlusMount .ops-plus-control-head {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+#integrationPlusMount .ops-plus-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    margin: 16px 0 20px;
+    border: 1px solid #e1e6ed;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+#integrationPlusMount .ops-plus-summary-item {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    padding: 14px 16px;
+    border-right: 1px solid #e1e6ed;
+}
+
+#integrationPlusMount .ops-plus-summary-item:last-child {
+    border-right: 0;
+}
+
+#integrationPlusMount .ops-plus-summary-item span {
+    color: #677589;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+#integrationPlusMount .ops-plus-summary-item strong {
+    overflow: hidden;
+    color: #132a46;
+    font-size: 22px;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#integrationPlusMount .ops-plus-main-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 32%);
+    gap: 24px;
+    align-items: start;
+}
+
+#integrationPlusMount .ops-plus-main-column {
+    min-width: 0;
+}
+
+#integrationPlusMount .ops-plus-attention-panel {
+    min-width: 0;
+    padding-left: 20px;
+    border-left: 1px solid #e1e6ed;
+}
+
+#integrationPlusMount .ops-plus-table-shell {
+    overflow-x: auto;
+    margin-top: 12px;
+    border: 1px solid #e1e6ed;
+    border-radius: 8px;
+}
+
+#integrationPlusMount .ops-plus-table {
+    width: 100%;
+    min-width: 650px;
+    border-collapse: collapse;
+    background: #fff;
+}
+
+#integrationPlusMount .ops-plus-table th,
+#integrationPlusMount .ops-plus-table td {
+    padding: 11px 12px;
+    border-bottom: 1px solid #edf0f4;
+    color: #24364d;
+    font-size: 13px;
+    text-align: left;
+    vertical-align: middle;
+}
+
+#integrationPlusMount .ops-plus-table th {
+    background: #f7f9fc;
+    color: #69778a;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+#integrationPlusMount .ops-plus-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+#integrationPlusMount .ops-plus-table td:last-child {
+    width: 1%;
+    text-align: right;
+    white-space: nowrap;
+}
+
+#integrationPlusMount .ops-plus-empty-cell {
+    padding: 24px !important;
+    color: #69778a !important;
+    text-align: center !important;
+}
+
+#integrationPlusMount .ops-plus-mapping-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    min-width: 260px;
+}
+
+#integrationPlusMount .ops-plus-mapping-actions .auth-input {
+    width: 240px;
+    min-height: 38px;
+    margin: 0;
+    font-size: 12px;
+}
+
+#integrationPlusMount .ops-plus-mapping-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+#integrationPlusMount .ops-plus-row-side {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 160px;
+}
+
+#integrationPlusMount .ops-plus-row-side .btn-secondary {
+    min-height: 30px;
+    padding: 6px 9px;
+    font-size: 11px;
+}
+
+#integrationPlusMount .ops-plus-row-side strong {
+    color: #10233f;
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1;
+}
+
+#integrationPlusMount .ops-plus-attention-row .metric-value {
+    min-width: 44px;
+    text-align: right;
+}
+
+#integrationPlusMount .ops-plus-advanced {
+    margin-top: 16px;
+    border: 1px solid #e1e6ed;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+#integrationPlusMount .ops-plus-advanced summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    padding: 13px 14px;
+    color: #10233f;
+    cursor: pointer;
+    list-style: none;
+}
+
+#integrationPlusMount .ops-plus-advanced summary::-webkit-details-marker {
+    display: none;
+}
+
+#integrationPlusMount .ops-plus-advanced summary span {
+    font-size: 14px;
+    font-weight: 850;
+}
+
+#integrationPlusMount .ops-plus-advanced summary small {
+    overflow: hidden;
+    color: #61718a;
+    font-size: 12px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#integrationPlusMount .ops-plus-advanced .finance-form-grid {
+    margin: 0;
+    padding: 0 14px 14px;
+}
+
+#integrationPlusMount .ops-plus-settings-form {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 2px 14px 14px;
+}
+
+#integrationPlusMount .ops-plus-settings-form label {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    color: #56657a;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+#integrationPlusMount .ops-plus-settings-form .auth-input {
+    width: 100%;
+    margin: 0;
+}
+
+#integrationPlusMount .ops-plus-settings-actions {
+    display: flex;
+    grid-column: 1 / -1;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+#integrationPlusMount .ops-plus-advanced .system-ops-grid {
+    margin: 0;
+    padding: 0 14px 14px;
+}
+
+.crm-routing-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.crm-routing-item__actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.crm-routing-note {
+    margin-top: 10px;
+}
+
+.documents-checklist-item {
+    display: grid;
+    grid-template-columns: 104px minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+}
+
+.documents-checklist-item em {
+    font-style: normal;
+}
+
+.documents-reception-item {
+    width: 100%;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.documents-reception-item:hover {
+    border-color: rgba(37, 99, 235, 0.42);
+    background: #f4f8ff;
+}
+
 @media (max-width: 1280px) {
     #prospectingView .prospecting-inline-grid,
     #prospectingView .prospecting-bulkbar__controls {
@@ -11626,8 +12794,37 @@ body.workspace-config-open {
     }
 
     #prospectingView .prospecting-control-layout,
-    #prospectingView .prospecting-dept-strip {
+    #prospectingView .prospecting-dept-strip,
+    #prospectingView .prospecting-knowledge-grid,
+    .crm-intelligence-grid,
+    .documents-director-grid,
+    .order-execution-metrics,
+    #integrationPlusMount .ops-plus-summary-grid,
+    #integrationPlusMount .ops-plus-compact-metrics {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    #operationsView .operations-two-columns,
+    #integrationPlusMount .ops-plus-main-grid {
+        grid-template-columns: 1fr;
+    }
+
+    #integrationPlusMount .ops-plus-attention-panel {
+        padding: 18px 0 0;
+        border-top: 1px solid #e1e6ed;
+        border-left: 0;
+    }
+
+    #operationsView .operations-section .ops-intelligence-metrics {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    #integrationPlusMount .ops-plus-summary-item:nth-child(2) {
+        border-right: 0;
+    }
+
+    #integrationPlusMount .ops-plus-summary-item:nth-child(-n+2) {
+        border-bottom: 1px solid #e1e6ed;
     }
 
     #prospectingView .prospecting-activity-grid {
@@ -11652,8 +12849,64 @@ body.workspace-config-open {
     #prospectingView .prospecting-control-layout,
     #prospectingView .prospecting-dept-strip,
     #prospectingView .prospecting-quality-grid,
-    #prospectingView .prospecting-loss-grid {
+    #prospectingView .prospecting-loss-grid,
+    #prospectingView .prospecting-knowledge-grid,
+    #prospectingView .prospecting-dossier-grid,
+    .crm-intelligence-grid,
+    .documents-director-grid,
+    .documents-checklist-item,
+    .crm-routing-settings,
+    .order-execution-metrics,
+    .order-stage-strip,
+    .telephony-upload-panel,
+    .telephony-recording-import {
         grid-template-columns: 1fr;
+    }
+
+    #operationsView .operations-header,
+    #operationsView .operations-section-head,
+    #operationsView .operations-subsection-head,
+    #integrationPlusMount .ops-plus-workspace-head,
+    #integrationPlusMount .ops-plus-section-head {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    #operationsView .operations-section,
+    #integrationPlusMount .ops-plus-workspace {
+        padding: 14px;
+    }
+
+    #operationsView .operations-form-actions,
+    #integrationPlusMount .ops-plus-settings-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #integrationPlusMount .ops-plus-settings-form {
+        grid-template-columns: 1fr;
+    }
+
+    #operationsView .operations-section .ops-intelligence-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    #prospectingView .prospecting-protocol-row,
+    .crm-routing-item,
+    .ops-intelligence-item {
+        grid-template-columns: 1fr;
+    }
+
+    .order-execution-side {
+        justify-content: flex-start;
+    }
+
+    .telephony-upload-actions {
+        justify-content: flex-start;
+    }
+
+    .telephony-upload-actions span {
+        text-align: left;
     }
 
     #prospectingView .prospecting-activity-grid {
@@ -11661,6 +12914,39 @@ body.workspace-config-open {
     }
 
     #prospectingView .prospecting-badge-stack {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 720px) {
+    #integrationPlusMount .ops-plus-control-head,
+    #integrationPlusMount .ops-plus-mapping-row {
+        grid-template-columns: 1fr;
+    }
+
+    #integrationPlusMount .ops-plus-control-head {
+        display: grid;
+    }
+
+    #integrationPlusMount .ops-plus-summary-grid,
+    #integrationPlusMount .ops-plus-compact-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    #integrationPlusMount .ops-plus-summary-item {
+        border-right: 0;
+        border-bottom: 1px solid #e1e6ed;
+    }
+
+    #integrationPlusMount .ops-plus-summary-item:last-child {
+        border-bottom: 0;
+    }
+
+    #integrationPlusMount .ops-plus-mapping-actions,
+    #integrationPlusMount .ops-plus-mapping-actions .auth-input,
+    #integrationPlusMount .ops-plus-row-side {
+        width: 100%;
+        min-width: 0;
         justify-content: flex-start;
     }
 }
@@ -13546,6 +14832,203 @@ body.workspace-config-open {
     }
 }
 
+/* --- 45. Cross-project structure and text-fit audit -------------------- */
+.main-content .crm-flow-page .crm-workspace__nav,
+.main-content .view-page.crm-flow-page .crm-workspace__nav {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+    overflow: visible !important;
+    scrollbar-gutter: auto !important;
+}
+
+.main-content .crm-flow-page .crm-workspace__tab,
+.main-content .view-page.crm-flow-page .crm-workspace__tab {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    min-height: 44px !important;
+    height: auto !important;
+    padding: 8px 12px !important;
+}
+
+.main-content .crm-flow-page .crm-workspace__tab-title,
+.main-content .view-page.crm-flow-page .crm-workspace__tab-title {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    overflow-wrap: anywhere !important;
+    line-height: 1.2 !important;
+    letter-spacing: 0 !important;
+}
+
+.main-content .crm-flow-page .crm-workspace--many-tabs > .crm-workspace__nav,
+.main-content .view-page.crm-flow-page .crm-workspace--many-tabs > .crm-workspace__nav {
+    grid-template-columns: minmax(220px, 0.7fr) minmax(280px, 1.3fr) !important;
+    align-items: center !important;
+    gap: 14px !important;
+    padding: 12px 14px !important;
+}
+
+.crm-workspace__nav-summary {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.crm-workspace__nav-summary > span {
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
+.crm-workspace__current {
+    min-width: 0;
+    color: #14233a;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+
+.crm-workspace__select {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 42px !important;
+    margin: 0 !important;
+    background-color: #fff !important;
+    color: #172234 !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+}
+
+.crm-flow-page .surface-card .surface-card {
+    border-right: 0 !important;
+    border-bottom: 0 !important;
+    border-left: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+.crm-flow-page .surface-card .surface-card:first-child {
+    border-top-color: transparent !important;
+}
+
+.crm-routing-rule strong,
+.crm-routing-rule span,
+.crm-routing-item strong,
+.crm-routing-item span {
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+}
+
+.email-account-card,
+.email-account-select,
+.email-account-card-main,
+.email-account-name,
+.email-account-meta {
+    min-width: 0 !important;
+    max-width: 100% !important;
+}
+
+.email-account-name,
+.email-account-meta {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    overflow-wrap: anywhere !important;
+}
+
+.production-queue-card,
+.production-queue-card > *,
+.production-queue-title,
+.production-queue-meta {
+    min-width: 0 !important;
+    max-width: 100% !important;
+}
+
+.production-queue-title,
+.production-queue-meta {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    overflow-wrap: anywhere !important;
+}
+
+.telephony-audio {
+    display: block;
+    width: min(100%, 520px);
+    height: 38px;
+    margin-top: 10px;
+}
+
+.telephony-analysis-details {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(203, 213, 225, 0.72);
+}
+
+.telephony-analysis-details summary {
+    width: fit-content;
+    color: #174ea6;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.telephony-analysis-details pre {
+    max-height: 360px;
+    margin: 10px 0 0;
+    padding: 12px;
+    overflow: auto;
+    border: 1px solid rgba(203, 213, 225, 0.78);
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #26364d;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.main-content #meetingsView .calendar-board {
+    overflow-x: visible !important;
+}
+
+.main-content #meetingsView .calendar-month-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+    min-width: 0 !important;
+}
+
+.main-content #meetingsView .calendar-week-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+    min-width: 0 !important;
+}
+
+@media (max-width: 900px) {
+    .main-content .crm-flow-page .crm-workspace--many-tabs > .crm-workspace__nav,
+    .main-content .view-page.crm-flow-page .crm-workspace--many-tabs > .crm-workspace__nav {
+        grid-template-columns: minmax(0, 1fr) !important;
+        gap: 8px !important;
+    }
+
+    .main-content #meetingsView .calendar-board {
+        overflow-x: auto !important;
+    }
+
+    .main-content #meetingsView .calendar-month-grid,
+    .main-content #meetingsView .calendar-week-grid {
+        min-width: 840px !important;
+    }
+}
+
 .omni-search-group {
     position: relative !important;
     top: auto !important;
@@ -14317,5 +15800,112 @@ body.workspace-config-open {
         width: calc(100vw - 20px) !important;
         max-width: calc(100vw - 20px) !important;
         max-height: calc(100vh - 20px) !important;
+    }
+}
+
+/* Contract tabs are a section picker, not a horizontally clipped toolbar. */
+.main-content #contract360View .contract360-tablist {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
+    gap: 7px !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    scrollbar-gutter: auto !important;
+}
+
+.main-content #contract360View .contract360-tablist .krd-tab {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    min-height: 42px !important;
+    padding: 8px 10px !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    line-height: 1.2 !important;
+}
+
+@media (max-width: 720px) {
+    .main-content #contract360View .contract360-tablist {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+#prospectingView .prospecting-quality-grid span,
+#prospectingView .prospecting-loss-grid span {
+    min-height: 24px;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    line-height: 1.2 !important;
+}
+
+.main-content #documentsView .documents-checklist-item em,
+.main-content #documentsView .documents-checklist-item strong,
+.main-content #documentsView .documents-checklist-item small {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    overflow-wrap: anywhere !important;
+}
+
+.main-content #tasksView .task-table {
+    min-width: 934px;
+}
+
+@media (min-width: 721px) and (max-width: 1000px) {
+    #prospectingView .crm-summary-strip,
+    .main-content #documentsView .documents-ops-counters {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    #prospectingView .crm-summary-card {
+        min-height: 84px;
+    }
+
+    .main-content #leadsView .crm-intelligence-grid,
+    .main-content #leadsView .crm-routing-settings {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .main-content #operationsView .operations-section-head,
+    .main-content #operationsView .operations-header {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .main-content #operationsView .operations-section-head .view-actions,
+    .main-content #operationsView .operations-header .view-actions {
+        justify-content: flex-start !important;
+    }
+
+    .main-content #operationsView .operations-section-head > .btn-secondary,
+    .main-content #operationsView .operations-section-head > .btn-primary {
+        justify-self: start;
+        width: auto;
+        max-width: 100%;
+    }
+
+    .main-content #operationsView .operations-tabs {
+        display: grid !important;
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        overflow: visible !important;
+    }
+
+    .main-content #operationsView .operations-tab {
+        width: 100%;
+        min-width: 0;
+        white-space: normal;
+    }
+
+    .main-content #leadsView .crm-intelligence-metrics span,
+    .main-content #documentsView .documents-director-metrics span {
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        line-height: 1.2;
     }
 }

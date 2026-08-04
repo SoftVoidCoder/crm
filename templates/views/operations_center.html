@@ -1,198 +1,293 @@
 <div id="operationsView" class="view-page view-page--compact" style="display:none;">
-    <div class="view-header">
+    <div class="view-header operations-header">
         <div class="view-heading">
-            <span class="view-eyebrow">Операции</span>
-<h1 class="view-title">Операционный центр</h1>
-            <p class="view-subtitle">Единый экран для 1С-мониторинга, сверки, банковской выписки, телефонии и блокировок редактирования.</p>
+            <span class="view-eyebrow">Контроль процессов</span>
+            <h1 class="view-title">Операционный центр</h1>
+            <p class="view-subtitle">Звонки, обмен с 1С, банк и состояние системы в одном рабочем разделе.</p>
+        </div>
+        <div class="view-actions">
+            <button class="btn-secondary" onclick="reloadOperationsCenter()">Обновить</button>
         </div>
     </div>
-    <div class="ops-overview-card ops-overview-card--compact">
-        <div>
-            <div class="ops-overview-title">Живой операционный мониторинг</div>
-            <div class="ops-overview-text">Повседневный пульт: где завис обмен, что не сведено с банком, какие звонки пропущены и какие записи сейчас заблокированы.</div>
-        </div>
-    </div>
-    <div class="workbench-strip">
-        <div class="workbench-card">
-            <div class="workbench-card-title">Первый экран</div>
-            <div class="workbench-card-text">Сначала мониторинг 1С и сверка. Именно там чаще всего лежат реальные операционные блокеры.</div>
-        </div>
-        <div class="workbench-card">
-            <div class="workbench-card-title">Порядок</div>
-      <div class="workbench-card-text">Сначала снимай зависшие и ошибочные записи, потом разбирай банк и телефонию. Так экран не превращается в шумную панель.</div>
-        </div>
-    </div>
-    <div id="operationsRoleWorkbenchMount"></div>
-    <div id="operationsCockpitMount" class="erp-cockpit-grid" style="margin-bottom:20px;"></div>
 
-    <div class="client360-grid secondary-zone">
-        <section class="surface-card surface-card--padded">
-            <div class="section-header">
+    <nav class="operations-tabs" aria-label="Разделы операционного центра">
+        <button class="operations-tab is-active" data-operations-tab="calls" onclick="setOperationsTab('calls')">Звонки и ИИ</button>
+        <button class="operations-tab" data-operations-tab="exchange" onclick="setOperationsTab('exchange')">Обмен с 1С</button>
+        <button class="operations-tab" data-operations-tab="bank" onclick="setOperationsTab('bank')">Банк</button>
+        <button class="operations-tab" data-operations-tab="reliability" onclick="setOperationsTab('reliability')">Надёжность</button>
+        <button class="operations-tab" data-operations-tab="reports" onclick="setOperationsTab('reports')">Отчёты</button>
+    </nav>
+
+    <div class="operations-panel is-active" data-operations-panel="calls">
+        <section class="operations-section telephony-panel">
+            <div class="operations-section-head">
                 <div>
-        <h3 class="section-title">1С мониторинг и восстановление</h3>
-        <p class="section-subtitle">Очередь, ошибки, конфликты, зависшая обработка и последние проблемы обмена.</p>
+                    <h2 class="section-title">Загрузка и анализ звонков</h2>
+                    <p class="section-subtitle">Загрузите записи из Bitrix. Система расшифрует разговор, определит роли, покажет ошибки менеджера и следующий шаг.</p>
                 </div>
-                <div class="view-actions">
-                    <button class="btn-secondary" onclick="processExecutiveIntegrationQueue()">Обработать очередь</button>
-                    <button class="btn-secondary" onclick="runOperationsReconciliation()">Сверить</button>
-        <button class="btn-secondary" onclick="recoverExecutiveIntegration(0)">Снять зависшие</button>
-        <button class="btn-secondary" onclick="recoverExecutiveIntegration(1)">Повторить ошибочные</button>
-        <button class="btn-secondary" onclick="exportOperationsSnapshot('integration')">Экспорт данных</button>
-                </div>
+                <button class="btn-secondary" onclick="prepareTelephonyDemoCall()">Показать пример</button>
             </div>
-            <div id="operationsIntegrationList" class="client360-list"></div>
-        </section>
-        <section class="surface-card surface-card--padded">
-            <div class="section-header">
+
+            <div class="telephony-upload-panel operations-upload-zone">
                 <div>
-        <h3 class="section-title">Сверка 1С</h3>
-                    <p class="section-subtitle">Автоматическая сверка расхождений по финансам, продажам, закупкам, складу, производству и ЭПЛ.</p>
+                    <div class="telephony-upload-title">Записи звонков</div>
+                    <div class="telephony-upload-text">Можно выбрать сразу несколько файлов.</div>
+                    <div class="telephony-upload-formats">MP3, WAV, M4A, OGG, WEBM, FLAC, AAC, AIFF</div>
                 </div>
-                <div class="view-actions">
-                    <button class="btn-secondary" onclick="reloadOperationsCenter()">Обновить</button>
-        <button class="btn-secondary" onclick="exportOperationsSnapshot('reconciliation')">Экспорт данных</button>
+                <div class="telephony-upload-actions">
+                    <input id="telephonyRecordingFiles" type="file" multiple accept=".mp3,.wav,.m4a,.ogg,.webm,.flac,.aac,.aiff,.aif,audio/*" onchange="updateTelephonyFileSelection()">
+                    <button type="button" class="btn-secondary" onclick="openTelephonyFilePicker()">Выбрать файлы</button>
+                    <button type="button" class="btn-primary" onclick="importTelephonyRecordings()">Распознать и проверить</button>
+                    <span id="telephonyFileSelectionStatus">Файлы не выбраны</span>
                 </div>
             </div>
-            <div id="operationsReconciliationList" class="client360-list"></div>
-        </section>
-        <section class="surface-card surface-card--padded">
-            <h3 class="section-title">Блокировки редактирования</h3>
-            <div id="operationsLocksList" class="client360-list"></div>
-        </section>
-        <section class="surface-card surface-card--padded">
-            <div class="section-header">
+
+            <div id="telephonyImportResult"></div>
+            <div id="operationsCallIntelligenceMount"></div>
+
+            <div class="operations-subsection-head">
                 <div>
-                    <h3 class="section-title">Банк и выписка</h3>
-                    <p class="section-subtitle">Счета, импорт строк выписки и ручная сводка с оплатами.</p>
+                    <h3 class="section-title">Последние звонки</h3>
+                    <p class="section-subtitle">Результат разговора, ответственный менеджер и дальнейшее действие.</p>
                 </div>
-                <div class="view-actions">
-                    <button class="btn-secondary" onclick="saveBankAccount()">Счёт</button>
-                    <button class="btn-primary" onclick="importBankStatementLines()">Импорт строк</button>
-        <button class="btn-secondary" onclick="exportOperationsSnapshot('bank')">Экспорт данных</button>
-                </div>
+                <button class="btn-secondary" onclick="exportOperationsSnapshot('telephony')">Скачать журнал</button>
             </div>
-            <div class="finance-form-grid" style="margin-bottom:16px;">
-                <input id="bankAccountName" class="auth-input" placeholder="Название счёта">
-                <input id="bankAccountBankName" class="auth-input" placeholder="Банк">
-                <input id="bankAccountNumber" class="auth-input" placeholder="Расчётный счёт">
-                <input id="bankAccountBik" class="auth-input" placeholder="БИК">
-                <textarea id="bankStatementImportPayload" class="auth-input" style="margin:0; min-height:110px; grid-column:1 / -1;" placeholder='[{"line_date":"13.04.2026","amount":150000,"direction":"incoming","counterparty":"ООО Клиент","purpose":"Оплата по счету","client_id":1}]'></textarea>
-            </div>
-            <div id="operationsBankList" class="client360-list"></div>
-        </section>
-        <section class="surface-card surface-card--padded">
-            <div class="section-header">
-                <div>
-                    <h3 class="section-title">Телефония</h3>
-                    <p class="section-subtitle">Линии связи, журнал звонков и пропущенные обращения клиентов.</p>
+            <div id="operationsTelephonyList" class="client360-list operations-list"></div>
+
+            <details class="operations-form-details">
+                <summary>
+                    <span>Добавить звонок вручную</span>
+                    <small>Для записи без аудиофайла или настройки линии</small>
+                </summary>
+                <div class="operations-form-body">
+                    <div class="finance-form-grid">
+                        <input id="telephonyLineName" class="auth-input" placeholder="Линия или отдел">
+                        <input id="telephonyProvider" class="auth-input" placeholder="Провайдер">
+                        <input id="telephonyManagerName" class="auth-input" placeholder="Менеджер">
+                        <input id="telephonyContactName" class="auth-input" placeholder="Контакт">
+                        <input id="telephonyPhone" class="auth-input" placeholder="Телефон">
+                        <select id="telephonyDirection" class="auth-input">
+                            <option value="inbound">Входящий звонок</option>
+                            <option value="outbound">Исходящий звонок</option>
+                        </select>
+                        <select id="telephonyCallStatus" class="auth-input">
+                            <option value="answered">Отвечен</option>
+                            <option value="missed">Пропущен</option>
+                            <option value="failed">Неуспешен</option>
+                        </select>
+                        <input id="telephonyDurationSec" class="auth-input" placeholder="Длительность, секунд">
+                        <input id="telephonyCallSummary" class="auth-input" placeholder="Краткий итог звонка">
+                        <input id="telephonyRecordingUrl" class="auth-input" placeholder="Ссылка на запись">
+                        <select id="telephonyProcessingStatus" class="auth-input">
+                            <option value="new">Новый</option>
+                            <option value="transcribed">Расшифрован</option>
+                            <option value="needs_review">Нужна проверка</option>
+                            <option value="processed">Обработан</option>
+                            <option value="follow_up">Повторный контакт</option>
+                            <option value="converted">Переведён дальше</option>
+                            <option value="lost">Потерян</option>
+                        </select>
+                        <select id="telephonyCallResult" class="auth-input">
+                            <option value="">Результат не указан</option>
+                            <option value="no_answer">Не дозвонились</option>
+                            <option value="interested">Есть интерес</option>
+                            <option value="not_interested">Не интересно</option>
+                            <option value="follow_up">Повторить контакт</option>
+                            <option value="meeting">Встреча</option>
+                            <option value="quote">Нужно КП</option>
+                            <option value="complaint">Жалоба или риск</option>
+                            <option value="wrong_contact">Не тот контакт</option>
+                            <option value="converted">Переведён в лид или сделку</option>
+                        </select>
+                        <input id="telephonyNextAction" class="auth-input" placeholder="Следующее действие">
+                        <textarea id="telephonyManagerComment" class="auth-input" placeholder="Комментарий менеджера"></textarea>
+                        <textarea id="telephonyTranscript" class="auth-input" placeholder="Расшифровка разговора"></textarea>
+                    </div>
+                    <div class="telephony-speech-controls">
+                        <button type="button" id="telephonySpeechStartBtn" class="btn-secondary" onclick="startTelephonySpeechRecognition()">Распознать речь с микрофона</button>
+                        <button type="button" id="telephonySpeechStopBtn" class="btn-secondary" onclick="stopTelephonySpeechRecognition()">Остановить</button>
+                        <span id="telephonySpeechStatus">Ожидает запуска</span>
+                    </div>
+                    <div class="operations-form-actions">
+                        <button class="btn-secondary" onclick="saveTelephonyAccount()">Сохранить линию</button>
+                        <button class="btn-primary" onclick="saveTelephonyCall()">Сохранить звонок</button>
+                    </div>
                 </div>
-                <div class="view-actions">
-                    <button class="btn-secondary" onclick="saveTelephonyAccount()">Линия</button>
-                    <button class="btn-primary" onclick="saveTelephonyCall()">Звонок</button>
-        <button class="btn-secondary" onclick="exportOperationsSnapshot('telephony')">Экспорт данных</button>
-                </div>
-            </div>
-            <div class="finance-form-grid" style="margin-bottom:16px;">
-                <input id="telephonyLineName" class="auth-input" placeholder="Линия / отдел">
-                <input id="telephonyProvider" class="auth-input" placeholder="Провайдер">
-                <input id="telephonyContactName" class="auth-input" placeholder="Контакт">
-                <input id="telephonyPhone" class="auth-input" placeholder="Телефон">
-                <select id="telephonyDirection" class="auth-input">
-                    <option value="inbound">Входящий</option>
-                    <option value="outbound">Исходящий</option>
-                </select>
-                <select id="telephonyCallStatus" class="auth-input">
-                    <option value="answered">Отвечен</option>
-                    <option value="missed">Пропущен</option>
-                    <option value="failed">Неуспешен</option>
-                </select>
-                <input id="telephonyDurationSec" class="auth-input" placeholder="Длительность, сек">
-                <input id="telephonyCallSummary" class="auth-input" placeholder="Краткий итог звонка">
-            </div>
-            <div id="operationsTelephonyList" class="client360-list"></div>
-        </section>
-        <section class="surface-card surface-card--padded">
-            <div class="section-header">
-                <div>
-        <h3 class="section-title">Аналитика и сохранённые отчёты</h3>
-                    <p class="section-subtitle">Сохраняй нужные аналитические срезы и запускай их без ручной сборки.</p>
-                </div>
-                <div class="view-actions">
-                    <button class="btn-primary" onclick="saveOperationsReport()">Сохранить отчёт</button>
-                </div>
-            </div>
-            <div class="finance-form-grid" style="margin-bottom:16px;">
-                <input id="operationsReportTitle" class="auth-input" placeholder="Название отчёта">
-                <select id="operationsReportType" class="auth-input">
-                    <option value="finance_analytics">Финансовая аналитика</option>
-          <option value="analytics_deep">Глубокая аналитика компании</option>
-                    <option value="dashboard_hub">Ролевые панели</option>
-                    <option value="analytics_drilldown">Проваливание в первичку</option>
-                    <option value="integration_monitoring">Мониторинг 1С</option>
-                    <option value="operations_monitoring">Операционный центр</option>
-          <option value="reliability_dashboard">Надёжность и восстановление</option>
-                </select>
-                <select id="operationsReportScope" class="auth-input">
-                    <option value="private">Личный отчёт</option>
-                    <option value="shared">Общий отчёт</option>
-                </select>
-                <select id="operationsReportRole" class="auth-input">
-                    <option value="">Для всех ролей</option>
-                    <option value="Директор">Директор</option>
-                    <option value="Бухгалтерия">Бухгалтерия</option>
-                    <option value="Менеджер">Менеджер</option>
-                    <option value="Склад и закупки">Склад и закупки</option>
-                    <option value="Производство и ОТК">Производство и ОТК</option>
-                </select>
-                <select id="operationsReportDashboardKind" class="auth-input">
-                    <option value="table">Табличный режим</option>
-                    <option value="cockpit">Операционный пульт</option>
-                    <option value="dashboard">Панель</option>
-                </select>
-                <input id="operationsReportDimension" class="auth-input" placeholder="Срез: клиент / продукт / склад">
-                <input id="operationsReportTags" class="auth-input" placeholder="Теги через запятую">
-            </div>
-            <div id="operationsReportsList" class="client360-list"></div>
-        </section>
-        <section class="surface-card surface-card--padded">
-            <div class="section-header">
-                <div>
-                    <h3 class="section-title">Надёжность и целостность</h3>
-        <p class="section-subtitle">Проверки модулей, проблемы целостности, зависшие сущности и кандидаты на восстановление.</p>
-                </div>
-                <div class="view-actions">
-                    <button class="btn-secondary" onclick="reloadOperationsCenter()">Обновить</button>
-        <button class="btn-secondary" onclick="exportOperationsSnapshot('reliability')">Экспорт данных</button>
-                </div>
-            </div>
-            <div id="operationsReliabilityList" class="client360-list"></div>
-        </section>
-        <section class="surface-card surface-card--padded">
-            <div class="section-header">
-                <div>
-        <h3 class="section-title">Работа базы и сценарии восстановления</h3>
-        <p class="section-subtitle">База, миграции, фоновые запуски, контрольная точка и журнал действий по восстановлению.</p>
-                </div>
-                <div class="view-actions">
-        <button class="btn-secondary" onclick="runSystemRecoveryAction('release_stale_locks')">Снять зависшие блокировки</button>
-        <button class="btn-secondary" onclick="runSystemRecoveryAction('recover_sync_queue')">Разблокировать синхронизацию</button>
-        <button class="btn-secondary" onclick="runSystemRecoveryAction('checkpoint')">Контрольная точка</button>
-                </div>
-            </div>
-            <div id="operationsRuntimeList" class="client360-list"></div>
-        </section>
-        <section class="surface-card surface-card--padded">
-            <div class="section-header">
-                <div>
-        <h3 class="section-title">Единый поток событий</h3>
-        <p class="section-subtitle">Общий поток событий из журнала аудита и изменений полей по доменам компании.</p>
-                </div>
-                <div class="view-actions">
-                    <button class="btn-secondary" onclick="reloadOperationsCenter()">Обновить</button>
-                </div>
-            </div>
-            <div id="operationsEventStreamList" class="client360-list"></div>
+            </details>
         </section>
     </div>
-    <div id="integrationPlusMount" style="margin-top:20px;"></div>
+
+    <div class="operations-panel" data-operations-panel="exchange" hidden>
+        <div id="operationsCockpitMount" class="erp-cockpit-grid"></div>
+
+        <div class="operations-two-columns">
+            <section class="operations-section">
+                <div class="operations-section-head">
+                    <div>
+                        <h2 class="section-title">Текущий обмен</h2>
+                        <p class="section-subtitle">Очередь, ошибки и зависшие записи.</p>
+                    </div>
+                    <div class="view-actions">
+                        <button class="btn-secondary" onclick="processExecutiveIntegrationQueue()">Обработать очередь</button>
+                        <button class="btn-secondary" onclick="recoverExecutiveIntegration(1)">Повторить ошибки</button>
+                    </div>
+                </div>
+                <div id="operationsIntegrationList" class="client360-list operations-list"></div>
+            </section>
+
+            <section class="operations-section">
+                <div class="operations-section-head">
+                    <div>
+                        <h2 class="section-title">Сверка данных</h2>
+                        <p class="section-subtitle">Проверка расхождений между CRM и 1С.</p>
+                    </div>
+                    <div class="view-actions">
+                        <button class="btn-primary" onclick="runOperationsReconciliation()">Запустить сверку</button>
+                        <button class="btn-secondary" onclick="exportOperationsSnapshot('reconciliation')">Скачать результат</button>
+                    </div>
+                </div>
+                <div id="operationsReconciliationList" class="client360-list operations-list"></div>
+            </section>
+        </div>
+
+        <div id="integrationPlusMount"></div>
+    </div>
+
+    <div class="operations-panel" data-operations-panel="bank" hidden>
+        <section class="operations-section">
+            <div class="operations-section-head">
+                <div>
+                    <h2 class="section-title">Банковские операции</h2>
+                    <p class="section-subtitle">Счета и строки выписки, которые ещё не сопоставлены с оплатами.</p>
+                </div>
+                <button class="btn-secondary" onclick="exportOperationsSnapshot('bank')">Скачать данные</button>
+            </div>
+            <div id="operationsBankList" class="client360-list operations-list"></div>
+
+            <details class="operations-form-details">
+                <summary>
+                    <span>Добавить счёт или импортировать выписку</span>
+                    <small>Ручной ввод банковских данных</small>
+                </summary>
+                <div class="operations-form-body">
+                    <div class="finance-form-grid">
+                        <input id="bankAccountName" class="auth-input" placeholder="Название счёта">
+                        <input id="bankAccountBankName" class="auth-input" placeholder="Банк">
+                        <input id="bankAccountNumber" class="auth-input" placeholder="Расчётный счёт">
+                        <input id="bankAccountBik" class="auth-input" placeholder="БИК">
+                        <textarea id="bankStatementImportPayload" class="auth-input" placeholder="Данные выписки"></textarea>
+                    </div>
+                    <div class="operations-form-actions">
+                        <button class="btn-secondary" onclick="saveBankAccount()">Сохранить счёт</button>
+                        <button class="btn-primary" onclick="importBankStatementLines()">Импортировать выписку</button>
+                    </div>
+                </div>
+            </details>
+        </section>
+    </div>
+
+    <div class="operations-panel" data-operations-panel="reliability" hidden>
+        <div class="operations-two-columns">
+            <section class="operations-section">
+                <div class="operations-section-head">
+                    <div>
+                        <h2 class="section-title">Состояние системы</h2>
+                        <p class="section-subtitle">Проверки модулей и проблемы целостности данных.</p>
+                    </div>
+                    <button class="btn-secondary" onclick="exportOperationsSnapshot('reliability')">Скачать проверку</button>
+                </div>
+                <div id="operationsReliabilityList" class="client360-list operations-list"></div>
+            </section>
+
+            <section class="operations-section">
+                <div class="operations-section-head">
+                    <div>
+                        <h2 class="section-title">Блокировки</h2>
+                        <p class="section-subtitle">Записи, которые сейчас редактируются или зависли.</p>
+                    </div>
+                    <button class="btn-secondary" onclick="runSystemRecoveryAction('release_stale_locks')">Снять зависшие</button>
+                </div>
+                <div id="operationsLocksList" class="client360-list operations-list"></div>
+            </section>
+        </div>
+
+        <section class="operations-section">
+            <div class="operations-section-head">
+                <div>
+                    <h2 class="section-title">Восстановление и резервные копии</h2>
+                    <p class="section-subtitle">Фоновые задания, состояние базы и безопасные действия восстановления.</p>
+                </div>
+                <div class="view-actions">
+                    <button class="btn-secondary" onclick="runSystemRecoveryAction('recover_sync_queue')">Разблокировать обмен</button>
+                    <button class="btn-secondary" onclick="runSystemRecoveryAction('checkpoint')">Создать контрольную точку</button>
+                </div>
+            </div>
+            <div id="operationsRuntimeList" class="client360-list operations-list"></div>
+        </section>
+    </div>
+
+    <div class="operations-panel" data-operations-panel="reports" hidden>
+        <section class="operations-section">
+            <div class="operations-section-head">
+                <div>
+                    <h2 class="section-title">Сохранённые отчёты</h2>
+                    <p class="section-subtitle">Готовые управленческие срезы для повторного запуска и выгрузки.</p>
+                </div>
+            </div>
+            <div id="operationsReportsList" class="client360-list operations-list"></div>
+
+            <details class="operations-form-details">
+                <summary>
+                    <span>Создать новый отчёт</span>
+                    <small>Название, вид и доступность отчёта</small>
+                </summary>
+                <div class="operations-form-body">
+                    <div class="finance-form-grid">
+                        <input id="operationsReportTitle" class="auth-input" placeholder="Название отчёта">
+                        <select id="operationsReportType" class="auth-input">
+                            <option value="finance_analytics">Финансовая аналитика</option>
+                            <option value="analytics_deep">Аналитика компании</option>
+                            <option value="dashboard_hub">Ролевые панели</option>
+                            <option value="analytics_drilldown">Детализация показателей</option>
+                            <option value="integration_monitoring">Мониторинг 1С</option>
+                            <option value="operations_monitoring">Операционный центр</option>
+                            <option value="reliability_dashboard">Надёжность системы</option>
+                        </select>
+                        <select id="operationsReportScope" class="auth-input">
+                            <option value="private">Личный отчёт</option>
+                            <option value="shared">Общий отчёт</option>
+                        </select>
+                        <select id="operationsReportRole" class="auth-input">
+                            <option value="">Для всех ролей</option>
+                            <option value="Директор">Директор</option>
+                            <option value="Бухгалтерия">Бухгалтерия</option>
+                            <option value="Менеджер">Менеджер</option>
+                            <option value="Склад и закупки">Склад и закупки</option>
+                            <option value="Производство и ОТК">Производство и ОТК</option>
+                        </select>
+                        <select id="operationsReportDashboardKind" class="auth-input">
+                            <option value="table">Таблица</option>
+                            <option value="cockpit">Краткая сводка</option>
+                            <option value="dashboard">Панель показателей</option>
+                        </select>
+                        <input id="operationsReportDimension" class="auth-input" placeholder="Срез: клиент, продукт или склад">
+                        <input id="operationsReportTags" class="auth-input" placeholder="Метки через запятую">
+                    </div>
+                    <div class="operations-form-actions">
+                        <button class="btn-primary" onclick="saveOperationsReport()">Сохранить отчёт</button>
+                    </div>
+                </div>
+            </details>
+        </section>
+
+        <section class="operations-section">
+            <div class="operations-section-head">
+                <div>
+                    <h2 class="section-title">Последние события</h2>
+                    <p class="section-subtitle">Кто и когда изменял данные в рабочих разделах.</p>
+                </div>
+            </div>
+            <div id="operationsEventStreamList" class="client360-list operations-list"></div>
+        </section>
+    </div>
 </div>

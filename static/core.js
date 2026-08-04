@@ -970,12 +970,12 @@ window.onload = async () => {
             if (typeof renderNotifications === 'function') renderNotifications();
             if (typeof initSignaturePad === 'function') initSignaturePad(); 
             checkOverdueTasksGlobal();
+            if (typeof initClaimsUI === 'function') initClaimsUI();
             const savedView = localStorage.getItem('korda_last_view');
             const landingView = savedView || (typeof getRoleLandingView === 'function' ? getRoleLandingView() : 'dashboard');
             if (typeof navigateTo === 'function') navigateTo(landingView);
             
             connectWebSocket();
-            initClaimsUI();
         }
     } else if (currentUser && currentUser.status === 'pending') {
         if (!path.includes('login.html') && !path.includes('register.html')) { window.location.href = '/static/login.html'; return; }

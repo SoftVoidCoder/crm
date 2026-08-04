@@ -1,11 +1,18 @@
 import json
+import base64
 import time
 from dataclasses import dataclass
 
 import httpx
 
 from app_logging import get_logger
-from settings import KORDA_AI_MODEL, KORDA_AI_TIMEOUT_SECONDS, KORDA_GEMINI_API_KEYS
+from settings import (
+    KORDA_AI_MODEL,
+    KORDA_AI_MODELS,
+    KORDA_AI_TIMEOUT_SECONDS,
+    KORDA_AUDIO_AI_MODELS,
+    KORDA_GEMINI_API_KEYS,
+)
 
 
 logger = get_logger("gemini_service")
@@ -32,6 +39,29 @@ def _gemini_keys() -> list[str]:
         if value and value not in keys:
             keys.append(value)
     return keys
+
+
+def _model_list(raw_value: str) -> list[str]:
+    raw = raw_value or KORDA_AI_MODEL or ""
+    normalized = raw.replace("\n", ",").replace(";", ",")
+    models = []
+    for item in normalized.split(","):
+        value = item.strip()
+        if value and value not in models:
+            models.append(value)
+    return models or [KORDA_AI_MODEL]
+
+
+def _text_models() -> list[str]:
+    return _model_list(KORDA_AI_MODELS)
+
+
+def _audio_models() -> list[str]:
+    return _model_list(KORDA_AUDIO_AI_MODELS)
+
+
+def _should_try_next_model(status_code: int) -> bool:
+    return status_code in {0, 500, 502, 503, 504}
 
 
 def _extract_text(payload: dict) -> str:
@@ -99,7 +129,6 @@ def ask_gemini(question: str, context: dict | None = None) -> dict:
 CRM-контекст JSON:
 {_safe_context(context)}
 """.strip()
-    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{KORDA_AI_MODEL}:generateContent"
     request_body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -111,39 +140,254 @@ CRM-контекст JSON:
     attempts: list[GeminiAttempt] = []
     timeout = httpx.Timeout(float(KORDA_AI_TIMEOUT_SECONDS), connect=5.0)
 
-    for index, api_key in enumerate(keys):
-        started = time.time()
+    for model in _text_models():
+        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        for index, api_key in enumerate(keys):
+            started = time.time()
+            try:
+                with httpx.Client(timeout=timeout) as client:
+                    response = client.post(
+                        endpoint,
+                        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+                        json=request_body,
+                    )
+                latency_ms = int((time.time() - started) * 1000)
+                if response.status_code == 200:
+                    payload = response.json()
+                    text = _extract_text(payload)
+                    if text:
+                        return {
+                            "answer": text,
+                            "model": model,
+                            "provider": "gemini",
+                            "key_index": index + 1,
+                            "attempts": [item.__dict__ for item in attempts],
+                        }
+                    attempts.append(GeminiAttempt(index + 1, response.status_code, f"{model}: empty_response", latency_ms))
+                    continue
+                error_text = response.text[:400]
+                attempts.append(GeminiAttempt(index + 1, response.status_code, f"{model}: {error_text}", latency_ms))
+                if _should_try_next_model(response.status_code):
+                    break
+                if response.status_code in {400, 401, 403}:
+                    logger.warning("Gemini key %s rejected with %s", index + 1, response.status_code)
+            except (httpx.TimeoutException, httpx.TransportError) as exc:
+                attempts.append(GeminiAttempt(index + 1, 0, f"{model}: {exc.__class__.__name__}", int((time.time() - started) * 1000)))
+                break
+            except Exception as exc:
+                attempts.append(GeminiAttempt(index + 1, 0, f"{model}: {exc.__class__.__name__}", int((time.time() - started) * 1000)))
+                break
+
+    raise GeminiUnavailableError(json.dumps([item.__dict__ for item in attempts], ensure_ascii=False))
+
+
+CALL_ANALYSIS_SCHEMA = {
+    "transcript": "полная расшифровка разговора на русском, по возможности с репликами",
+    "dialog": [
+        {
+            "speaker": "manager|customer|unknown",
+            "text": "реплика",
+            "confidence": 0.0,
+        }
+    ],
+    "summary": "короткий итог звонка",
+    "customer_need": "что нужно клиенту",
+    "manager_errors": [
+        {
+            "type": "не выявил потребность|не назначил следующий шаг|перебивал|не отработал возражение|не назвал срок|ошибка речи|другое",
+            "quote": "фрагмент разговора или пусто",
+            "severity": "low|medium|high",
+            "recommendation": "как исправить",
+        }
+    ],
+    "next_step": "что сделать дальше",
+    "deal_signal": "cold|neutral|warm|hot|risk",
+    "role_confidence": 0.0,
+    "transcription_confidence": 0.0,
+}
+
+
+def _extract_json_object(text: str) -> dict:
+    raw = (text or "").strip()
+    if not raw:
+        return {}
+    if raw.startswith("```"):
+        raw = raw.strip("`")
+        raw = raw.removeprefix("json").strip()
+    try:
+        return json.loads(raw)
+    except Exception:
+        pass
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start >= 0 and end > start:
         try:
-            with httpx.Client(timeout=timeout) as client:
-                response = client.post(
-                    endpoint,
-                    headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-                    json=request_body,
-                )
-            latency_ms = int((time.time() - started) * 1000)
-            if response.status_code == 200:
-                payload = response.json()
-                text = _extract_text(payload)
-                if text:
-                    return {
-                        "answer": text,
-                        "model": KORDA_AI_MODEL,
-                        "provider": "gemini",
-                        "key_index": index + 1,
-                        "attempts": [item.__dict__ for item in attempts],
-                    }
-                attempts.append(GeminiAttempt(index + 1, response.status_code, "empty_response", latency_ms))
+            return json.loads(raw[start:end + 1])
+        except Exception:
+            return {}
+    return {}
+
+
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_call_analysis(payload: dict, fallback_name: str = "") -> dict:
+    payload = payload if isinstance(payload, dict) else {}
+    dialog = payload.get("dialog") if isinstance(payload.get("dialog"), list) else []
+    normalized_dialog = []
+    for item in dialog[:120]:
+        if not isinstance(item, dict):
+            continue
+        speaker = str(item.get("speaker") or "unknown").strip().lower()
+        if speaker not in {"manager", "customer", "unknown"}:
+            speaker = "unknown"
+        normalized_dialog.append({
+            "speaker": speaker,
+            "text": str(item.get("text") or "").strip()[:2000],
+            "confidence": max(0.0, min(1.0, _safe_float(item.get("confidence")))),
+        })
+    errors = payload.get("manager_errors") if isinstance(payload.get("manager_errors"), list) else []
+    normalized_errors = []
+    for item in errors[:12]:
+        if not isinstance(item, dict):
+            continue
+        severity = str(item.get("severity") or "medium").strip().lower()
+        if severity not in {"low", "medium", "high"}:
+            severity = "medium"
+        normalized_errors.append({
+            "type": str(item.get("type") or "другое").strip()[:120],
+            "quote": str(item.get("quote") or "").strip()[:700],
+            "severity": severity,
+            "recommendation": str(item.get("recommendation") or "").strip()[:900],
+        })
+    signal = str(payload.get("deal_signal") or "neutral").strip().lower()
+    if signal not in {"cold", "neutral", "warm", "hot", "risk"}:
+        signal = "neutral"
+    transcript = str(payload.get("transcript") or "").strip()
+    if not transcript and normalized_dialog:
+        transcript = "\n".join(f"{item['speaker']}: {item['text']}" for item in normalized_dialog if item["text"])
+    return {
+        "transcript": transcript,
+        "dialog": normalized_dialog,
+        "summary": str(payload.get("summary") or f"Расшифровка звонка {fallback_name}".strip()).strip()[:1500],
+        "customer_need": str(payload.get("customer_need") or "").strip()[:1000],
+        "manager_errors": normalized_errors,
+        "next_step": str(payload.get("next_step") or "").strip()[:1000],
+        "deal_signal": signal,
+        "role_confidence": max(0.0, min(1.0, _safe_float(payload.get("role_confidence")))),
+        "transcription_confidence": max(0.0, min(1.0, _safe_float(payload.get("transcription_confidence")))),
+    }
+
+
+def format_call_analysis_summary(analysis: dict) -> str:
+    dialog_lines = []
+    role_label = {"manager": "Менеджер", "customer": "Клиент", "unknown": "Не определено"}
+    for item in analysis.get("dialog") or []:
+        text = str(item.get("text") or "").strip()
+        if text:
+            dialog_lines.append(f"{role_label.get(item.get('speaker'), 'Не определено')}: {text}")
+    errors = []
+    for item in analysis.get("manager_errors") or []:
+        line = f"- {item.get('type') or 'Ошибка'} ({item.get('severity') or 'medium'}): {item.get('recommendation') or 'Нужна ручная проверка'}"
+        quote = str(item.get("quote") or "").strip()
+        if quote:
+            line += f" | Фрагмент: {quote}"
+        errors.append(line)
+    parts = [
+        "ИИ-расшифровка звонка",
+        f"Итог: {analysis.get('summary') or 'Не определено'}",
+        f"Потребность клиента: {analysis.get('customer_need') or 'Не определена'}",
+        f"Сигнал сделки: {analysis.get('deal_signal') or 'neutral'}",
+        f"Следующий шаг: {analysis.get('next_step') or 'Нужно назначить вручную'}",
+        f"Уверенность ролей: {round(float(analysis.get('role_confidence') or 0) * 100)}%",
+        f"Уверенность распознавания: {round(float(analysis.get('transcription_confidence') or 0) * 100)}%",
+        "",
+        "Диалог:",
+        "\n".join(dialog_lines) or (analysis.get("transcript") or "Расшифровка не получена"),
+        "",
+        "Ошибки менеджера:",
+        "\n".join(errors) or "Критичных ошибок не найдено.",
+    ]
+    return "\n".join(parts).strip()
+
+
+def transcribe_call_audio(audio_bytes: bytes, mime_type: str, filename: str = "") -> dict:
+    keys = _gemini_keys()
+    if not keys:
+        raise GeminiUnavailableError("gemini_keys_not_configured")
+    if not audio_bytes:
+        raise GeminiUnavailableError("empty_audio")
+
+    prompt = f"""
+Ты анализируешь запись звонка отдела продаж Korda CRM. Верни только валидный JSON без markdown.
+
+Задачи:
+1. Распознай речь в текст на русском. Если язык другой, переведи смысл на русский.
+2. Раздели реплики по ролям: manager — продавец/менеджер, customer — покупатель/клиент, unknown — если роль неясна.
+3. Определи ошибки менеджера: не выявил потребность, не назначил следующий шаг, перебивал, не отработал возражение, не назвал срок, ошибка речи, другое.
+4. Дай краткий итог, потребность клиента, сигнал сделки и следующий шаг.
+5. Не выдумывай реплики. Если качество записи плохое, снизь confidence и прямо укажи это.
+
+Имя файла: {filename}
+
+JSON-схема:
+{json.dumps(CALL_ANALYSIS_SCHEMA, ensure_ascii=False)}
+""".strip()
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{KORDA_AI_MODEL}:generateContent"
+    request_body = {
+        "contents": [{
+            "role": "user",
+            "parts": [
+                {"text": prompt},
+                {"inline_data": {"mime_type": mime_type, "data": base64.b64encode(audio_bytes).decode("ascii")}},
+            ],
+        }],
+        "generationConfig": {
+            "temperature": 0.1,
+            "topP": 0.85,
+            "maxOutputTokens": 8000,
+            "responseMimeType": "application/json",
+        },
+    }
+    attempts: list[GeminiAttempt] = []
+    timeout = httpx.Timeout(max(float(KORDA_AI_TIMEOUT_SECONDS), 60.0), connect=10.0)
+
+    for model in _audio_models():
+        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        for index, api_key in enumerate(keys):
+            started = time.time()
+            try:
+                with httpx.Client(timeout=timeout) as client:
+                    response = client.post(
+                        endpoint,
+                        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+                        json=request_body,
+                    )
+                latency_ms = int((time.time() - started) * 1000)
+                if response.status_code == 200:
+                    payload = response.json()
+                    text = _extract_text(payload)
+                    analysis = _normalize_call_analysis(_extract_json_object(text), fallback_name=filename)
+                    analysis["provider"] = "gemini"
+                    analysis["model"] = model
+                    analysis["key_index"] = index + 1
+                    analysis["attempts"] = [item.__dict__ for item in attempts]
+                    return analysis
+                attempt = GeminiAttempt(index + 1, response.status_code, response.text[:500], latency_ms)
+                attempt.error = f"{model}: {attempt.error}"
+                attempts.append(attempt)
+                if _should_try_next_model(response.status_code):
+                    break
                 continue
-            error_text = response.text[:400]
-            attempts.append(GeminiAttempt(index + 1, response.status_code, error_text, latency_ms))
-            if response.status_code in {400, 401, 403}:
-                logger.warning("Gemini key %s rejected with %s", index + 1, response.status_code)
-            continue
-        except (httpx.TimeoutException, httpx.TransportError) as exc:
-            attempts.append(GeminiAttempt(index + 1, 0, exc.__class__.__name__, int((time.time() - started) * 1000)))
-            continue
-        except Exception as exc:
-            attempts.append(GeminiAttempt(index + 1, 0, exc.__class__.__name__, int((time.time() - started) * 1000)))
-            continue
+            except (httpx.TimeoutException, httpx.TransportError) as exc:
+                attempts.append(GeminiAttempt(index + 1, 0, f"{model}: {exc.__class__.__name__}", int((time.time() - started) * 1000)))
+                break
+            except Exception as exc:
+                attempts.append(GeminiAttempt(index + 1, 0, f"{model}: {exc.__class__.__name__}", int((time.time() - started) * 1000)))
+                break
 
     raise GeminiUnavailableError(json.dumps([item.__dict__ for item in attempts], ensure_ascii=False))

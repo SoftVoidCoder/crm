@@ -435,11 +435,16 @@
         <div class="modal-header modal-header--stack">
             <div>
                 <h2 id="readKnowTitle" class="modal-title"></h2>
+                <div id="readKnowMeta" class="modal-subtitle"></div>
                 <p class="modal-subtitle">Ознакомьтесь с содержимым и подтвердите прочтение, если это обязательный документ.</p>
             </div>
         </div>
         <div id="readKnowContent" style="flex:1; overflow-y:auto; background: var(--bg); padding: 15px; border-radius: 12px; border: 1px solid var(--border); font-size: 14px; line-height: 1.5; white-space: pre-wrap; margin-bottom: 20px;"></div>
+        <div id="readKnowStats" style="display:none; margin-bottom: 16px; color: var(--secondary); font-size: 13px;">
+            Ознакомились: <span id="readKnowUsers">Никто не ознакомился</span>
+        </div>
         <div class="modal-actions">
+            <button id="btnDownloadKnowledge" class="btn-secondary" onclick="downloadKnowledgeDoc()">Скачать текст</button>
             <button class="btn-secondary" onclick="document.getElementById('readKnowledgeModal').style.display='none'">Закрыть</button>
             <button id="btnMarkRead" class="btn-success" style="display:none;" onclick="markKnowledgeRead()">ОЗНАКОМЛЕН(А)</button>
         </div>

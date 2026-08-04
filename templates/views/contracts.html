@@ -62,7 +62,16 @@
                         </div>
                         <div>
                             <label class="field-label">Статус</label>
-                            <input id="contractCardStatus" class="auth-input" type="text">
+                            <select id="contractCardStatus" class="auth-input">
+                                <option value="draft">Черновик</option>
+                                <option value="pending">На согласовании</option>
+                                <option value="active">Действует</option>
+                                <option value="paused">Приостановлен</option>
+                                <option value="completed">Исполнен</option>
+                                <option value="closed">Закрыт</option>
+                                <option value="terminated">Расторгнут</option>
+                                <option value="archived">Архив</option>
+                            </select>
                         </div>
                         <div class="contract360-field-full">
                             <label class="field-label">Название / предмет</label>

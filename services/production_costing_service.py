@@ -660,7 +660,14 @@ def complete_operation_costing(conn, operation_id: int, actor_email: str = "") -
             COALESCE(SUM(CASE WHEN layer_type IN ('material','labor') THEN actual_amount ELSE 0 END), 0)
                 + COALESCE(SUM(CASE WHEN layer_type='overhead' THEN overhead_amount ELSE 0 END), 0) AS actual_cost
         FROM production_cost_layers
-        WHERE production_order_id=? AND layer_type IN ('material', 'labor', 'overhead')
+        WHERE production_order_id=?
+          AND layer_type IN ('material', 'labor', 'overhead')
+          AND EXISTS (
+              SELECT 1
+              FROM production_operations po
+              WHERE po.id=production_cost_layers.operation_id
+                AND po.order_id=production_cost_layers.production_order_id
+          )
         """,
         (order_id,),
     ))
@@ -713,7 +720,14 @@ def build_plan_fact_cost_report(conn, production_order_id: int = 0, period: str 
             COALESCE(SUM(CASE WHEN pcl.layer_type IN ('output','semifinished') THEN pcl.qty ELSE 0 END), 0) AS output_qty,
             COUNT(pcl.id) AS layer_count
         FROM production_orders po
-        LEFT JOIN production_cost_layers pcl ON pcl.production_order_id=po.id
+        LEFT JOIN production_cost_layers pcl
+          ON pcl.production_order_id=po.id
+         AND EXISTS (
+             SELECT 1
+             FROM production_operations operation
+             WHERE operation.id=pcl.operation_id
+               AND operation.order_id=po.id
+         )
     """
     if where:
         query += " WHERE " + " AND ".join(where)

@@ -1917,6 +1917,23 @@ def _load_integration_plus_summary() -> dict:
             expected_fields = sorted((meta.get("builder")({}) or {}).keys()) if meta and meta.get("builder") else []
         entity_rows = [row for row in mappings if _safe_text(row.get("entity_type")) == entity_type]
         active_rows = [row for row in entity_rows if int(row.get("is_active") or 0) == 1]
+        expected_field_set = set(expected_fields)
+        mapped_fields = {
+            _safe_text(row.get("local_field"))
+            for row in entity_rows
+            if _safe_text(row.get("local_field")) in expected_field_set
+        }
+        active_mapped_fields = {
+            _safe_text(row.get("local_field"))
+            for row in active_rows
+            if _safe_text(row.get("local_field")) in expected_field_set
+        }
+        required_fields = {
+            _safe_text(row.get("local_field"))
+            for row in active_rows
+            if int(row.get("is_required") or 0) == 1
+            and _safe_text(row.get("local_field")) in expected_field_set
+        }
         directions: dict[str, int] = {}
         for row in active_rows:
             directions[row.get("direction") or "bidirectional"] = directions.get(row.get("direction") or "bidirectional", 0) + 1
@@ -1924,11 +1941,12 @@ def _load_integration_plus_summary() -> dict:
             {
                 "entity_type": entity_type,
                 "expected_fields_total": len(expected_fields),
-                "mapped_total": len(entity_rows),
-                "active_mapped_total": len(active_rows),
-                "required_total": len([row for row in active_rows if int(row.get("is_required") or 0) == 1]),
-                "coverage_percent": round((len(active_rows) / len(expected_fields)) * 100, 1) if expected_fields else 0,
+                "mapped_total": len(mapped_fields),
+                "active_mapped_total": len(active_mapped_fields),
+                "required_total": len(required_fields),
+                "coverage_percent": round((len(active_mapped_fields) / len(expected_fields)) * 100, 1) if expected_fields else 0,
                 "directions": directions,
+                "expected_fields": expected_fields,
             }
         )
     queue_rows = projects_router._load_sync_queue_rows(180)

@@ -6,12 +6,21 @@ let docflowTimelineState = null;
 let integrationInboundPreviewState = null;
 
 function opsPlusEscape(value) {
-    return String(value || '')
+    return String(value ?? '')
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+function opsPlusJsString(value) {
+    return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function opsPlusPercent(value) {
+    const percent = Math.max(0, Math.min(100, Number(value || 0)));
+    return Number.isInteger(percent) ? String(percent) : percent.toFixed(1);
 }
 
 function opsPlusStatusBadge(value) {
@@ -47,6 +56,13 @@ function opsPlusStatusLabel(value) {
         stale: 'Зависло',
         attention: 'Требует внимания',
         open: 'Открыто',
+        pending: 'Ожидает',
+        unsigned: 'Не подписано',
+        incoming: 'Регистрация',
+        approval: 'Согласование',
+        approved: 'Согласовано',
+        not_started: 'Не начато',
+        idle: 'Ожидает запуска',
         allow: 'Разрешено',
         deny: 'Запрещено',
         medium: 'Средний риск',
@@ -108,6 +124,7 @@ function opsPlusActionLabel(value) {
 }
 
 function opsPlusEntityLabel(value) {
+    const key = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
     return {
         bank_accounts: 'Банковские счета',
         characteristics: 'Характеристики',
@@ -116,9 +133,11 @@ function opsPlusEntityLabel(value) {
         finance_payment: 'Платежи',
         financial_responsibility_centers: 'ЦФО',
         groups: 'Группы',
+        income_expense_articles: 'Статьи доходов и расходов',
         legal_entities: 'Юрлица',
         nomenclature: 'Номенклатура',
         operation_types: 'Виды операций',
+        positions: 'Должности',
         production_order: 'Производственные заказы',
         purchase_order: 'Закупки',
         sales_document: 'Реализации',
@@ -131,16 +150,23 @@ function opsPlusEntityLabel(value) {
         warehouses: 'Склады',
         bank_statement_lines: 'Строки банковской выписки',
         bi_reports: 'Аналитические витрины',
-    }[value] || value || 'Сущность';
+    }[key] || 'Раздел данных';
 }
 
 function opsPlusRecoveryLabel(value) {
-    return {
+    const key = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    const labels = {
         failed_queue: 'Очередь с ошибками',
         retry_queue: 'Очередь повторов',
         stale_processing: 'Зависшая обработка',
         recent_conflicts: 'Последние конфликты',
         inbound_errors: 'Ошибки входящих обновлений',
+        open_errors: 'Открытые ошибки',
+        critical_errors: 'Критичные ошибки',
+        retryable_total: 'Можно повторить',
+        idempotency_keys_total: 'Контроль дублей',
+        idempotency_collisions: 'Конфликты дублей',
+        consistency_alerts: 'Предупреждения целостности',
         bank_unreconciled: 'Несведённый банк',
         telephony_unlinked: 'Непривязанные звонки',
         mappings_total: 'Всего сопоставлений',
@@ -151,6 +177,7 @@ function opsPlusRecoveryLabel(value) {
         bank_accounts_total: 'Банковские счета',
         telephony_accounts_total: 'Линии телефонии',
         bi_reports_total: 'Аналитические витрины',
+        connectors_total: 'Подключения',
         mapping_coverage_entities: 'Покрытые сущности',
         documents_total: 'Всего документов',
         templates_total: 'Всего шаблонов',
@@ -175,39 +202,142 @@ function opsPlusRecoveryLabel(value) {
         matrix_rows_total: 'Строк матрицы',
         matrix_rows_covered: 'Покрыто строк',
         matrix_coverage_percent: 'Покрытие, %',
-    }[value] || String(value || '').replace(/_/g, ' ') || 'Контроль';
+    };
+    const modulePrefixes = {
+        production: 'Производство',
+        finance: 'Финансы',
+        warehouse: 'Склад',
+        stock: 'Склад',
+        integration: 'Интеграции',
+        integrations: 'Интеграции',
+        security: 'Безопасность',
+        backup: 'Резервное копирование',
+    };
+    for (const [prefix, label] of Object.entries(modulePrefixes)) {
+        const prefixText = `${prefix}_`;
+        if (key.startsWith(prefixText)) {
+            return `${label}: ${labels[key.slice(prefixText.length)] || 'показатель контроля'}`;
+        }
+    }
+    return labels[key] || 'Показатель контроля';
 }
 
 function opsPlusFieldLabel(value) {
+    const key = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    if ((key.includes('item') || key.includes('position')) && (key.includes('name') || key.includes('наз'))) return 'наименование позиции';
+    if ((key.includes('item') || key.includes('position')) && (key.includes('article') || key.includes('арт'))) return 'артикул позиции';
+    if (key.includes('object') && (key.includes('identifier') || key.includes('иденти'))) return 'объект';
+    if (key.includes('project') && (key.includes('identifier') || key.includes('иденти'))) return 'проект';
+    if (key.includes('contract') && (key.includes('identifier') || key.includes('иденти'))) return 'договор';
+    if (key.includes('expected') && key.includes('date')) return 'ожидаемая дата';
     return {
         id: 'идентификатор',
+        identifier: 'идентификатор',
         external_id: 'внешний идентификатор',
         entity_id: 'идентификатор записи',
         entity_type: 'тип сущности',
         name: 'наименование',
         title: 'название',
+        number: 'номер',
+        code: 'код',
+        article: 'артикул',
+        article_kind: 'вид статьи',
+        category: 'категория',
+        kind: 'вид',
         status: 'статус',
         state: 'состояние',
+        stage: 'этап',
+        priority: 'приоритет',
+        progress: 'готовность',
+        is_active: 'активность',
         warehouse: 'склад',
         warehouse_id: 'склад',
+        default_warehouse: 'склад по умолчанию',
+        zone_name: 'зона склада',
         storage_cell: 'ячейка',
         storage_cell_id: 'ячейка',
+        bin_code: 'код ячейки',
         serial_no: 'серийный номер',
         batch_no: 'партия',
+        batch_code: 'код партии',
         qty: 'количество',
         quantity: 'количество',
+        planned_qty: 'плановое количество',
+        produced_qty: 'произведено',
+        scrap_qty: 'брак',
+        stock: 'остаток',
         fulfilled_qty: 'исполнено',
         reserved_qty: 'зарезервировано',
+        price: 'цена',
+        planned_cost: 'плановая себестоимость',
+        actual_cost: 'фактическая себестоимость',
+        labor_hours_plan: 'плановые трудозатраты',
+        labor_hours_fact: 'фактические трудозатраты',
         project_id: 'проект',
+        project_identifier: 'проект',
+        project: 'проект',
         client_id: 'клиент',
+        client_identifier: 'клиент',
+        client: 'клиент',
+        object_id: 'объект',
+        object_identifier: 'объект',
+        object: 'объект',
+        contract_id: 'договор',
+        contract_identifier: 'договор',
+        contract: 'договор',
+        item_id: 'позиция',
+        item_identifier: 'позиция',
+        item_name: 'наименование позиции',
+        item_article: 'артикул позиции',
+        expected_date: 'ожидаемая дата',
+        received_date: 'дата получения',
+        delivery_date: 'дата поставки',
+        due_date: 'срок исполнения',
+        paid_date: 'дата оплаты',
+        doc_date: 'дата документа',
+        doc_number: 'номер документа',
+        doc_type: 'тип документа',
+        source_document_id: 'исходный документ',
+        source_document_type: 'тип исходного документа',
+        supplier: 'поставщик',
+        unit: 'единица измерения',
+        unit_price: 'цена за единицу',
+        manager_id: 'ответственный',
+        manager_name: 'ответственный',
+        full_name: 'ФИО',
+        personnel_number: 'табельный номер',
+        department_name: 'отдел',
+        position_id: 'должность',
+        phone: 'телефон',
+        email: 'электронная почта',
+        recipient_email: 'почта получателя',
+        document_id: 'документ',
+        order_id: 'заказ',
+        order_name: 'заказ',
         amount: 'сумма',
         total_amount: 'итоговая сумма',
         vat_amount: 'НДС',
+        vat_rate_id: 'ставка НДС',
+        currency: 'валюта',
         payment_status: 'статус оплаты',
         shipment_status: 'статус отгрузки',
+        sent_status: 'статус отправки',
+        status_name: 'статус',
+        account_number: 'расчётный счёт',
+        bank_name: 'банк',
+        bik: 'БИК',
+        legal_entity_id: 'юридическое лицо',
+        business_unit_id: 'подразделение',
+        treasury_article_id: 'статья движения денег',
+        flow_kind: 'вид движения',
+        characteristic_type: 'тип характеристики',
+        group_name: 'группа',
+        module_name: 'модуль',
+        route_name: 'маршрут',
+        comment: 'комментарий',
         created_at: 'дата создания',
         updated_at: 'дата изменения',
-    }[value] || String(value || '').replace(/_/g, ' ');
+    }[key] || 'дополнительное поле';
 }
 
 function opsPlusProviderLabel(value) {
@@ -230,12 +360,182 @@ function opsPlusConnectorTypeLabel(value) {
 }
 
 function renderOpsPlusMetricCards(metrics) {
-    return Object.entries(metrics || {}).map(([key, value]) => `
+    const priorityKeys = [
+        'matrix_coverage_percent',
+        'queue_failed',
+        'inbound_errors',
+        'consistency_alerts',
+        'connectors_total',
+        'bank_unreconciled',
+        'telephony_unlinked',
+        'reconciliation_runs',
+    ];
+    const entries = Object.entries(metrics || {})
+        .filter(([key]) => priorityKeys.includes(String(key)))
+        .slice(0, 8);
+    return (entries.length ? entries : Object.entries(metrics || {}).slice(0, 6)).map(([key, value]) => `
         <div class="metric-card">
             <div class="metric-title">${opsPlusEscape(opsPlusRecoveryLabel(key))}</div>
             <div class="metric-value">${opsPlusEscape(value)}</div>
         </div>
     `).join('');
+}
+
+function opsPlusMappingState(item) {
+    const percent = Number(item?.coverage_percent || 0);
+    const expected = Number(item?.expected_fields_total || 0);
+    const mapped = Number(item?.active_mapped_total || 0);
+    if (!expected) return { label: 'нет структуры', tone: 'status-archived' };
+    if (percent >= 100) return { label: 'готово', tone: 'status-active' };
+    if (mapped > 0) return { label: 'частично', tone: 'status-active' };
+    return { label: 'не настроено', tone: 'status-overdue' };
+}
+
+function opsPlusDirectionLabel(directions = {}) {
+    const inbound = Number(directions.inbound || 0);
+    const outbound = Number(directions.outbound || 0);
+    const both = Number(directions.bidirectional || 0);
+    if (both > 0 || (inbound > 0 && outbound > 0)) return 'CRM ↔ 1С';
+    if (inbound > 0) return '1С → CRM';
+    if (outbound > 0) return 'CRM → 1С';
+    return 'Не задано';
+}
+
+function renderOpsPlusMappingMatrix(rows = []) {
+    const list = (Array.isArray(rows) ? rows : [])
+        .filter(item => Number(item.expected_fields_total || 0) > 0);
+    const incomplete = list.filter(item => Number(item.coverage_percent || 0) < 100);
+    return `
+        <div class="ops-plus-section-head">
+            <div>
+                <h4 class="section-title">Какие данные передаются в 1С</h4>
+                <p class="section-subtitle">${incomplete.length ? `Требуют настройки: ${incomplete.length}.` : 'Все разделы настроены.'} Кнопка открывает параметры выбранного раздела и сама ничего не изменяет.</p>
+            </div>
+        </div>
+        <div class="ops-plus-table-shell">
+            <table class="ops-plus-table">
+                <thead>
+                    <tr>
+                        <th>Раздел CRM</th>
+                        <th>Направление</th>
+                        <th>Поля</th>
+                        <th>Состояние</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${list.length ? list.map(item => {
+                        const state = opsPlusMappingState(item);
+                        const expected = Number(item.expected_fields_total || 0);
+                        const mapped = expected ? Math.min(Number(item.active_mapped_total || 0), expected) : 0;
+                        return `
+                            <tr>
+                                <td><strong>${opsPlusEscape(opsPlusEntityLabel(item.entity_type))}</strong></td>
+                                <td>${opsPlusEscape(opsPlusDirectionLabel(item.directions))}</td>
+                                <td>${mapped} из ${expected}</td>
+                                <td><span class="status-badge ${state.tone}">${state.label}</span></td>
+                                <td><button class="btn-secondary" onclick="openIntegrationMappingSettings('${opsPlusJsString(item.entity_type)}')">Настроить</button></td>
+                            </tr>
+                        `;
+                    }).join('') : '<tr><td colspan="5" class="ops-plus-empty-cell">Разделы для обмена пока не найдены.</td></tr>'}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderOpsPlusAttentionBoard(source = {}) {
+    const entries = Object.entries(source || {})
+        .filter(([key, value]) => typeof value !== 'object' && Number(value || 0) > 0)
+        .filter(([key]) => opsPlusIsAttentionMetric(key))
+        .slice(0, 8);
+    if (!entries.length) {
+        return '<div class="empty-state">Критичных проблем обмена сейчас нет.</div>';
+    }
+    return `<div class="client360-list" style="margin-top:12px;">${entries.map(([key, value]) => `
+        <div class="client360-item ops-plus-attention-row">
+            <div>
+                <div class="client360-item-title">${opsPlusEscape(opsPlusRecoveryLabel(key))}</div>
+                <div class="client360-item-meta">${opsPlusEscape(opsPlusControlGroupLabel(key))}</div>
+            </div>
+            <div class="metric-value" style="font-size:22px;">${opsPlusEscape(value)}</div>
+        </div>
+    `).join('')}</div>`;
+}
+
+function opsPlusIsAttentionMetric(key) {
+    const normalized = String(key || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    return [
+        'error',
+        'failed',
+        'stale',
+        'conflict',
+        'collision',
+        'unreconciled',
+        'unlinked',
+        'alert',
+        'retry_queue',
+        'failed_queue',
+    ].some(token => normalized.includes(token));
+}
+
+function opsPlusMergeAttentionBoards(...boards) {
+    const result = {};
+    boards.forEach(board => {
+        Object.entries(board || {}).forEach(([key, value]) => {
+            if (typeof value === 'object' || !opsPlusIsAttentionMetric(key)) return;
+            result[key] = Math.max(Number(result[key] || 0), Number(value || 0));
+        });
+    });
+    return result;
+}
+
+function renderIntegrationAdvancedSettings(rows = []) {
+    const options = (Array.isArray(rows) ? rows : [])
+        .filter(item => Number(item.expected_fields_total || 0) > 0)
+        .map(item => `<option value="${opsPlusEscape(item.entity_type)}">${opsPlusEscape(opsPlusEntityLabel(item.entity_type))}</option>`)
+        .join('');
+    return `
+        <details id="integrationMappingSettings" class="ops-plus-advanced">
+            <summary>
+                <span>Настройки выбранного раздела</span>
+                <small>Добавление одного поля или недостающих типовых полей</small>
+            </summary>
+            <div class="ops-plus-settings-form">
+                <label>
+                    <span>Раздел CRM</span>
+                    <select id="integrationMappingEntitySelect" class="auth-input" onchange="selectIntegrationMappingEntity(this.value)">
+                        <option value="">Выберите раздел</option>
+                        ${options}
+                    </select>
+                </label>
+                <label>
+                    <span>Поле в CRM</span>
+                    <select id="integrationMapLocal" class="auth-input">
+                        <option value="">Сначала выберите раздел</option>
+                    </select>
+                </label>
+                <label>
+                    <span>Соответствующее поле в 1С</span>
+                    <input id="integrationMapExternal" class="auth-input" placeholder="Например: Номер">
+                </label>
+                <input id="integrationMapEntity" type="hidden">
+                <div class="ops-plus-settings-actions">
+                    <button class="btn-primary" onclick="saveIntegrationMapping()">Добавить это поле</button>
+                    <button class="btn-secondary" onclick="bootstrapSelectedIntegrationMapping()">Добавить недостающие типовые поля</button>
+                </div>
+            </div>
+        </details>
+    `;
+}
+
+function opsPlusControlGroupLabel(key) {
+    const normalized = String(key || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    if (normalized.includes('production')) return 'Производственный контроль';
+    if (normalized.includes('finance') || normalized.includes('bank')) return 'Финансовый контроль';
+    if (normalized.includes('telephony')) return 'Телефония';
+    if (normalized.includes('idempotency') || normalized.includes('consistency')) return 'Защита от дублей';
+    return 'Операторский контроль';
 }
 
 function renderOpsPlusList(items, mapFn, emptyText) {
@@ -474,7 +774,7 @@ function renderDocflowPlusMount() {
                         <div class="client360-item">
                             <div>
                                 <div class="client360-item-title">${opsPlusEscape(item.number || item.document_id)} · ${opsPlusEscape(item.signature_kind || 'подпись не задана')}</div>
-                                <div class="client360-item-meta">${opsPlusEscape(item.signer_name || 'подписант не указан')} · ${opsPlusEscape(item.signature_display_status || 'нет действительной подписи')} · текущая версия ${opsPlusEscape(item.current_revision_valid_signatures_total || 0)} · архивных записей ${opsPlusEscape(item.archive_total || 0)} · thumb ${opsPlusEscape(item.thumbprint_short || 'нет')}</div>
+                                <div class="client360-item-meta">${opsPlusEscape(item.signer_name || 'подписант не указан')} · ${opsPlusEscape(item.signature_display_status || 'нет действительной подписи')} · текущая версия ${opsPlusEscape(item.current_revision_valid_signatures_total || 0)} · архивных записей ${opsPlusEscape(item.archive_total || 0)} · отпечаток ${opsPlusEscape(item.thumbprint_short || 'нет')}</div>
                             </div>
                             <div class="view-actions">${opsPlusStatusBadge(item.verification_status || 'pending')}${opsPlusStatusBadge(item.legal_force || 'unsigned')}</div>
                         </div>
@@ -482,17 +782,17 @@ function renderDocflowPlusMount() {
                     ${renderOpsPlusList(docflowPlusDB.signature_gaps, item => `<div class="client360-item"><div><div class="client360-item-title">Пробел: ${opsPlusEscape(item.number || item.document_id)}</div><div class="client360-item-meta">${opsPlusEscape(item.gap_reason || 'контур ЭП неполный')}</div></div><div>${opsPlusStatusBadge('attention')}</div></div>`, 'Пробелов по ЭП и юридической значимости сейчас нет.')}
                 </div>
                 <div class="surface-card surface-card--soft surface-card--padded">
-                    <h4 class="section-title" style="font-size:16px;">Сквозной workflow</h4>
+                    <h4 class="section-title" style="font-size:16px;">Сквозной маршрут документа</h4>
                     ${renderOpsPlusList(docflowPlusDB.workflow_board, item => `
                         <div class="client360-item">
                             <div>
                                 <div class="client360-item-title">${opsPlusEscape(item.number || item.document_id)} · ${opsPlusEscape(item.subject || 'Без темы')}</div>
-                                <div class="client360-item-meta">этап ${opsPlusEscape(item.workflow_stage || 'incoming')} · прогресс ${opsPlusEscape(item.progress_percent || 0)}% · approval ${opsPlusEscape(item.approval_status || 'pending')} · archive ${opsPlusEscape(item.archive_status || 'not_started')}</div>
+                                <div class="client360-item-meta">этап: ${opsPlusEscape(opsPlusStatusLabel(item.workflow_stage || 'incoming'))} · готовность ${opsPlusEscape(item.progress_percent || 0)}% · согласование: ${opsPlusEscape(opsPlusStatusLabel(item.approval_status || 'pending'))} · архив: ${opsPlusEscape(opsPlusStatusLabel(item.archive_status || 'not_started'))}</div>
                             </div>
                             <div class="view-actions">${opsPlusStatusBadge(item.workflow_status || 'idle')}</div>
                         </div>
                     `, 'Сквозные маршруты документов пока не запущены.')}
-                    ${renderOpsPlusList(docflowPlusDB.workflow_gaps, item => `<div class="client360-item"><div><div class="client360-item-title">Пробел: ${opsPlusEscape(item.number || item.document_id)}</div><div class="client360-item-meta">${opsPlusEscape(item.block_reason || 'workflow остановлен')}</div></div><div>${opsPlusStatusBadge('attention')}</div></div>`, 'Блокеров по сквозному workflow сейчас нет.')}
+                    ${renderOpsPlusList(docflowPlusDB.workflow_gaps, item => `<div class="client360-item"><div><div class="client360-item-title">Пробел: ${opsPlusEscape(item.number || item.document_id)}</div><div class="client360-item-meta">${opsPlusEscape(item.block_reason || 'маршрут остановлен')}</div></div><div>${opsPlusStatusBadge('attention')}</div></div>`, 'Блокеров по сквозному маршруту сейчас нет.')}
                 </div>
                 <div class="surface-card surface-card--soft surface-card--padded">
                     <h4 class="section-title" style="font-size:16px;">Хранение и архивная политика</h4>
@@ -679,84 +979,76 @@ function renderDocflowPlusMount() {
 function renderIntegrationPlusMount() {
     const mount = document.getElementById('integrationPlusMount');
     if (!mount || !integrationPlusDB) return;
+    const mappings = Array.isArray(integrationPlusDB.mapping_matrix) ? integrationPlusDB.mapping_matrix : [];
+    const supportedMappings = mappings.filter(item => Number(item.expected_fields_total || 0) > 0);
+    const totalSections = supportedMappings.length;
+    const readySections = supportedMappings.filter(item => Number(item.coverage_percent || 0) >= 100).length;
+    const incompleteSections = supportedMappings.filter(item => Number(item.coverage_percent || 0) < 100).length;
+    const operatorBoard = integrationPlusDB.operator_recovery_board || {};
+    const qualityBoard = integrationPlusDB.production_quality || {};
+    const attentionBoard = {
+        failed_queue: Number(operatorBoard.failed_queue || 0),
+        retry_queue: Number(operatorBoard.retry_queue || 0),
+        stale_processing: Math.max(Number(operatorBoard.stale_processing || 0), Number(qualityBoard.stale_processing || 0)),
+        recent_conflicts: Number(operatorBoard.recent_conflicts || 0),
+        inbound_errors: Number(operatorBoard.inbound_errors || 0),
+        production_open_errors: Math.max(Number(operatorBoard.production_open_errors || 0), Number(qualityBoard.open_errors || 0)),
+        idempotency_collisions: Math.max(Number(operatorBoard.idempotency_collisions || 0), Number(qualityBoard.idempotency_collisions || 0)),
+        consistency_alerts: Math.max(Number(operatorBoard.consistency_alerts || 0), Number(qualityBoard.consistency_alerts || 0)),
+    };
+    const exchangeErrors = Number(attentionBoard.failed_queue || 0)
+        + Number(attentionBoard.inbound_errors || 0)
+        + Number(attentionBoard.production_open_errors || 0);
+    const consistencyIssues = Number(attentionBoard.consistency_alerts || 0);
     mount.innerHTML = `
-        <div class="surface-card surface-card--padded">
-            <div class="section-header">
+        <section class="ops-plus-workspace">
+            <div class="ops-plus-workspace-head">
                 <div>
-                    <h3 class="section-title">1С-интеграции+</h3>
-                    <p class="section-subtitle">Конструктор сопоставления, входящие обновления 1С, глубокая сверка, подключения банка/телефонии/аналитики и единый мониторинг обмена.</p>
+                    <h3 class="section-title">Настройка обмена с 1С</h3>
+                    <p class="section-subtitle">Здесь видно, какие данные CRM передаёт в 1С и какие разделы ещё нужно настроить.</p>
                 </div>
-                <div class="view-actions"><button class="btn-secondary" onclick="reloadIntegrationPlus()">Обновить</button></div>
+                <button class="btn-secondary" onclick="reloadIntegrationPlus()">Обновить данные</button>
             </div>
-            <div class="metrics-grid">${renderOpsPlusMetricCards(integrationPlusDB.metrics)}</div>
-            <div class="system-ops-grid" style="margin-top:18px;">
-                <div class="surface-card surface-card--soft surface-card--padded">
-                    <h4 class="section-title" style="font-size:16px;">Матрица сопоставления</h4>
-                    ${renderOpsPlusList(integrationPlusDB.mapping_matrix, item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(opsPlusEntityLabel(item.entity_type))}</div><div class="client360-item-meta">заполнено ${item.active_mapped_total}/${item.expected_fields_total} · обязательных ${item.required_total}</div></div><div class="view-actions"><div class="metric-value" style="font-size:18px;">${opsPlusEscape(item.coverage_percent)}%</div><button class="btn-secondary" onclick="bootstrapIntegrationMappings('${opsPlusEscape(item.entity_type)}')">Заполнить основу</button></div></div>`, 'Матрица сопоставления пока пуста.')}
+            <div class="ops-plus-summary-grid">
+                <div class="ops-plus-summary-item"><span>Настроено разделов</span><strong>${readySections} из ${totalSections}</strong></div>
+                <div class="ops-plus-summary-item"><span>Требуют настройки</span><strong>${incompleteSections}</strong></div>
+                <div class="ops-plus-summary-item"><span>Ошибки обмена</span><strong>${exchangeErrors}</strong></div>
+                <div class="ops-plus-summary-item"><span>Несовпадения данных</span><strong>${consistencyIssues}</strong></div>
+            </div>
+            <div class="ops-plus-main-grid">
+                <div class="ops-plus-main-column">
+                    ${renderOpsPlusMappingMatrix(mappings)}
+                    ${renderIntegrationAdvancedSettings(mappings)}
                 </div>
-                <div class="surface-card surface-card--soft surface-card--padded">
-                    <h4 class="section-title" style="font-size:16px;">Пульт восстановления</h4>
-                    <div class="client360-list" style="margin-top:12px;">
-                        ${Object.entries(integrationPlusDB.operator_recovery_board || {}).map(([key, value]) => `
-                            <div class="client360-item">
-                                <div>
-                                    <div class="client360-item-title">${opsPlusEscape(opsPlusRecoveryLabel(key))}</div>
-                                    <div class="client360-item-meta">Операторский контроль</div>
-                                </div>
-                                <div class="metric-value" style="font-size:22px;">${opsPlusEscape(value)}</div>
-                            </div>
-                        `).join('') || '<div class="empty-state">Пульт восстановления пока пуст.</div>'}
+                <aside class="ops-plus-attention-panel">
+                    <h4 class="section-title">Что нужно исправить</h4>
+                    <p class="section-subtitle">Только ошибки, конфликты и зависшие операции.</p>
+                    ${renderOpsPlusAttentionBoard(attentionBoard)}
+                </aside>
+            </div>
+            <details class="ops-plus-advanced ops-plus-advanced--journal">
+                <summary>
+                    <span>Журнал для администратора</span>
+                    <small>Подробные записи обмена, подключения и результаты сверки</small>
+                </summary>
+                <div class="system-ops-grid">
+                    <div class="surface-card surface-card--soft surface-card--padded"><h4 class="section-title" style="font-size:16px;">Сопоставленные поля</h4>${renderOpsPlusList(integrationPlusDB.mappings, item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(opsPlusEntityLabel(item.entity_type))}</div><div class="client360-item-meta">${opsPlusEscape(opsPlusFieldLabel(item.local_field))} → ${opsPlusEscape(opsPlusFieldLabel(item.external_field))}</div></div><div class="view-actions">${opsPlusStatusBadge(item.direction)}<button class="btn-danger" onclick="deleteIntegrationMapping(${item.id})">Удалить</button></div></div>`, 'Сопоставление полей пока не настроено.')}</div>
+                    <div class="surface-card surface-card--soft surface-card--padded"><h4 class="section-title" style="font-size:16px;">Входящие обновления</h4>${renderOpsPlusList(integrationPlusDB.inbound_updates, item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(opsPlusEntityLabel(item.entity_type))} #${item.entity_id}</div><div class="client360-item-meta">${opsPlusEscape(item.external_id || 'без external_id')} · ${opsPlusEscape(opsPlusStatusLabel(item.apply_mode || 'apply'))}</div></div><div class="view-actions">${opsPlusStatusBadge(item.apply_status)}<button class="btn-secondary" onclick="previewIntegrationInbound(${item.id})">Посмотреть</button><button class="btn-secondary" onclick="applyIntegrationInbound(${item.id})">Применить</button><button class="btn-danger" onclick="deleteIntegrationInbound(${item.id})">Удалить</button></div></div>`, 'Входящих обновлений пока нет.')}
+                        ${integrationInboundPreviewState ? `<div class="surface-card surface-card--padded" style="margin-top:12px;"><div class="section-header"><div><h4 class="section-title" style="font-size:15px;">Предпросмотр изменений</h4><p class="section-subtitle">${opsPlusEscape(opsPlusEntityLabel(integrationInboundPreviewState.entity_type))} · цель ${opsPlusEscape(integrationInboundPreviewState.target_id || 0)}</p></div><div class="view-actions"><button class="btn-secondary" onclick="clearIntegrationInboundPreview()">Скрыть</button></div></div>${renderOpsPlusList(integrationInboundPreviewState.changes, item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(item.field_name)}</div><div class="client360-item-meta">было: ${opsPlusEscape(item.before)} · станет: ${opsPlusEscape(item.after)}</div></div></div>`, integrationInboundPreviewState.matched ? 'Изменений нет.' : 'Сущность для входящего обновления не найдена.')}</div>` : ''}
                     </div>
-                    <div class="view-actions" style="margin-top:12px;">
-                        <button class="btn-primary" onclick="autoResolveIntegrationReconciliation()">Авторазбор</button>
+                    <div class="surface-card surface-card--soft surface-card--padded"><h4 class="section-title" style="font-size:16px;">Коннекторы и аналитика</h4>${renderOpsPlusList(integrationPlusDB.connectors, item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(opsPlusConnectorTypeLabel(item.connector_type))} · ${opsPlusEscape(opsPlusProviderLabel(item.provider_name))}</div><div class="client360-item-meta">последний обмен: ${item.last_sync_at || 0}</div></div><div class="view-actions">${opsPlusStatusBadge(item.status)}<button class="btn-secondary" onclick="syncIntegrationConnector(${item.id})">Синхронизировать</button><button class="btn-secondary" onclick="heartbeatIntegrationConnector(${item.id})">Проверить</button><button class="btn-danger" onclick="deleteIntegrationConnector(${item.id})">Удалить</button></div></div>`, 'Коннекторов пока нет.')}
+                        ${renderOpsPlusList(integrationPlusDB.connector_health, item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(opsPlusConnectorTypeLabel(item.connector_type))} · ${opsPlusEscape(opsPlusProviderLabel(item.provider_name))}</div><div class="client360-item-meta">${item.last_sync_minutes_ago === null ? 'обмена ещё не было' : `обмен ${item.last_sync_minutes_ago} мин назад`}${item.last_error ? ` · ${opsPlusEscape(item.last_error)}` : ''}</div></div><div>${opsPlusStatusBadge(item.status)}</div></div>`, 'Состояние коннекторов пока пусто.')}</div>
+                    <div class="surface-card surface-card--soft surface-card--padded"><h4 class="section-title" style="font-size:16px;">Глубокая сверка</h4>${renderOpsPlusList(integrationPlusDB.reconciliation_runs, item => `<div class="client360-item"><div><div class="client360-item-title">Прогон #${item.id}</div><div class="client360-item-meta">расхождений ${item.mismatch_count || 0}</div></div><div>${opsPlusStatusBadge((item.mismatch_count || 0) > 0 ? 'attention' : 'synced')}</div></div>`, 'Сверка ещё не запускалась.')}
+                        ${renderOpsPlusList(integrationPlusDB.conflicts, item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(opsPlusEntityLabel(item.entity_type))} #${opsPlusEscape(item.entity_id)}</div><div class="client360-item-meta">${opsPlusEscape(item.message || opsPlusStatusLabel(item.state || 'conflict'))}</div></div><div>${opsPlusStatusBadge(item.state || 'conflict')}</div></div>`, 'Конфликтов сейчас нет.')}
                     </div>
-                    <div class="client360-list" style="margin-top:12px;">
-                        ${Object.entries(integrationPlusDB.production_quality || {}).filter(([key, value]) => typeof value !== 'object').map(([key, value]) => `
-                            <div class="client360-item">
-                                <div>
-                                    <div class="client360-item-title">${opsPlusEscape(opsPlusRecoveryLabel(key))}</div>
-                                    <div class="client360-item-meta">Качество производства</div>
-                                </div>
-                                <div class="metric-value" style="font-size:20px;">${opsPlusEscape(value)}</div>
-                            </div>
-                        `).join('') || ''}
+                    <div class="surface-card surface-card--soft surface-card--padded"><h4 class="section-title" style="font-size:16px;">Банк, телефония и аналитика</h4>
+                        ${renderOpsPlusList((integrationPlusDB.bank_exchange_board?.latest_batches || []), item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(opsPlusProviderLabel(item.provider_name || 'Банк'))} · пакет #${opsPlusEscape(item.id)}</div><div class="client360-item-meta">строк ${opsPlusEscape(item.item_count)} · сумма ${opsPlusEscape(item.total_amount)}</div></div><div>${opsPlusStatusBadge(item.status)}</div></div>`, 'Банковских пакетов пока нет.')}
+                        ${renderOpsPlusList((integrationPlusDB.telephony_board?.recent_unlinked || []), item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(item.phone_number || 'Номер')}</div><div class="client360-item-meta">${opsPlusEscape(item.summary || '')}</div></div><div>${opsPlusStatusBadge(item.status || 'open')}</div></div>`, 'Непривязанных звонков сейчас нет.')}
+                        ${renderOpsPlusList(integrationPlusDB.bi_vitrines, item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(item.title || item.report_type)}</div><div class="client360-item-meta">${opsPlusEscape(opsPlusRecoveryLabel(item.report_type))} · ${opsPlusEscape(opsPlusStatusLabel(item.scope || 'shared'))}</div></div><div>${opsPlusStatusBadge('shared')}</div></div>`, 'Аналитических витрин пока нет.')}
                     </div>
                 </div>
-            </div>
-            <div class="finance-form-grid" style="margin-top:16px;">
-                <input id="integrationMapEntity" class="auth-input" style="margin:0;" placeholder="Сущность, например документ реализации">
-                <input id="integrationMapLocal" class="auth-input" style="margin:0;" placeholder="Локальное поле">
-                <input id="integrationMapExternal" class="auth-input" style="margin:0;" placeholder="Поле 1С">
-                <button class="btn-primary" onclick="saveIntegrationMapping()">Сохранить сопоставление</button>
-                <button class="btn-secondary" onclick="bootstrapIntegrationMappings(document.getElementById('integrationMapEntity')?.value || '')">Заполнить сущность</button>
-                <input id="integrationInboundEntity" class="auth-input" style="margin:0;" placeholder="Тип входящей сущности">
-                <input id="integrationInboundId" class="auth-input" style="margin:0;" placeholder="внутренний идентификатор">
-                <input id="integrationInboundExternalId" class="auth-input" style="margin:0;" placeholder="внешний идентификатор">
-                <select id="integrationInboundMode" class="auth-input" style="margin:0;"><option value="apply">Применить</option><option value="preview">Предпросмотр</option><option value="queue_only">Только в очередь</option></select>
-                <textarea id="integrationInboundPayload" class="auth-input" style="margin:0; min-height:88px; grid-column:1 / -1;" placeholder='{"status":"синхронизирован","exchange_state":"синхронизирован"}'></textarea>
-                <button class="btn-secondary" onclick="saveIntegrationInbound()">Входящее обновление</button>
-                <select id="integrationConnectorType" class="auth-input" style="margin:0;"><option value="1c">1С</option><option value="bank">Банк</option><option value="telephony">Телефония</option><option value="bi">Аналитика</option></select>
-                <input id="integrationConnectorProvider" class="auth-input" style="margin:0;" placeholder="Провайдер / шлюз">
-                <select id="integrationConnectorStatus" class="auth-input" style="margin:0;"><option value="active">Активно</option><option value="draft">Черновик</option><option value="error">Ошибка</option></select>
-                <button class="btn-secondary" onclick="saveIntegrationConnector()">Коннектор</button>
-            </div>
-            <div class="system-ops-grid" style="margin-top:18px;">
-                <div class="surface-card surface-card--soft surface-card--padded"><h4 class="section-title" style="font-size:16px;">Сопоставленные поля</h4>${renderOpsPlusList(integrationPlusDB.mappings, item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(opsPlusEntityLabel(item.entity_type))}</div><div class="client360-item-meta">${opsPlusEscape(opsPlusFieldLabel(item.local_field))} → ${opsPlusEscape(opsPlusFieldLabel(item.external_field))}</div></div><div class="view-actions">${opsPlusStatusBadge(item.direction)}<button class="btn-danger" onclick="deleteIntegrationMapping(${item.id})">Удалить</button></div></div>`, 'Сопоставление полей пока не настроено.')}</div>
-                <div class="surface-card surface-card--soft surface-card--padded"><h4 class="section-title" style="font-size:16px;">Входящие обновления</h4>${renderOpsPlusList(integrationPlusDB.inbound_updates, item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(opsPlusEntityLabel(item.entity_type))} #${item.entity_id}</div><div class="client360-item-meta">${opsPlusEscape(item.external_id || 'без external_id')} · ${opsPlusEscape(opsPlusStatusLabel(item.apply_mode || 'apply'))}</div></div><div class="view-actions">${opsPlusStatusBadge(item.apply_status)}<button class="btn-secondary" onclick="previewIntegrationInbound(${item.id})">Посмотреть</button><button class="btn-secondary" onclick="applyIntegrationInbound(${item.id})">Применить</button><button class="btn-danger" onclick="deleteIntegrationInbound(${item.id})">Удалить</button></div></div>`, 'Входящих обновлений пока нет.')}
-                    ${integrationInboundPreviewState ? `<div class="surface-card surface-card--padded" style="margin-top:12px;"><div class="section-header"><div><h4 class="section-title" style="font-size:15px;">Предпросмотр изменений</h4><p class="section-subtitle">${opsPlusEscape(opsPlusEntityLabel(integrationInboundPreviewState.entity_type))} · цель ${opsPlusEscape(integrationInboundPreviewState.target_id || 0)}</p></div><div class="view-actions"><button class="btn-secondary" onclick="clearIntegrationInboundPreview()">Скрыть</button></div></div>${renderOpsPlusList(integrationInboundPreviewState.changes, item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(item.field_name)}</div><div class="client360-item-meta">было: ${opsPlusEscape(item.before)} · станет: ${opsPlusEscape(item.after)}</div></div></div>`, integrationInboundPreviewState.matched ? 'Изменений нет.' : 'Сущность для входящего обновления не найдена.')}</div>` : ''}
-                </div>
-                <div class="surface-card surface-card--soft surface-card--padded"><h4 class="section-title" style="font-size:16px;">Коннекторы и аналитика</h4>${renderOpsPlusList(integrationPlusDB.connectors, item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(opsPlusConnectorTypeLabel(item.connector_type))} · ${opsPlusEscape(opsPlusProviderLabel(item.provider_name))}</div><div class="client360-item-meta">последний обмен: ${item.last_sync_at || 0}</div></div><div class="view-actions">${opsPlusStatusBadge(item.status)}<button class="btn-secondary" onclick="syncIntegrationConnector(${item.id})">Синхронизировать</button><button class="btn-secondary" onclick="heartbeatIntegrationConnector(${item.id})">Проверить</button><button class="btn-danger" onclick="deleteIntegrationConnector(${item.id})">Удалить</button></div></div>`, 'Коннекторов пока нет.')}
-                    ${renderOpsPlusList(integrationPlusDB.connector_health, item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(opsPlusConnectorTypeLabel(item.connector_type))} · ${opsPlusEscape(opsPlusProviderLabel(item.provider_name))}</div><div class="client360-item-meta">${item.last_sync_minutes_ago === null ? 'обмена ещё не было' : `обмен ${item.last_sync_minutes_ago} мин назад`}${item.last_error ? ` · ${opsPlusEscape(item.last_error)}` : ''}</div></div><div>${opsPlusStatusBadge(item.status)}</div></div>`, 'Состояние коннекторов пока пусто.')}</div>
-                <div class="surface-card surface-card--soft surface-card--padded"><h4 class="section-title" style="font-size:16px;">Глубокая сверка</h4>${renderOpsPlusList(integrationPlusDB.reconciliation_runs, item => `<div class="client360-item"><div><div class="client360-item-title">Прогон #${item.id}</div><div class="client360-item-meta">расхождений ${item.mismatch_count || 0}</div></div><div>${opsPlusStatusBadge((item.mismatch_count || 0) > 0 ? 'attention' : 'synced')}</div></div>`, 'Сверка ещё не запускалась.')}
-                    ${renderOpsPlusList(integrationPlusDB.conflicts, item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(opsPlusEntityLabel(item.entity_type))} #${opsPlusEscape(item.entity_id)}</div><div class="client360-item-meta">${opsPlusEscape(item.message || opsPlusStatusLabel(item.state || 'conflict'))}</div></div><div>${opsPlusStatusBadge(item.state || 'conflict')}</div></div>`, 'Конфликтов сейчас нет.')}
-                </div>
-                <div class="surface-card surface-card--soft surface-card--padded"><h4 class="section-title" style="font-size:16px;">Банк, телефония и аналитика</h4>
-                    ${renderOpsPlusList((integrationPlusDB.bank_exchange_board?.latest_batches || []), item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(opsPlusProviderLabel(item.provider_name || 'Банк'))} · пакет #${opsPlusEscape(item.id)}</div><div class="client360-item-meta">строк ${opsPlusEscape(item.item_count)} · сумма ${opsPlusEscape(item.total_amount)}</div></div><div>${opsPlusStatusBadge(item.status)}</div></div>`, 'Банковских пакетов пока нет.')}
-                    ${renderOpsPlusList((integrationPlusDB.telephony_board?.recent_unlinked || []), item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(item.phone_number || 'Номер')}</div><div class="client360-item-meta">${opsPlusEscape(item.summary || '')}</div></div><div>${opsPlusStatusBadge(item.status || 'open')}</div></div>`, 'Непривязанных звонков сейчас нет.')}
-                    ${renderOpsPlusList(integrationPlusDB.bi_vitrines, item => `<div class="client360-item"><div><div class="client360-item-title">${opsPlusEscape(item.title || item.report_type)}</div><div class="client360-item-meta">${opsPlusEscape(opsPlusRecoveryLabel(item.report_type))} · ${opsPlusEscape(opsPlusStatusLabel(item.scope || 'shared'))}</div></div><div>${opsPlusStatusBadge('shared')}</div></div>`, 'Аналитических витрин пока нет.')}
-                </div>
-            </div>
-        </div>
+            </details>
+        </section>
     `;
 }
 
@@ -932,10 +1224,18 @@ window.focusDocumentFromTimeline = function(documentId) {
 };
 
 window.saveIntegrationMapping = async function() {
-    const payload = { entity_type: document.getElementById('integrationMapEntity')?.value || '', local_field: document.getElementById('integrationMapLocal')?.value || '', external_field: document.getElementById('integrationMapExternal')?.value || '' };
+    const payload = {
+        entity_type: String(document.getElementById('integrationMapEntity')?.value || '').trim(),
+        local_field: String(document.getElementById('integrationMapLocal')?.value || '').trim(),
+        external_field: String(document.getElementById('integrationMapExternal')?.value || '').trim(),
+    };
+    if (!payload.entity_type) return customAlert('Сначала выберите раздел CRM.');
+    if (!payload.local_field || !payload.external_field) return customAlert('Укажите поле в CRM и соответствующее поле в 1С.');
     const res = await apiCall('/integration/mappings/designer', 'POST', payload);
     if (!res || res.error) return customAlert(res?.message || res?.error || 'Не удалось сохранить сопоставление.');
+    showToast('Обмен с 1С', `Поле добавлено в раздел «${opsPlusEntityLabel(payload.entity_type)}».`);
     await reloadIntegrationPlus();
+    openIntegrationMappingSettings(payload.entity_type);
 };
 
 window.bootstrapIntegrationMappings = async function(entityType) {
@@ -943,8 +1243,54 @@ window.bootstrapIntegrationMappings = async function(entityType) {
     if (!target) return customAlert('Укажи тип сущности для автозаполнения.');
     const res = await apiCall(`/integration/mappings/bootstrap/${encodeURIComponent(target)}`, 'POST');
     if (!res || res.error) return customAlert(res?.message || res?.error || 'Не удалось выполнить автозаполнение сопоставления.');
-    showToast('Интеграции', `Автозаполнение выполнено: ${target}, создано ${Number(res.created || 0)}`);
+    showToast('Интеграции', `Созданы базовые правила для раздела «${opsPlusEntityLabel(target)}»: ${Number(res.created || 0)}`);
     await reloadIntegrationPlus();
+};
+
+window.selectIntegrationMappingEntity = function(entityType) {
+    const target = String(entityType || '').trim();
+    const select = document.getElementById('integrationMappingEntitySelect');
+    const input = document.getElementById('integrationMapEntity');
+    if (select) select.value = target;
+    if (input) input.value = target;
+    const localFieldSelect = document.getElementById('integrationMapLocal');
+    if (localFieldSelect) {
+        const section = (integrationPlusDB?.mapping_matrix || [])
+            .find(item => String(item.entity_type || '') === target);
+        const fields = Array.isArray(section?.expected_fields) ? section.expected_fields : [];
+        localFieldSelect.innerHTML = fields.length
+            ? `<option value="">Выберите поле</option>${fields.map(field => `<option value="${opsPlusEscape(field)}">${opsPlusEscape(opsPlusFieldLabel(field))}</option>`).join('')}`
+            : '<option value="">Для раздела нет доступных полей</option>';
+    }
+};
+
+window.openIntegrationMappingSettings = function(entityType) {
+    const target = String(entityType || '').trim();
+    selectIntegrationMappingEntity(target);
+    const details = document.getElementById('integrationMappingSettings');
+    if (details) {
+        details.open = true;
+        details.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    const localField = document.getElementById('integrationMapLocal');
+    if (localField) window.setTimeout(() => localField.focus(), 250);
+};
+
+window.bootstrapSelectedIntegrationMapping = async function() {
+    const target = String(
+        document.getElementById('integrationMappingEntitySelect')?.value
+        || document.getElementById('integrationMapEntity')?.value
+        || ''
+    ).trim();
+    if (!target) return customAlert('Сначала выбери один раздел для настройки.');
+    const message = `Создать базовые правила только для раздела «${opsPlusEntityLabel(target)}»? Остальные разделы не изменятся.`;
+    const confirmed = typeof customConfirm === 'function' ? await customConfirm(message) : window.confirm(message);
+    if (!confirmed) return;
+    await bootstrapIntegrationMappings(target);
+};
+
+window.bootstrapMissingIntegrationMappings = function() {
+    return customAlert('Массовое автозаполнение отключено. Выбери один раздел и создай правила только для него.');
 };
 
 window.saveIntegrationInbound = async function() {
@@ -952,7 +1298,7 @@ window.saveIntegrationInbound = async function() {
     try { payloadJson = JSON.parse(document.getElementById('integrationInboundPayload')?.value || '{}'); } catch (e) { return customAlert('Входящие данные должны быть валидным JSON.'); }
     const payload = { entity_type: document.getElementById('integrationInboundEntity')?.value || '', entity_id: Number(document.getElementById('integrationInboundId')?.value || 0), external_id: document.getElementById('integrationInboundExternalId')?.value || '', payload: payloadJson, apply_mode: document.getElementById('integrationInboundMode')?.value || 'apply' };
     const res = await apiCall('/integration/inbound_updates', 'POST', payload);
-    if (!res || res.error) return customAlert(res?.message || res?.error || 'Не удалось применить inbound update.');
+    if (!res || res.error) return customAlert(res?.message || res?.error || 'Не удалось сохранить входящее обновление.');
     if (res.outcome && res.outcome.changes) integrationInboundPreviewState = res.outcome;
     await reloadIntegrationPlus();
 };
@@ -970,13 +1316,13 @@ window.deleteIntegrationConnector = async id => { await apiCall(`/integration/co
 window.heartbeatIntegrationConnector = async id => { await apiCall(`/integration/connectors/${id}/heartbeat`, 'POST'); await reloadIntegrationPlus(); };
 window.previewIntegrationInbound = async function(id) {
     const res = await apiCall(`/integration/inbound_updates/${id}/preview`);
-    if (!res || res.error) return customAlert(res?.message || res?.error || 'Не удалось загрузить inbound preview.');
+    if (!res || res.error) return customAlert(res?.message || res?.error || 'Не удалось проверить входящее обновление.');
     integrationInboundPreviewState = res;
     renderIntegrationPlusMount();
 };
 window.applyIntegrationInbound = async function(id) {
     const res = await apiCall(`/integration/inbound_updates/${id}/apply`, 'POST');
-    if (!res || res.error) return customAlert(res?.message || res?.error || 'Не удалось применить inbound record.');
+    if (!res || res.error) return customAlert(res?.message || res?.error || 'Не удалось применить входящее обновление.');
     integrationInboundPreviewState = null;
     await reloadIntegrationPlus();
 };

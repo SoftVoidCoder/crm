@@ -7,6 +7,14 @@ let documentsExtraFilter = 'all';
 let selectedDocuments = new Set();
 let documentsOneCImportPreviewState = null;
 const documentDraftFieldIds = ['docType', 'docDate', 'docNumber', 'docSenderName', 'docRecipientName', 'docSourceNumber', 'docSourceDate', 'docDeliveryMethod', 'docSignerName', 'docExecutorName', 'docCorrespondent', 'docSubject', 'docProjectId', 'docParentId', 'docPriority'];
+const TENDER_REQUIRED_DOCUMENTS = [
+    { key: 'company_card', label: 'Карточка компании', keywords: ['карточк', 'реквизит', 'инн', 'кпп'] },
+    { key: 'authority', label: 'Доверенность / полномочия', keywords: ['доверен', 'полномоч', 'приказ директор'] },
+    { key: 'certificates', label: 'Сертификаты / лицензии', keywords: ['сертифик', 'лиценз', 'деклараци'] },
+    { key: 'proposal', label: 'Коммерческое предложение', keywords: ['кп', 'коммерческ', 'предложен'] },
+    { key: 'templates', label: 'Типовые письма и формы', keywords: ['письм', 'форма', 'шаблон'] },
+    { key: 'tender_request', label: 'Тендерная заявка', keywords: ['тендер', 'закуп', 'заявк', 'площадк'] },
+];
 
 function bindDocumentDraftAutosave() {
     if (typeof bindFormDraftAutosave !== 'function') return;
@@ -452,6 +460,62 @@ async function assembleDocumentPackageFromSelection() {
     showToast('Документы', 'Пакет собран');
 }
 
+async function assembleTenderPackageFromSelection() {
+    const ids = Array.from(selectedDocuments).map(Number).filter(Boolean);
+    if (!ids.length) return customAlert('Выбери документы тендерного комплекта галочками.');
+    const title = await customPrompt('Название тендерного пакета:', `Тендерный пакет ${new Date().toLocaleDateString('ru-RU')}`);
+    if (title === null) return;
+    const res = await apiCall('/docflow/packages', 'POST', { title, document_ids: ids, package_kind: 'tender_set' });
+    if (!res || res.error) return customAlert(res?.message || res?.error || 'Не удалось собрать тендерный пакет.');
+    selectedDocuments.clear();
+    await loadDocumentPackages();
+    renderDocuments();
+    showToast('Документы', 'Тендерный пакет собран');
+}
+
+window.assembleTenderPackageFromSelection = assembleTenderPackageFromSelection;
+
+window.openTenderDocumentPreset = function() {
+    openDocumentModalWithPreset({
+        type: 'outgoing',
+        correspondent: 'Тендерная площадка',
+        subject: 'Тендерная заявка / комплект документов',
+        delivery_method: 'ЭДО / площадка',
+        priority: 'high',
+        executor_name: currentUser?.name || '',
+        resolution: 'Проверить комплект и сроки подачи',
+    });
+};
+
+window.openReceptionIncomingPreset = function() {
+    openDocumentModalWithPreset({
+        type: 'incoming',
+        sender_name: 'Ресепшен',
+        correspondent: 'Входящее обращение',
+        subject: 'Обращение клиента / звонок / входящий документ',
+        delivery_method: 'Ресепшен',
+        priority: 'high',
+        executor_name: currentUser?.name || '',
+    });
+};
+
+async function scheduleTenderDocumentReview() {
+    const tender = buildTenderControl(allDocuments || []);
+    const target = tender.states.find(item => item.document && ['expiring', 'expired', 'needs_file'].includes(item.status));
+    if (!target) return customAlert('Нет тендерных документов, по которым нужно ставить напоминание.');
+    const assignee = await customPrompt('Кому поставить напоминание по тендерному документу?', target.document.executor_name || target.document.resolution_assignee || currentUser?.name || '');
+    if (assignee === null) return;
+    const deadline = await customPrompt('Срок проверки документа (дд.мм.гггг).', target.document.resolution_deadline || new Date().toLocaleDateString('ru-RU'));
+    if (deadline === null) return;
+    await persistDocumentQuickUpdate(Number(target.document.id || 0), {
+        executor_name: String(assignee || '').trim(),
+        resolution_assignee: String(assignee || '').trim(),
+        resolution_deadline: String(deadline || '').trim(),
+        resolution: [target.document.resolution || '', `Проверить тендерный документ: ${target.label}. Статус: ${target.statusLabel}.`].filter(Boolean).join('\n'),
+        status: target.document.status || 'review',
+    }, 'Напоминание по тендерному документу поставлено');
+}
+
 async function sendDocumentPackageApproval(packageId) {
     const res = await apiCall(`/docflow/packages/${Number(packageId || 0)}/send_approval`, 'POST', {});
     if (!res || res.error) return customAlert(res?.message || res?.error || 'Не удалось отправить пакет на согласование.');
@@ -528,6 +592,34 @@ function isDocumentOverdue(row) {
     return due < now;
 }
 
+function documentParseRuDate(value) {
+    const parts = String(value || '').split('.');
+    if (parts.length !== 3) return null;
+    const date = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+    if (Number.isNaN(date.getTime())) return null;
+    date.setHours(0, 0, 0, 0);
+    return date;
+}
+
+function documentDaysUntil(value) {
+    const date = documentParseRuDate(value);
+    if (!date) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((date - today) / 86400000);
+}
+
+function tenderDocumentFreshness(row) {
+    if (!row) return { label: 'Нет', tone: 'critical', status: 'missing', days: null };
+    if (!row.file_url) return { label: 'Требует файл', tone: 'attention', status: 'needs_file', days: null };
+    const deadline = row.retention_until || row.resolution_deadline || '';
+    const days = documentDaysUntil(deadline);
+    if (days !== null && days < 0) return { label: 'Просрочен', tone: 'critical', status: 'expired', days };
+    if (days !== null && days <= 30) return { label: 'Скоро истекает', tone: 'attention', status: 'expiring', days };
+    if (isDocumentOverdue(row)) return { label: 'Просрочен', tone: 'critical', status: 'expired', days };
+    return { label: 'Актуален', tone: 'positive', status: 'active', days };
+}
+
 function isRecentDocument(row) {
     if (!row?.d_date) return false;
     const parts = String(row.d_date).split('.');
@@ -564,6 +656,162 @@ function renderDocumentsOpsCounters(rows) {
             <div class="documents-ops-counter__note">${item.note}</div>
         </article>
     `).join('');
+}
+
+function documentText(row) {
+    return [row?.number, row?.subject, row?.correspondent, row?.sender_name, row?.recipient_name, row?.resolution, row?.type]
+        .join(' ')
+        .toLowerCase();
+}
+
+function tenderRequirementState(rows, requirement) {
+    const match = rows.find(row => requirement.keywords.some(keyword => documentText(row).includes(keyword)));
+    if (!match) return { ...requirement, status: 'missing', tone: 'critical', statusLabel: 'Нет', document: null };
+    const freshness = tenderDocumentFreshness(match);
+    if (freshness.status === 'active') return { ...requirement, status: 'ready', tone: freshness.tone, statusLabel: freshness.label, document: match, freshness };
+    return { ...requirement, status: freshness.status, tone: freshness.tone, statusLabel: freshness.label, document: match, freshness };
+}
+
+function buildTenderControl(rows = []) {
+    const tenderDocs = rows.filter(row => /тендер|закуп|заявк|площадк|кп|сертифик|лиценз|доверен|реквизит/i.test(documentText(row)));
+    const states = TENDER_REQUIRED_DOCUMENTS.map(item => tenderRequirementState(rows, item));
+    const ready = states.filter(item => item.status === 'ready').length;
+    const missing = states.filter(item => item.status === 'missing').length;
+    const attention = states.filter(item => item.status !== 'ready' && item.status !== 'missing').length;
+    const expiring = states.filter(item => item.status === 'expiring').length;
+    const expired = states.filter(item => item.status === 'expired').length;
+    const readiness = Math.round((ready / states.length) * 100);
+    const tenderPackages = (Array.isArray(documentPackagesDB) ? documentPackagesDB : []).filter(pkg => String(pkg.package_kind || '').includes('tender') || /тендер/i.test(pkg.title || ''));
+    return { tenderDocs, states, ready, missing, attention, expiring, expired, readiness, tenderPackages };
+}
+
+function renderTenderDirectorMount(rows = []) {
+    const mount = document.getElementById('tenderDirectorMount');
+    if (!mount) return;
+    const tender = buildTenderControl(rows);
+    mount.innerHTML = `
+        <section class="documents-director-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Тендерный пакет документов</h3>
+                    <p class="section-subtitle">Чеклист стандартного комплекта: реквизиты, полномочия, сертификаты, КП, формы и заявка.</p>
+                </div>
+                <div class="view-actions">
+                    <span class="crm-inline-pill crm-inline-pill--${tender.missing ? 'critical' : tender.attention ? 'attention' : 'positive'}">${tender.readiness}% готово</span>
+                    <button class="btn-secondary" onclick="openTenderDocumentPreset()">+ Документ тендера</button>
+                    <button class="btn-secondary" onclick="assembleTenderPackageFromSelection()">Собрать тендерный пакет</button>
+                    <button class="btn-secondary" onclick="scheduleTenderDocumentReview()">Напомнить по срокам</button>
+                    <button class="btn-secondary" onclick="exportTenderReceptionDirectorReport('tender')">Отчёт</button>
+                </div>
+            </div>
+            <div class="documents-director-grid">
+                <div class="documents-director-metrics">
+                    <div><span>Документов по тендерам</span><strong>${tender.tenderDocs.length}</strong></div>
+                    <div><span>Готово</span><strong>${tender.ready}</strong></div>
+                    <div><span>Проверить</span><strong>${tender.attention}</strong></div>
+                    <div><span>Не хватает</span><strong>${tender.missing}</strong></div>
+                    <div><span>Скоро истекает</span><strong>${tender.expiring}</strong></div>
+                    <div><span>Просрочено</span><strong>${tender.expired}</strong></div>
+                </div>
+                <div class="documents-checklist">
+                    ${tender.states.map(item => `
+                        <div class="documents-checklist-item">
+                            <span class="crm-inline-pill crm-inline-pill--${item.tone}">${documentPackageEscape(item.statusLabel)}</span>
+                            <strong>${documentPackageEscape(item.label)}</strong>
+                            <small>${documentPackageEscape(item.document?.number || item.document?.subject || 'добавить в пакет')} · ${documentPackageEscape(item.document?.executor_name || item.document?.resolution_assignee || 'ответственный не задан')}</small>
+                            <em>${documentPackageEscape(item.document?.retention_until || item.document?.resolution_deadline || item.document?.subject || item.status)}</em>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            <div class="documents-director-grid" style="margin-top:12px;">
+                <div class="documents-checklist">
+                    <div class="documents-checklist-item"><span class="crm-inline-pill crm-inline-pill--attention">Архив</span><strong>Отправленные комплекты</strong><small>${tender.tenderPackages.length} пакетов</small><em>${tender.tenderPackages.slice(0, 3).map(pkg => pkg.package_number || pkg.title || `#${pkg.id}`).join(', ') || 'пока нет'}</em></div>
+                </div>
+                <div class="documents-checklist">
+                    ${(tender.states.filter(item => ['expiring', 'expired', 'needs_file', 'missing'].includes(item.status)).slice(0, 3).map(item => `
+                        <div class="documents-checklist-item">
+                            <span class="crm-inline-pill crm-inline-pill--${item.tone}">Контроль</span>
+                            <strong>${documentPackageEscape(item.label)}</strong>
+                            <small>${documentPackageEscape(item.statusLabel)}</small>
+                            <em>${documentPackageEscape(item.document?.executor_name || item.document?.resolution_assignee || 'назначить ответственного')}</em>
+                        </div>
+                    `).join('') || '<div class="client360-empty">Сроки тендерных документов в норме.</div>')}
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+function buildReceptionControl(rows = []) {
+    const incoming = rows.filter(row => String(row.type || '').toLowerCase() === 'incoming');
+    const outgoing = rows.filter(row => String(row.type || '').toLowerCase() === 'outgoing');
+    const closed = rows.filter(row => isDocumentClosedState(row.status));
+    const unassigned = rows.filter(row => !isDocumentClosedState(row.status) && !String(row.executor_name || row.resolution_assignee || '').trim());
+    const overdue = rows.filter(isDocumentOverdue);
+    const noReaction = incoming.filter(row => !isDocumentClosedState(row.status) && !row.resolution && !row.resolution_task_id && !row.resolution_assignee);
+    const receptionRows = rows.filter(row => /ресепш|секрет|звон|обращ|приемн|входящ/i.test(documentText(row))).slice(0, 8);
+    const routes = {
+        director: rows.filter(row => /директор|руковод|соглас/i.test(documentText(row))).length,
+        sales: rows.filter(row => /клиент|заказ|кп|сделк|менедж/i.test(documentText(row))).length,
+        accounting: rows.filter(row => /счет|счёт|акт|оплат|бухгалтер|упд/i.test(documentText(row))).length,
+        production: rows.filter(row => /производ|цех|срок|изготов|отк/i.test(documentText(row))).length,
+        supply: rows.filter(row => /снабж|закуп|постав|склад|материал/i.test(documentText(row))).length,
+    };
+    return { incoming, outgoing, closed, unassigned, overdue, noReaction, receptionRows, routes };
+}
+
+function receptionRouteSuggestion(row) {
+    const text = documentText(row);
+    if (/директор|руковод|жалоб|претенз|эскалац/i.test(text)) return { label: 'Директору', assignee: 'Директор', priority: 'high' };
+    if (/счет|счёт|акт|оплат|бухгалтер|упд/i.test(text)) return { label: 'Бухгалтерии', assignee: 'Бухгалтерия', priority: 'normal' };
+    if (/производ|цех|срок|изготов|отк/i.test(text)) return { label: 'Производству', assignee: 'Производство и ОТК', priority: 'high' };
+    if (/снабж|закуп|постав|склад|материал/i.test(text)) return { label: 'Снабжению', assignee: 'Склад и закупки', priority: 'normal' };
+    return { label: 'Менеджеру', assignee: 'Менеджер', priority: 'normal' };
+}
+
+function renderReceptionDirectorMount(rows = []) {
+    const mount = document.getElementById('receptionDirectorMount');
+    if (!mount) return;
+    const reception = buildReceptionControl(rows);
+    mount.innerHTML = `
+        <section class="documents-director-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Документооборот и ресепшен</h3>
+                    <p class="section-subtitle">Входящие, исходящие, обращения, исполнители, сроки реакции и просрочки секретариата.</p>
+                </div>
+                <div class="view-actions">
+                    <span class="crm-inline-pill crm-inline-pill--${reception.overdue.length ? 'critical' : 'positive'}">Просрочено: ${reception.overdue.length}</span>
+                    <button class="btn-secondary" onclick="openReceptionIncomingPreset()">+ Обращение</button>
+                    <button class="btn-secondary" onclick="routeReceptionQueue()">Маршрутизировать очередь</button>
+                    <button class="btn-secondary" onclick="exportTenderReceptionDirectorReport('reception')">Отчёт</button>
+                </div>
+            </div>
+            <div class="documents-director-grid">
+                <div class="documents-director-metrics">
+                    <div><span>Входящие</span><strong>${reception.incoming.length}</strong></div>
+                    <div><span>Исходящие</span><strong>${reception.outgoing.length}</strong></div>
+                    <div><span>Закрыто</span><strong>${reception.closed.length}</strong></div>
+                    <div><span>Без реакции</span><strong>${reception.noReaction.length}</strong></div>
+                    <div><span>Без исполнителя</span><strong>${reception.unassigned.length}</strong></div>
+                    <div><span>Просрочено</span><strong>${reception.overdue.length}</strong></div>
+                </div>
+                <div class="documents-reception-list">
+                    ${(reception.overdue.concat(reception.noReaction).concat(reception.receptionRows)).slice(0, 8).map(row => `
+                        <button type="button" class="documents-reception-item" onclick="quickDocumentTask(${Number(row.id || 0)})">
+                            <strong>${documentPackageEscape(row.number || row.subject || `Документ #${row.id}`)}</strong>
+                            <span>${documentPackageEscape(row.correspondent || row.sender_name || 'без корреспондента')} · ${documentPackageEscape(row.resolution_deadline || 'без срока')} · ${documentPackageEscape(row.executor_name || row.resolution_assignee || 'без исполнителя')} · ${documentPackageEscape(receptionRouteSuggestion(row).label)}</span>
+                        </button>
+                    `).join('') || '<div class="client360-empty">Критичных обращений сейчас нет.</div>'}
+                </div>
+            </div>
+            <div class="documents-checklist" style="margin-top:12px;">
+                <div class="documents-checklist-item"><span class="crm-inline-pill crm-inline-pill--attention">Маршруты</span><strong>Директор / продажи / бухгалтерия</strong><small>${reception.routes.director} / ${reception.routes.sales} / ${reception.routes.accounting}</small><em>Автоподсказка по теме обращения</em></div>
+                <div class="documents-checklist-item"><span class="crm-inline-pill crm-inline-pill--attention">Производство</span><strong>Производство / снабжение</strong><small>${reception.routes.production} / ${reception.routes.supply}</small><em>Отдельный поток для операционных вопросов</em></div>
+            </div>
+        </section>
+    `;
 }
 
 async function persistDocumentQuickUpdate(id, overrides = {}, successMessage = 'Документ обновлён') {
@@ -643,6 +891,87 @@ window.quickDocumentReminder = async function(id) {
         resolution_deadline: String(deadline || '').trim(),
         resolution_author: currentUser?.name || row.resolution_author || '',
     }, 'Срок контроля по документу обновлён');
+};
+
+window.routeReceptionQueue = async function() {
+    const reception = buildReceptionControl(allDocuments || []);
+    const queue = reception.noReaction
+        .concat(reception.unassigned)
+        .filter((row, index, arr) => arr.findIndex(item => Number(item.id) === Number(row.id)) === index)
+        .slice(0, 12);
+    if (!queue.length) return customAlert('Очередь ресепшена сейчас пустая.');
+    if (!(await customConfirm(`Маршрутизировать обращений: ${queue.length}?`))) return;
+    let done = 0;
+    for (const row of queue) {
+        const route = receptionRouteSuggestion(row);
+        await persistDocumentQuickUpdate(Number(row.id || 0), {
+            executor_name: route.assignee,
+            resolution_assignee: route.assignee,
+            priority: route.priority,
+            resolution_deadline: row.resolution_deadline || new Date().toLocaleDateString('ru-RU'),
+            resolution: [row.resolution || '', `Ресепшен-маршрут: ${route.label}. Проверить обращение и дать реакцию.`].filter(Boolean).join('\n'),
+            resolution_author: currentUser?.name || row.resolution_author || '',
+            status: row.status || 'registered',
+        }, 'Обращение маршрутизировано');
+        done += 1;
+    }
+    showToast('Ресепшен', `Маршрутизировано обращений: ${done}`);
+};
+
+window.exportTenderReceptionDirectorReport = function(scope = 'tender') {
+    let rows = [];
+    if (scope === 'tender') {
+        const tender = buildTenderControl(allDocuments || []);
+        rows = tender.states.map(item => ({
+            'Блок': 'Тендерные документы',
+            'Документ': item.label,
+            'Статус': item.statusLabel,
+            'Номер/тема': item.document?.number || item.document?.subject || '',
+            'Ответственный': item.document?.executor_name || item.document?.resolution_assignee || '',
+            'Срок/действует до': item.document?.retention_until || item.document?.resolution_deadline || '',
+            'Файл': item.document?.file_url ? 'есть' : 'нет',
+            'Комментарий': item.document?.resolution || '',
+        }));
+        rows.push({
+            'Блок': 'Архив пакетов',
+            'Документ': 'Тендерные пакеты',
+            'Статус': `${tender.tenderPackages.length} пакетов`,
+            'Номер/тема': tender.tenderPackages.map(pkg => pkg.package_number || pkg.title || `#${pkg.id}`).join(', '),
+            'Ответственный': '',
+            'Срок/действует до': '',
+            'Файл': '',
+            'Комментарий': `${tender.readiness}% готовности`,
+        });
+    } else {
+        const reception = buildReceptionControl(allDocuments || []);
+        rows = reception.incoming.concat(reception.outgoing).slice(0, 200).map(row => {
+            const route = receptionRouteSuggestion(row);
+            return {
+                'Блок': 'Ресепшен',
+                'Документ': row.number || `#${row.id}`,
+                'Статус': row.status || '',
+                'Тема': row.subject || '',
+                'Корреспондент': row.correspondent || row.sender_name || row.recipient_name || '',
+                'Ответственный': row.executor_name || row.resolution_assignee || '',
+                'Срок реакции': row.resolution_deadline || '',
+                'Маршрут': route.label,
+                'Просрочено': isDocumentOverdue(row) ? 'да' : 'нет',
+            };
+        });
+    }
+    if (!rows.length) return customAlert('Нет данных для отчёта.');
+    const header = Object.keys(rows[0]);
+    const csv = [header.join(';')]
+        .concat(rows.map(row => header.map(key => `"${String(row[key] ?? '').replace(/"/g, '""')}"`).join(';')))
+        .join('\n');
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `korda-${scope}-director-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast('Документы', 'Директорский отчёт выгружен');
 };
 
 window.openDocumentLinkedContext = function(id) {
@@ -755,6 +1084,8 @@ function renderDocuments() {
     updateDocumentsBulkBar(filtered);
     renderDocumentPackagesMount();
     renderDocumentsOpsCounters(filtered);
+    renderTenderDirectorMount(filtered);
+    renderReceptionDirectorMount(filtered);
 
     // --- Empty state ---
     if (filtered.length === 0) {

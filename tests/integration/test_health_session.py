@@ -2326,7 +2326,7 @@ class HealthSessionIntegrationTests(unittest.TestCase):
             self.assertEqual(conflicts.status_code, 200)
             self.assertTrue(any(item["external_id"] == "1C-QA-130-BAD" for item in conflicts.json()))
 
-            analytics = director_client.get("/api/finance/analytics")
+            analytics = director_client.get(f"/api/finance/analytics?project_id={project_id}")
             self.assertEqual(analytics.status_code, 200)
             analytics_payload = analytics.json()
             self.assertGreaterEqual(float(analytics_payload["metrics"]["dds_in_fact"]), 15000)

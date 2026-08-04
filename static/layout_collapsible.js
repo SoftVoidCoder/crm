@@ -233,7 +233,7 @@
     function activateWorkspaceTab(workspace, index) {
         const tabs = Array.from(workspace.querySelectorAll(':scope > .crm-workspace__nav .crm-workspace__tab'));
         const sections = getSectionsForWorkspace(workspace);
-        if (!tabs.length || !sections.length) return;
+        if (!sections.length) return;
 
         const safeIndex = Math.max(0, Math.min(index, sections.length - 1));
         workspace.dataset.crmWorkspaceActive = String(safeIndex);
@@ -250,6 +250,11 @@
             section.hidden = !active;
             section.classList.toggle('is-active', active);
         });
+
+        const select = workspace.querySelector(':scope > .crm-workspace__nav .crm-workspace__select');
+        if (select) select.value = String(safeIndex);
+        const currentLabel = workspace.querySelector(':scope > .crm-workspace__nav .crm-workspace__current');
+        if (currentLabel) currentLabel.textContent = getSectionLabel(sections[safeIndex]).title;
     }
 
     function cleanupSourceContainers(view, workspace) {
@@ -327,21 +332,56 @@
         }
 
         nav.innerHTML = '';
+        const useSectionPicker = sectionCount > 8;
+        workspace.classList.toggle('crm-workspace--many-tabs', useSectionPicker);
+        workspace.classList.toggle('crm-workspace--tabs', !useSectionPicker);
 
-        sections.forEach(function (section, index) {
-            const label = getSectionLabel(section);
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'crm-workspace__tab';
-            button.setAttribute('role', 'tab');
-            button.setAttribute('aria-selected', 'false');
-            button.innerHTML = '<span class="crm-workspace__tab-title">' + label.title + '</span>';
-            if (label.subtitle) button.title = label.subtitle;
-            button.addEventListener('click', function () {
-                activateWorkspaceTab(workspace, index);
+        if (useSectionPicker) {
+            nav.removeAttribute('role');
+            nav.setAttribute('aria-label', 'Выбор рабочего раздела');
+
+            const summary = document.createElement('div');
+            summary.className = 'crm-workspace__nav-summary';
+            const caption = document.createElement('span');
+            caption.textContent = 'Рабочий раздел';
+            const current = document.createElement('strong');
+            current.className = 'crm-workspace__current';
+            summary.append(caption, current);
+
+            const select = document.createElement('select');
+            select.className = 'crm-workspace__select auth-input';
+            select.setAttribute('aria-label', 'Рабочий раздел');
+            sections.forEach(function (section, index) {
+                const option = document.createElement('option');
+                option.value = String(index);
+                option.textContent = getSectionLabel(section).title;
+                select.appendChild(option);
             });
-            nav.appendChild(button);
-        });
+            select.addEventListener('change', function () {
+                activateWorkspaceTab(workspace, parseInt(select.value || '0', 10));
+            });
+            nav.append(summary, select);
+        } else {
+            nav.setAttribute('role', 'tablist');
+            nav.removeAttribute('aria-label');
+            sections.forEach(function (section, index) {
+                const label = getSectionLabel(section);
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'crm-workspace__tab';
+                button.setAttribute('role', 'tab');
+                button.setAttribute('aria-selected', 'false');
+                const title = document.createElement('span');
+                title.className = 'crm-workspace__tab-title';
+                title.textContent = label.title;
+                button.appendChild(title);
+                if (label.subtitle) button.title = label.subtitle;
+                button.addEventListener('click', function () {
+                    activateWorkspaceTab(workspace, index);
+                });
+                nav.appendChild(button);
+            });
+        }
 
         const preferredIndex = parseInt(workspace.dataset.crmWorkspaceActive || '0', 10);
         activateWorkspaceTab(workspace, Number.isFinite(preferredIndex) ? preferredIndex : 0);

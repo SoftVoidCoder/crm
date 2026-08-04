@@ -1,7 +1,7 @@
 import os, re, secrets, shutil, json, time, csv, io, hashlib
 import httpx
 from datetime import datetime
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Body
 from fastapi.responses import JSONResponse
 from database import (
     DB_NAME,
@@ -51,6 +51,7 @@ from services.analytics_ops_service import (
 from services.accounting_close_service import run_accounting_close_cycle
 from services.accounting_register_service import purge_registers_for_source, register_accounting_entry_by_id, rebuild_registers_for_source
 from services.client360_service import build_client_dossier
+from services.gemini_service import GeminiUnavailableError, format_call_analysis_summary, transcribe_call_audio
 from services.integration_sync_service import (
     build_finance_sync_payload as build_finance_sync_payload_service,
     build_purchase_sync_payload as build_purchase_sync_payload_service,
@@ -127,6 +128,19 @@ router = APIRouter()
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 MAX_PROJECT_UPLOAD_BYTES = int(os.getenv("KORDA_MAX_PROJECT_UPLOAD_BYTES", str(50 * 1024 * 1024)))
+MAX_TELEPHONY_RECORDING_BYTES = int(os.getenv("KORDA_MAX_TELEPHONY_RECORDING_BYTES", str(20 * 1024 * 1024)))
+TELEPHONY_RECORDINGS_DIR = os.path.join(UPLOADS_DIR, "telephony_recordings")
+TELEPHONY_AUDIO_MIME_TYPES = {
+    ".mp3": "audio/mp3",
+    ".wav": "audio/wav",
+    ".ogg": "audio/ogg",
+    ".flac": "audio/flac",
+    ".aac": "audio/aac",
+    ".m4a": "audio/mp4",
+    ".webm": "audio/webm",
+    ".aiff": "audio/aiff",
+    ".aif": "audio/aiff",
+}
 BLOCKED_PROJECT_UPLOAD_EXTENSIONS = {
     ".app",
     ".bat",
@@ -4380,7 +4394,14 @@ def _sync_production_order_rollup(conn, order_id: int):
                 COALESCE(SUM(CASE WHEN layer_type IN ('material','labor') THEN actual_amount ELSE 0 END), 0)
                 + COALESCE(SUM(CASE WHEN layer_type='overhead' THEN overhead_amount ELSE 0 END), 0)
             FROM production_cost_layers
-            WHERE production_order_id=? AND layer_type IN ('material', 'labor', 'overhead')
+            WHERE production_order_id=?
+              AND layer_type IN ('material', 'labor', 'overhead')
+              AND EXISTS (
+                  SELECT 1
+                  FROM production_operations operation
+                  WHERE operation.id=production_cost_layers.operation_id
+                    AND operation.order_id=production_cost_layers.production_order_id
+              )
             """,
             (order_id,),
         )
@@ -8316,11 +8337,13 @@ def get_finance_erp_summary(request: Request):
 
 
 @router.get("/api/finance/analytics")
-def get_finance_analytics(request: Request):
+def get_finance_analytics(request: Request, project_id: int = 0):
     actor = require_approved_user(request)
     if not actor or not has_permission(actor, "finance", "read"):
         return {"error": "forbidden"}
     rows = _filter_finance_rows_for_actor(actor, _load_finance_rows())
+    if _safe_int(project_id):
+        rows = [row for row in rows if _safe_int(row.get("project_id")) == _safe_int(project_id)]
     return _finance_analytics(rows)
 
 
@@ -13485,6 +13508,298 @@ def create_telephony_call(data: TelephonyCallData, request: Request):
     audit_log("telephony_call_created", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="telephony_call", entity_id=str(call_id), details={"client_id": resolved_client_id, "project_id": resolved_project_id, "status": data.status, "direction": data.direction, "auto_linked": int(result.get("auto_linked") or 0)})
     record_domain_event("telephony", "call_created", entity_type="telephony_call", entity_id=str(call_id), actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), payload={"client_id": resolved_client_id, "project_id": resolved_project_id, "auto_linked": int(result.get("auto_linked") or 0)})
     return {"status": "success", "id": call_id}
+
+
+def _phone_from_recording_filename(filename: str) -> str:
+    raw = str(filename or "")
+    match = re.search(r"(\+?\d[\d\s()_-]{8,}\d)", raw)
+    if not match:
+        return ""
+    phone = re.sub(r"[^\d+]", "", match.group(1))
+    if phone.startswith("8") and len(phone) == 11:
+        phone = "+7" + phone[1:]
+    if phone.startswith("7") and len(phone) == 11:
+        phone = "+" + phone
+    return phone
+
+
+def _looks_like_supported_audio(payload: bytes, extension: str) -> bool:
+    head = bytes(payload[:16])
+    if extension == ".wav":
+        return head.startswith(b"RIFF") and head[8:12] == b"WAVE"
+    if extension == ".mp3":
+        return head.startswith(b"ID3") or (len(head) >= 2 and head[0] == 0xFF and (head[1] & 0xE0) == 0xE0)
+    if extension == ".ogg":
+        return head.startswith(b"OggS")
+    if extension == ".flac":
+        return head.startswith(b"fLaC")
+    if extension == ".aac":
+        return len(head) >= 2 and head[0] == 0xFF and (head[1] & 0xF6) == 0xF0
+    if extension in {".aiff", ".aif"}:
+        return head.startswith(b"FORM") and head[8:12] in {b"AIFF", b"AIFC"}
+    if extension == ".m4a":
+        return len(head) >= 12 and head[4:8] == b"ftyp"
+    if extension == ".webm":
+        return head.startswith(b"\x1aE\xdf\xa3")
+    return False
+
+
+CALL_CONTROL_START = "[KORDA_CALL_CONTROL]"
+CALL_CONTROL_END = "[/KORDA_CALL_CONTROL]"
+CALL_CONTROL_ALLOWED_STATUSES = {"new", "transcribed", "needs_review", "processed", "follow_up", "converted", "lost"}
+CALL_CONTROL_ALLOWED_RESULTS = {"", "no_answer", "interested", "not_interested", "follow_up", "meeting", "quote", "complaint", "wrong_contact", "converted"}
+
+
+def _strip_call_control_block(summary: str) -> str:
+    text = str(summary or "")
+    pattern = re.compile(rf"\n*\s*{re.escape(CALL_CONTROL_START)}.*?{re.escape(CALL_CONTROL_END)}\s*", re.S)
+    return pattern.sub("\n", text).strip()
+
+
+def _build_call_control_block(payload: dict) -> str:
+    status = str(payload.get("processing_status") or "new").strip()
+    if status not in CALL_CONTROL_ALLOWED_STATUSES:
+        status = "new"
+    result = str(payload.get("call_result") or "").strip()
+    if result not in CALL_CONTROL_ALLOWED_RESULTS:
+        result = ""
+    control = {
+        "manager_name": str(payload.get("manager_name") or "").strip()[:160],
+        "processing_status": status,
+        "call_result": result,
+        "next_action": str(payload.get("next_action") or "").strip()[:700],
+        "manager_comment": str(payload.get("manager_comment") or "").strip()[:1200],
+        "updated_at": datetime.now().strftime("%d.%m.%Y %H:%M"),
+    }
+    return f"{CALL_CONTROL_START}{json.dumps(control, ensure_ascii=False, separators=(',', ':'))}{CALL_CONTROL_END}"
+
+
+def _summary_with_call_control(summary: str, payload: dict) -> str:
+    clean_summary = _strip_call_control_block(summary)
+    return f"{clean_summary}\n\n{_build_call_control_block(payload)}".strip()
+
+
+@router.put("/api/telephony/calls/{call_id}/control")
+def update_telephony_call_control(call_id: int, request: Request, payload: dict = Body(default={})):
+    actor = require_approved_user(request)
+    if not actor or not has_permission(actor, "chats", "update"):
+        return {"error": "forbidden"}
+    conn = get_connection(row_factory=True)
+    try:
+        c = conn.cursor()
+        c.execute("SELECT id, summary FROM telephony_calls WHERE id=?", (_safe_int(call_id),))
+        row = c.fetchone()
+        if not row:
+            return {"error": "not_found"}
+        existing_summary = row["summary"] if isinstance(row, dict) else row[1]
+        next_summary = _summary_with_call_control(existing_summary, payload or {})
+        c.execute("UPDATE telephony_calls SET summary=? WHERE id=?", (next_summary, _safe_int(call_id)))
+        conn.commit()
+    finally:
+        conn.close()
+    audit_log("telephony_call_control_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="telephony_call", entity_id=str(call_id), details={"processing_status": (payload or {}).get("processing_status", "")})
+    record_domain_event("telephony", "call_control_updated", entity_type="telephony_call", entity_id=str(call_id), actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), payload={"processing_status": (payload or {}).get("processing_status", "")})
+    return {"status": "success", "id": _safe_int(call_id)}
+
+
+@router.post("/api/telephony/calls/import_recordings")
+async def import_telephony_recordings(
+    request: Request,
+    files: list[UploadFile] = File(...),
+    line_name: str = Form("Bitrix24"),
+    provider_name: str = Form("Bitrix24"),
+    contact_name: str = Form(""),
+    phone_number: str = Form(""),
+    direction: str = Form("inbound"),
+    manager_name: str = Form(""),
+    manager_comment: str = Form(""),
+):
+    actor = require_approved_user(request)
+    if not actor or not has_permission(actor, "chats", "create"):
+        return {"error": "forbidden"}
+    if not files:
+        return {"error": "no_files"}
+
+    clean_line_name = (line_name or "Bitrix24").strip() or "Bitrix24"
+    clean_provider_name = (provider_name or "Bitrix24").strip() or "Bitrix24"
+    account_id = 0
+    conn = get_connection(row_factory=True)
+    try:
+        c = conn.cursor()
+        c.execute(
+            "SELECT id FROM telephony_accounts WHERE line_name=? AND provider_name=? ORDER BY id DESC LIMIT 1",
+            (clean_line_name, clean_provider_name),
+        )
+        row = c.fetchone()
+        account_id = _safe_int(row["id"] if isinstance(row, dict) else row[0]) if row else 0
+    finally:
+        conn.close()
+    if not account_id:
+        account_id = create_telephony_account_record_service(
+            get_connection=get_connection,
+            actor=actor,
+            data=TelephonyAccountData(line_name=clean_line_name, provider_name=clean_provider_name, external_line_id="bitrix-import", is_active=1),
+        )
+
+    os.makedirs(TELEPHONY_RECORDINGS_DIR, exist_ok=True)
+    results = []
+    created = 0
+    failed = 0
+    for upload in files[:20]:
+        original_name = _safe_upload_filename(upload.filename or "recording.mp3")
+        extension = os.path.splitext(original_name)[1].lower()
+        mime_type = TELEPHONY_AUDIO_MIME_TYPES.get(extension)
+        if not mime_type:
+            failed += 1
+            results.append({
+                "filename": original_name,
+                "status": "failed",
+                "error": "unsupported_audio_format",
+                "supported": sorted(TELEPHONY_AUDIO_MIME_TYPES.keys()),
+            })
+            continue
+        payload = await upload.read()
+        if not payload:
+            failed += 1
+            results.append({"filename": original_name, "status": "failed", "error": "empty_file"})
+            continue
+        if len(payload) > MAX_TELEPHONY_RECORDING_BYTES:
+            failed += 1
+            results.append({
+                "filename": original_name,
+                "status": "failed",
+                "error": "file_too_large",
+                "max_mb": round(MAX_TELEPHONY_RECORDING_BYTES / 1024 / 1024, 1),
+            })
+            continue
+        if not _looks_like_supported_audio(payload, extension):
+            failed += 1
+            results.append({
+                "filename": original_name,
+                "status": "failed",
+                "error": "invalid_audio_content",
+            })
+            continue
+
+        checksum = hashlib.sha256(payload).hexdigest()[:12]
+        stored_filename = f"{checksum}_{original_name}"
+        disk_path = os.path.join(TELEPHONY_RECORDINGS_DIR, stored_filename)
+        recording_url = f"/uploads/telephony_recordings/{stored_filename}"
+        conn = get_connection(row_factory=True)
+        try:
+            duplicate = conn.execute(
+                "SELECT id FROM telephony_calls WHERE recording_url=? ORDER BY id DESC LIMIT 1",
+                (recording_url,),
+            ).fetchone()
+        finally:
+            conn.close()
+        if duplicate:
+            duplicate_id = _safe_int(duplicate["id"] if isinstance(duplicate, dict) else duplicate[0])
+            results.append({
+                "filename": original_name,
+                "status": "duplicate",
+                "call_id": duplicate_id,
+                "recording_url": recording_url,
+            })
+            continue
+        with open(disk_path, "wb") as buffer:
+            buffer.write(payload)
+
+        try:
+            analysis = transcribe_call_audio(payload, mime_type, original_name)
+            base_summary = format_call_analysis_summary(analysis)
+            processing_status = "needs_review" if (
+                float(analysis.get("transcription_confidence") or 0) < 0.55
+                or float(analysis.get("role_confidence") or 0) < 0.55
+                or len(analysis.get("manager_errors") or []) > 0
+            ) else "transcribed"
+            disposition = {
+                "hot": "interested",
+                "warm": "interested",
+                "risk": "complaint",
+                "cold": "not_interested",
+            }.get(str(analysis.get("deal_signal") or "neutral"), "follow_up")
+            summary = _summary_with_call_control(base_summary, {
+                "manager_name": (manager_name or "").strip() or actor.get("name", ""),
+                "processing_status": processing_status,
+                "call_result": disposition,
+                "next_action": analysis.get("next_step", ""),
+                "manager_comment": (manager_comment or "").strip(),
+            })
+            inferred_phone = (phone_number or "").strip() or _phone_from_recording_filename(original_name)
+            call_record = create_telephony_call_record_service(
+                get_connection=get_connection,
+                actor=actor,
+                data=TelephonyCallData(
+                    account_id=account_id,
+                    client_id=0,
+                    project_id=0,
+                    contact_name=(contact_name or "").strip(),
+                    phone_number=inferred_phone,
+                    direction=direction if direction in {"inbound", "outbound"} else "inbound",
+                    status="answered",
+                    duration_sec=0,
+                    call_at=datetime.now().strftime("%d.%m.%Y %H:%M"),
+                    summary=summary,
+                    recording_url=recording_url,
+                ),
+                safe_int_fn=_safe_int,
+                now_timestamp=int(time.time()),
+                call_at=datetime.now().strftime("%d.%m.%Y %H:%M"),
+            )
+            call_id = _safe_int(call_record.get("id"))
+            created += 1
+            results.append({
+                "filename": original_name,
+                "status": "success",
+                "call_id": call_id,
+                "recording_url": recording_url,
+                "summary": analysis.get("summary", ""),
+                "deal_signal": analysis.get("deal_signal", "neutral"),
+                "role_confidence": analysis.get("role_confidence", 0),
+                "transcription_confidence": analysis.get("transcription_confidence", 0),
+                "manager_errors": analysis.get("manager_errors", []),
+                "dialog": analysis.get("dialog", [])[:12],
+                "manager_name": (manager_name or "").strip() or actor.get("name", ""),
+                "processing_status": processing_status,
+                "call_result": disposition,
+                "key_index": analysis.get("key_index"),
+            })
+            audit_log("telephony_recording_imported", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="telephony_call", entity_id=str(call_id), details={"filename": original_name, "provider": "gemini"})
+            record_domain_event("telephony", "recording_imported", entity_type="telephony_call", entity_id=str(call_id), actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), payload={"filename": original_name, "deal_signal": analysis.get("deal_signal", "neutral")})
+        except GeminiUnavailableError as exc:
+            try:
+                os.remove(disk_path)
+            except OSError:
+                pass
+            failed += 1
+            results.append({
+                "filename": original_name,
+                "status": "failed",
+                "recording_url": recording_url,
+                "error": "gemini_unavailable",
+                "details": str(exc)[:700],
+            })
+        except Exception as exc:
+            try:
+                os.remove(disk_path)
+            except OSError:
+                pass
+            failed += 1
+            results.append({
+                "filename": original_name,
+                "status": "failed",
+                "recording_url": recording_url,
+                "error": exc.__class__.__name__,
+            })
+
+    return {
+        "status": "success",
+        "created": created,
+        "failed": failed,
+        "total": len(results),
+        "results": results,
+    }
 
 
 @router.get("/api/analytics/reports")

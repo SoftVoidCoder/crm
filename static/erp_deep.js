@@ -54,8 +54,22 @@ function erpDeepTranslateLabel(value, fallback = '—') {
         incoming: 'Приход',
         outgoing: 'Расход',
         imported: 'Загружено',
+        accepted: 'Принято',
+        rejected: 'Отклонено',
+        retry: 'Повторная отправка',
+        sent: 'Отправлено',
+        pass: 'Пройдено',
+        ok: 'В норме',
+        reporting: 'Регламентированная отчётность',
+        tax: 'Налоговая отчётность',
+        regulated_report: 'Регламентированный отчёт',
+        vat_return: 'Декларация по НДС',
+        submit: 'Отправка отчёта',
+        status_sync: 'Обновление статуса',
+        system: 'Система',
     };
-    return map[raw] || raw;
+    if (map[raw]) return map[raw];
+    return /^[a-z0-9_]+$/i.test(raw) ? fallback : raw;
 }
 
 function erpDeepDisplayName(value, fallback = '') {
@@ -505,14 +519,19 @@ function renderAccountingDeepMount() {
                     <input id="accBankOrderAmountDeep" class="auth-input" style="margin:0;" placeholder="Сумма поручения">
                     <input id="accBankImportOrderIdDeep" class="auth-input" style="margin:0;" placeholder="Идентификатор поручения для импорта статуса">
                     <input id="accBankImportExternalDeep" class="auth-input" style="margin:0;" placeholder="Банковская ссылка / внешний идентификатор">
-                    <input id="accClosePeriodDeep" class="auth-input" style="margin:0;" placeholder="Период закрытия YYYY-MM" value="${erpDeepEscape(close.selected_period_key || new Date().toISOString().slice(0, 7))}">
+                    <input id="accClosePeriodDeep" class="auth-input" style="margin:0;" placeholder="Период закрытия ГГГГ-ММ" value="${erpDeepEscape(close.selected_period_key || new Date().toISOString().slice(0, 7))}">
                     <input id="accCloseCommentDeep" class="auth-input" style="margin:0;" placeholder="Комментарий к закрытию периода">
                     <input id="accExternalOperatorNameDeep" class="auth-input" style="margin:0;" placeholder="Оператор ЭДО / провайдер">
-                    <input id="accExternalApiDeep" class="auth-input" style="margin:0;" placeholder="API endpoint внешнего контура">
-                    <input id="accExternalNamespaceDeep" class="auth-input" style="margin:0;" placeholder="Пространство идемпотентности">
-                    <input id="accExternalOperatorIdDeep" class="auth-input" style="margin:0;" placeholder="ID оператора для отправки">
-                    <input id="accExternalReportTypeDeep" class="auth-input" style="margin:0;" placeholder="Тип отчёта, например vat_return">
-                    <input id="accExternalPeriodDeep" class="auth-input" style="margin:0;" placeholder="Период YYYY-MM" value="${erpDeepEscape(close.selected_period_key || new Date().toISOString().slice(0, 7))}">
+                    <input id="accExternalApiDeep" class="auth-input" style="margin:0;" placeholder="Адрес API внешнего контура">
+                    <input id="accExternalNamespaceDeep" class="auth-input" style="margin:0;" placeholder="Ключ защиты от повторной отправки">
+                    <input id="accExternalOperatorIdDeep" class="auth-input" style="margin:0;" placeholder="Номер оператора для отправки">
+                    <select id="accExternalReportTypeDeep" class="auth-input" style="margin:0;">
+                        <option value="vat_return">Декларация по НДС</option>
+                        <option value="balance_sheet">Бухгалтерский баланс</option>
+                        <option value="profit_and_loss">Отчёт о финансовых результатах</option>
+                        <option value="other">Прочий отчёт</option>
+                    </select>
+                    <input id="accExternalPeriodDeep" class="auth-input" style="margin:0;" placeholder="Период ГГГГ-ММ" value="${erpDeepEscape(close.selected_period_key || new Date().toISOString().slice(0, 7))}">
                 </div>
                 <div class="finance-actions-row" style="margin-top:12px;">
                     <button class="btn-secondary" onclick="saveAccountingManualDeep()">Ручная операция</button>
@@ -539,7 +558,7 @@ function renderAccountingDeepMount() {
             <section class="surface-card surface-card--padded ops-list-card">
                 <h3 class="section-title">Закрытие периода и регламентированный контур</h3>
                 <div class="client360-grid">
-                    <div class="surface-card surface-card--padded"><h3 class="section-title">Периоды и чек-лист</h3><div class="client360-list">${erpDeepSimpleRows((close.periods || []).slice(0, 8), item => `<div class="client360-item"><div><div class="client360-item-title">${erpDeepEscape(item.period_key || '')}</div><div class="client360-item-meta">${erpDeepEscape(erpDeepTranslateLabel(item.status || 'open', 'Открыт'))}</div></div><div class="client360-item-side">${item.closed_at ? new Date(Number(item.closed_at || 0) * 1000).toLocaleDateString('ru-RU') : 'open'}</div></div>`, 'Периоды пока не зарегистрированы.')}${erpDeepSimpleRows((close.checklist || []).slice(0, 8), item => `<div class="client360-item"><div><div class="client360-item-title">${erpDeepEscape(item.title || item.code || '')}</div><div class="client360-item-meta">${erpDeepEscape(item.message || '')}</div></div><div class="client360-item-side">${erpDeepEscape(erpDeepTranslateLabel(item.status || 'pass', 'Статус'))}</div></div>`, 'Чек-лист закрытия пока не собран.')}</div></div>
+                    <div class="surface-card surface-card--padded"><h3 class="section-title">Периоды и чек-лист</h3><div class="client360-list">${erpDeepSimpleRows((close.periods || []).slice(0, 8), item => `<div class="client360-item"><div><div class="client360-item-title">${erpDeepEscape(item.period_key || '')}</div><div class="client360-item-meta">${erpDeepEscape(erpDeepTranslateLabel(item.status || 'open', 'Открыт'))}</div></div><div class="client360-item-side">${item.closed_at ? new Date(Number(item.closed_at || 0) * 1000).toLocaleDateString('ru-RU') : 'Открыт'}</div></div>`, 'Периоды пока не зарегистрированы.')}${erpDeepSimpleRows((close.checklist || []).slice(0, 8), item => `<div class="client360-item"><div><div class="client360-item-title">${erpDeepEscape(item.title || item.code || '')}</div><div class="client360-item-meta">${erpDeepEscape(item.message || '')}</div></div><div class="client360-item-side">${erpDeepEscape(erpDeepTranslateLabel(item.status || 'pass', 'Статус'))}</div></div>`, 'Чек-лист закрытия пока не собран.')}</div></div>
                     <div class="surface-card surface-card--padded"><h3 class="section-title">Налоги и отчетность</h3><div class="client360-list">${erpDeepSimpleRows((close.tax_accruals || []).slice(0, 8), item => `<div class="client360-item"><div><div class="client360-item-title">${erpDeepEscape(item.tax_name || item.tax_type || '')}</div><div class="client360-item-meta">${erpDeepEscape(item.account_debit || '')} / ${erpDeepEscape(item.account_credit || '')} · ${erpDeepEscape(erpDeepTranslateLabel(item.status || 'draft', 'Черновик'))}</div></div><div class="client360-item-side">${erpDeepMoney(item.amount || 0)}</div></div>`, 'Налоговые начисления еще не сформированы.')}${erpDeepSimpleRows((close.report_snapshots || []).slice(0, 8), item => `<div class="client360-item"><div><div class="client360-item-title">${erpDeepEscape(item.report_name || item.report_type || '')}</div><div class="client360-item-meta">${Number(item.line_count || 0)} строк</div></div><div class="client360-item-side">${erpDeepMoney(item.amount_total || 0)}</div></div>`, 'Снимков отчетности пока нет.')}</div></div>
                     <div class="surface-card surface-card--padded"><h3 class="section-title">Сверка регистров и ОСВ</h3><div class="client360-list">${erpDeepSimpleRows((close.register_reconciliations || []).slice(0, 8), item => `<div class="client360-item"><div><div class="client360-item-title">${erpDeepEscape(item.register_name || '')}</div><div class="client360-item-meta">${erpDeepEscape(erpDeepTranslateLabel(item.status || 'ok', 'Ок'))}</div></div><div class="client360-item-side">${Number(item.mismatch_count || 0)}</div></div>`, 'Сверок регистров пока нет.')}${erpDeepSimpleRows((close.trial_balance || []).slice(0, 8), item => `<div class="client360-item"><div><div class="client360-item-title">${erpDeepEscape(item.account_code || '')} ${erpDeepEscape(item.account_name || '')}</div><div class="client360-item-meta">оборот ${erpDeepMoney(item.turnover_debit || 0)} / ${erpDeepMoney(item.turnover_credit || 0)}</div></div><div class="client360-item-side">${erpDeepMoney((item.closing_debit || 0) - (item.closing_credit || 0))}</div></div>`, 'ОСВ пока не собрана.')}</div></div>
                 </div>
@@ -550,7 +569,7 @@ function renderAccountingDeepMount() {
                     <div class="surface-card surface-card--padded">
                         <h3 class="section-title">Операторы и здоровье контура</h3>
                         <div class="client360-list">
-                            ${erpDeepSimpleRows((data.edo_operators || []).slice(0, 8), item => `<div class="client360-item client360-item--stack"><div class="client360-item-title">${erpDeepEscape(item.operator_name || item.provider_name || 'Оператор')}</div><div class="client360-item-meta">${erpDeepEscape(item.provider_name || '')} · ${erpDeepEscape(erpDeepTranslateLabel(item.status || 'active', 'Активный'))}</div><div class="client360-item-meta">${erpDeepEscape(item.contour_type || 'reporting')} · namespace ${erpDeepEscape(item.idempotency_namespace || '—')}</div><div class="client360-item-meta">${erpDeepEscape(item.api_endpoint || 'endpoint не задан')} · ошибок ${erpDeepEscape(item.last_error || 'нет')}</div></div>`, 'Операторы ЭДО пока не заведены.')}
+                            ${erpDeepSimpleRows((data.edo_operators || []).slice(0, 8), item => `<div class="client360-item client360-item--stack"><div class="client360-item-title">${erpDeepEscape(item.operator_name || item.provider_name || 'Оператор')}</div><div class="client360-item-meta">${erpDeepEscape(item.provider_name || '')} · ${erpDeepEscape(erpDeepTranslateLabel(item.status || 'active', 'Активный'))}</div><div class="client360-item-meta">Контур: ${erpDeepEscape(erpDeepTranslateLabel(item.contour_type || 'reporting', 'Отчётность'))} · пространство обмена: ${erpDeepEscape(item.idempotency_namespace || 'не задано')}</div><div class="client360-item-meta">Адрес подключения: ${erpDeepEscape(item.api_endpoint || 'не задан')} · последняя ошибка: ${erpDeepEscape(item.last_error || 'нет')}</div></div>`, 'Операторы ЭДО пока не заведены.')}
                             <div class="client360-item">
                                 <div>
                                     <div class="client360-item-title">Подписи и сертификаты</div>
@@ -563,13 +582,13 @@ function renderAccountingDeepMount() {
                     <div class="surface-card surface-card--padded">
                         <h3 class="section-title">Отправки и статусы</h3>
                         <div class="client360-list">
-                            ${erpDeepSimpleRows((data.external_submissions || []).slice(0, 10), item => `<div class="client360-item client360-item--stack"><div class="client360-item-title">${erpDeepEscape(item.report_type || 'regulated_report')} · ${erpDeepEscape(item.period_key || '')}</div><div class="client360-item-meta">${erpDeepEscape(item.operator_name || item.provider_name || 'Оператор')} · ${erpDeepEscape(erpDeepTranslateLabel(item.submission_status || 'queued', 'Статус'))}</div><div class="client360-item-meta">Протокол ${erpDeepEscape(item.protocol_number || '—')} · квитанция ${erpDeepEscape(item.receipt_number || '—')}</div><div class="view-actions" style="margin-top:8px;"><button class="btn-secondary" onclick="acceptAccountingExternalReportDeep(${Number(item.id || 0)})">Принять статус</button><button class="btn-secondary" onclick="retryAccountingExternalReportDeep(${Number(item.id || 0)})">Повторить</button></div></div>`, 'Отправок во внешний контур пока нет.')}
+                            ${erpDeepSimpleRows((data.external_submissions || []).slice(0, 10), item => `<div class="client360-item client360-item--stack"><div class="client360-item-title">${erpDeepEscape(erpDeepTranslateLabel(item.report_type || 'regulated_report', 'Регламентированный отчёт'))} · ${erpDeepEscape(item.period_key || '')}</div><div class="client360-item-meta">${erpDeepEscape(item.operator_name || item.provider_name || 'Оператор')} · ${erpDeepEscape(erpDeepTranslateLabel(item.submission_status || 'queued', 'Статус'))}</div><div class="client360-item-meta">Протокол ${erpDeepEscape(item.protocol_number || '—')} · квитанция ${erpDeepEscape(item.receipt_number || '—')}</div><div class="view-actions" style="margin-top:8px;"><button class="btn-secondary" onclick="acceptAccountingExternalReportDeep(${Number(item.id || 0)})">Принять статус</button><button class="btn-secondary" onclick="retryAccountingExternalReportDeep(${Number(item.id || 0)})">Повторить</button></div></div>`, 'Отправок во внешний контур пока нет.')}
                         </div>
                     </div>
                     <div class="surface-card surface-card--padded">
                         <h3 class="section-title">Журнал обмена</h3>
                         <div class="client360-list">
-                            ${erpDeepSimpleRows((data.external_events || []).slice(0, 12), item => `<div class="client360-item client360-item--stack"><div class="client360-item-title">${erpDeepEscape(item.event_type || 'event')} · ${erpDeepEscape(erpDeepTranslateLabel(item.status_after || '', 'Статус'))}</div><div class="client360-item-meta">${erpDeepEscape(item.message || 'Сообщение не заполнено')}</div><div class="client360-item-meta">${erpDeepEscape(item.created_by || 'system')} · ${Number(item.created_at || 0) ? new Date(Number(item.created_at || 0) * 1000).toLocaleString('ru-RU') : '—'}</div></div>`, 'Событий внешнего контура пока нет.')}
+                            ${erpDeepSimpleRows((data.external_events || []).slice(0, 12), item => `<div class="client360-item client360-item--stack"><div class="client360-item-title">${erpDeepEscape(erpDeepTranslateLabel(item.event_type || '', 'Событие обмена'))} · ${erpDeepEscape(erpDeepTranslateLabel(item.status_after || '', 'Статус'))}</div><div class="client360-item-meta">${erpDeepEscape(item.message || 'Сообщение не заполнено')}</div><div class="client360-item-meta">${erpDeepEscape(erpDeepTranslateLabel(item.created_by || 'system', item.created_by || 'Система'))} · ${Number(item.created_at || 0) ? new Date(Number(item.created_at || 0) * 1000).toLocaleString('ru-RU') : '—'}</div></div>`, 'Событий внешнего контура пока нет.')}
                         </div>
                     </div>
                 </div>

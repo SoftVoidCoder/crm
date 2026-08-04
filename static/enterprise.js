@@ -23,6 +23,9 @@ let bankAccountsOpsDB = [];
 let bankStatementLinesOpsDB = [];
 let telephonyAccountsOpsDB = [];
 let telephonyCallsOpsDB = [];
+let telephonySpeechRecognition = null;
+let telephonySpeechBaseText = '';
+let telephonyImportResultCache = null;
 let savedReportsOpsDB = [];
 let operationsReliabilityDB = null;
 let operationsRuntimeDB = null;
@@ -562,6 +565,8 @@ function enterpriseStatusLabel(value) {
         queued: 'В очереди',
         retry: 'Повтор',
         processing: 'Обработка',
+        collecting: 'Сбор данных',
+        ready: 'Готово к отправке',
         synced: 'Синхронизировано',
         failed: 'Ошибка',
         conflict: 'Конфликт',
@@ -1909,8 +1914,43 @@ function integrationEntityLabel(value) {
         bank_statement_lines: 'Строки банковской выписки',
         bi_reports: 'Аналитические витрины',
         reconciliation_runs: 'Прогоны сверки',
+        approval: 'Согласование',
+        edo_certificate: 'Сертификат ЭДО',
+        accounting_edo_operator: 'Оператор ЭДО',
+        accounting_external_submission: 'Отправка отчётности',
+        document_package: 'Пакет документов',
+        saved_report: 'Сохранённый отчёт',
     };
-    return labels[value] || value || 'Сущность';
+    const raw = String(value || '').trim();
+    if (labels[raw]) return labels[raw];
+    return /^[a-z0-9_]+$/i.test(raw) ? 'Системный объект' : (raw || 'Сущность');
+}
+
+function operationsEventTitleLabel(value) {
+    const raw = String(value || '').trim();
+    const labels = {
+        approval_action_applied: 'Выполнено действие по согласованию',
+        approval_created: 'Создано согласование',
+        edo_certificate_created: 'Добавлен сертификат ЭДО',
+        accounting_edo_operator_created: 'Добавлен оператор ЭДО',
+        accounting_external_submission_created: 'Отчёт отправлен во внешний контур',
+        accounting_external_submission_retried: 'Повторная отправка отчёта',
+        accounting_external_submission_synced: 'Обновлён статус отчёта',
+        document_package_created: 'Собран пакет документов',
+        document_package_sent_to_approval: 'Пакет отправлен на согласование',
+        document_package_signed: 'Пакет документов подписан',
+        login_success: 'Выполнен вход в систему',
+        project_created: 'Создан проект',
+        project_updated: 'Обновлён проект',
+        production_order_created: 'Создан производственный заказ',
+        finance_payment_created: 'Создан платёж',
+        sales_document_created: 'Создан документ продажи',
+        inventory_document_created: 'Создан складской документ',
+        stock_movement_created: 'Зарегистрировано складское движение',
+        saved_report_created: 'Создан сохранённый отчёт',
+    };
+    if (labels[raw]) return labels[raw];
+    return /^[a-z0-9_]+$/i.test(raw) ? 'Системное событие' : (raw || 'Событие');
 }
 
 function integrationIssueLabel(value) {
@@ -1919,6 +1959,7 @@ function integrationIssueLabel(value) {
         missing_local: 'нет локальной записи',
         missing_queue: 'нет записи в очереди обмена',
         missing_external_id: 'не присвоен внешний идентификатор',
+        no_sync_trace: 'нет записи об обмене',
         stale: 'зависшая запись',
         failed: 'ошибка обмена',
         conflict: 'конфликт данных',
@@ -1931,6 +1972,80 @@ function integrationIssueLabel(value) {
     return labels[value] || String(value || 'расхождение').replace(/_/g, ' ');
 }
 
+function operationsModuleLabel(value) {
+    const key = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    const labels = {
+        finance: 'Финансы',
+        warehouse: 'Склад',
+        stock: 'Склад',
+        production: 'Производство',
+        integrations: 'Интеграции',
+        integration: 'Интеграции',
+        security: 'Безопасность',
+        backup: 'Резервное копирование',
+        documents: 'Документы',
+        docflow: 'Документооборот',
+        crm: 'CRM',
+        telephony: 'Телефония',
+        bank: 'Банк',
+        accounting: 'Бухгалтерия',
+        sales: 'Продажи',
+        supply: 'Снабжение',
+    };
+    return labels[key] || 'Модуль системы';
+}
+
+function operationsJobLabel(value) {
+    const key = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    const labels = {
+        integration_sync_runner: 'Обмен с внешними системами',
+        backup_runner: 'Резервное копирование',
+        notification_runner: 'Уведомления',
+        mail_sync_runner: 'Синхронизация почты',
+        telephony_import_runner: 'Импорт звонков',
+        analytics_refresh_runner: 'Обновление аналитики',
+        recovery_runner: 'Восстановление данных',
+    };
+    return labels[key] || 'Фоновое задание';
+}
+
+function operationsSeverityLabel(value) {
+    const key = String(value || '').trim().toLowerCase();
+    return {
+        critical: 'критичный',
+        high: 'высокий',
+        warning: 'предупреждение',
+        medium: 'средний',
+        low: 'низкий',
+        info: 'информация',
+    }[key] || 'требует внимания';
+}
+
+function operationsIntegrityCodeLabel(value) {
+    const key = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    return {
+        orphan_accounting_entries: 'Проводки без связанного документа',
+        orphan_payments: 'Платежи без связанного основания',
+        orphan_documents: 'Документы без карточки клиента',
+        stale_locks: 'Зависшие блокировки',
+        failed_sync: 'Ошибки обмена',
+        missing_external_id: 'Нет внешнего идентификатора',
+        duplicate_external_id: 'Дубли внешних идентификаторов',
+    }[key] || 'Проверка целостности';
+}
+
+function integrityExampleLabel(example) {
+    if (!example || typeof example !== 'object') return 'Пример записи требует проверки';
+    const parts = [];
+    const entity = integrationEntityLabel(example.entity_type || example.table || example.kind || '');
+    if (entity && entity !== 'Сущность') parts.push(entity);
+    const id = example.id || example.entity_id || example.row_id || example.document_id || example.project_id || '';
+    if (id) parts.push(`#${id}`);
+    const title = example.title || example.name || example.contract || example.client || example.external_id || '';
+    if (title) parts.push(String(title).slice(0, 90));
+    return parts.length ? parts.join(' · ') : 'Пример записи требует проверки';
+}
+
 function lockAgeLabel(lock) {
     const seconds = Math.max(0, Math.round(Date.now() / 1000) - Number(lock?.locked_at || 0));
     if (seconds < 60) return `${seconds} сек`;
@@ -1938,8 +2053,297 @@ function lockAgeLabel(lock) {
     return `${Math.floor(seconds / 3600)} ч`;
 }
 
+function formatOperationsDuration(seconds) {
+    seconds = Number(seconds || 0);
+    if (!seconds) return '0 мин';
+    if (seconds < 3600) return `${Math.max(1, Math.round(seconds / 60))} мин`;
+    return `${Math.floor(seconds / 3600)} ч`;
+}
+
+function normalizeCallText(call) {
+    return String(call?.summary || '').trim();
+}
+
+function callTextHas(text, words) {
+    const lower = String(text || '').toLowerCase();
+    return words.some(word => lower.includes(word));
+}
+
+function analyzeTelephonyCall(call) {
+    const text = normalizeCallText(call);
+    const hasRecording = !!String(call?.recording_url || '').trim();
+    const hasTranscript = /транскрипт|расшифров|клиент:|менеджер:/i.test(text) || text.length > 180;
+    const isMissed = ['missed', 'failed'].includes(call?.status || '');
+    const isShort = Number(call?.duration_sec || 0) > 0 && Number(call?.duration_sec || 0) < 30;
+    const unlinked = !Number(call?.client_id || 0) && !Number(call?.project_id || 0);
+    const riskWords = ['жалоб', 'претенз', 'срыв', 'дорого', 'не интересно', 'неинтересно', 'конкурент', 'отказ', 'проблем', 'не работает'];
+    const interestWords = ['кп', 'коммерчес', 'счет', 'счёт', 'встреч', 'интерес', 'расчет', 'расчёт', 'тендер', 'пилот'];
+    const hasRisk = callTextHas(text, riskWords);
+    const hasInterest = callTextHas(text, interestWords);
+    const flags = [];
+    if (isMissed) flags.push('пропущен');
+    if (!hasRecording) flags.push('нет записи');
+    if (!hasTranscript) flags.push('нет расшифровки');
+    if (unlinked) flags.push('не привязан');
+    if (hasRisk) flags.push('риск');
+    if (hasInterest) flags.push('интерес');
+    let score = 100;
+    if (isMissed) score -= 35;
+    if (!hasRecording) score -= 15;
+    if (!hasTranscript) score -= 20;
+    if (unlinked) score -= 15;
+    if (isShort) score -= 10;
+    if (hasRisk) score -= 10;
+    if (hasInterest) score += 5;
+    score = Math.max(0, Math.min(100, score));
+    let tone = 'stable';
+    let nextAction = 'Зафиксировать итог и следующий шаг';
+    if (isMissed) {
+        tone = 'danger';
+        nextAction = 'Перезвонить и назначить ответственного';
+    } else if (hasRisk || unlinked || !hasTranscript) {
+        tone = 'attention';
+        nextAction = hasRisk ? 'Разобрать риск и поставить задачу' : 'Допривязать звонок и заполнить расшифровку';
+    } else if (hasInterest) {
+        tone = 'success';
+        nextAction = 'Перевести в лид или запланировать повторный контакт';
+    }
+    return { score, tone, flags, nextAction, hasRecording, hasTranscript, hasRisk, hasInterest, unlinked };
+}
+
+function callIntelligenceBadgeClass(tone) {
+    if (tone === 'danger') return 'status-overdue';
+    if (tone === 'attention') return 'status-active';
+    if (tone === 'success') return 'status-completed';
+    return 'status-archived';
+}
+
+const TELEPHONY_CALL_CONTROL_START = '[KORDA_CALL_CONTROL]';
+const TELEPHONY_CALL_CONTROL_END = '[/KORDA_CALL_CONTROL]';
+const TELEPHONY_PROCESSING_LABELS = {
+    new: 'Новый',
+    processing: 'Распознается',
+    transcribed: 'Расшифрован',
+    needs_review: 'Нужна проверка',
+    processed: 'Обработан',
+    follow_up: 'Повторный контакт',
+    converted: 'Переведён дальше',
+    lost: 'Потерян',
+};
+const TELEPHONY_RESULT_LABELS = {
+    no_answer: 'Не дозвонились',
+    interested: 'Есть интерес',
+    not_interested: 'Не интересно',
+    follow_up: 'Повторить контакт',
+    meeting: 'Встреча',
+    quote: 'Нужно КП',
+    complaint: 'Жалоба / риск',
+    wrong_contact: 'Не тот контакт',
+    converted: 'Переведён в лид/сделку',
+};
+
+function stripTelephonyControlBlock(summary) {
+    const text = String(summary || '');
+    const start = text.indexOf(TELEPHONY_CALL_CONTROL_START);
+    const end = text.indexOf(TELEPHONY_CALL_CONTROL_END);
+    if (start < 0 || end < start) return text.trim();
+    return `${text.slice(0, start)}${text.slice(end + TELEPHONY_CALL_CONTROL_END.length)}`.trim();
+}
+
+function parseTelephonyControl(summary) {
+    const text = String(summary || '');
+    const start = text.indexOf(TELEPHONY_CALL_CONTROL_START);
+    const end = text.indexOf(TELEPHONY_CALL_CONTROL_END);
+    if (start < 0 || end < start) return {};
+    const raw = text.slice(start + TELEPHONY_CALL_CONTROL_START.length, end).trim();
+    try {
+        const payload = JSON.parse(raw);
+        return payload && typeof payload === 'object' ? payload : {};
+    } catch (_) {
+        return {};
+    }
+}
+
+function telephonyProcessingBadgeClass(status) {
+    if (['processed', 'converted', 'transcribed'].includes(status)) return 'status-completed';
+    if (['needs_review', 'follow_up'].includes(status)) return 'status-active';
+    if (status === 'lost') return 'status-overdue';
+    return 'status-archived';
+}
+
+function telephonyManagerErrorsCount(summary) {
+    const match = String(summary || '').match(/Ошибки менеджера:\s*([\s\S]*)/i);
+    if (!match) return 0;
+    const block = match[1].split(TELEPHONY_CALL_CONTROL_START)[0] || '';
+    if (/Критичных ошибок не найдено/i.test(block)) return 0;
+    return block.split('\n').filter(line => line.trim().startsWith('-')).length;
+}
+
+function buildTelephonyControlBlock(payload) {
+    const control = {
+        manager_name: String(payload.manager_name || '').trim(),
+        processing_status: String(payload.processing_status || 'new').trim(),
+        call_result: String(payload.call_result || '').trim(),
+        next_action: String(payload.next_action || '').trim(),
+        manager_comment: String(payload.manager_comment || '').trim(),
+        updated_at: new Date().toLocaleString('ru-RU'),
+    };
+    return `${TELEPHONY_CALL_CONTROL_START}${JSON.stringify(control)}${TELEPHONY_CALL_CONTROL_END}`;
+}
+
+function buildTelephonySummaryWithControl(summary, payload) {
+    const clean = stripTelephonyControlBlock(summary);
+    return [clean, buildTelephonyControlBlock(payload)].filter(Boolean).join('\n\n');
+}
+
+function renderOperationsCallIntelligence() {
+    const mount = document.getElementById('operationsCallIntelligenceMount');
+    if (!mount) return;
+    const calls = Array.isArray(telephonyCallsOpsDB) ? telephonyCallsOpsDB : [];
+    const analyzed = calls.map(call => ({ call, analysis: analyzeTelephonyCall(call) }));
+    const recorded = analyzed.filter(item => item.analysis.hasRecording).length;
+    const transcribed = analyzed.filter(item => item.analysis.hasTranscript).length;
+    const processed = calls.filter(item => ['processed', 'converted'].includes(parseTelephonyControl(item.summary).processing_status || '')).length;
+    const needsReview = calls.filter(item => (parseTelephonyControl(item.summary).processing_status || '') === 'needs_review').length;
+    const managerErrors = calls.reduce((sum, item) => sum + telephonyManagerErrorsCount(item.summary), 0);
+    const risky = analyzed.filter(item => item.analysis.tone === 'danger' || item.analysis.hasRisk).length;
+    const unlinked = analyzed.filter(item => item.analysis.unlinked).length;
+    const avgScore = analyzed.length ? Math.round(analyzed.reduce((sum, item) => sum + item.analysis.score, 0) / analyzed.length) : 0;
+    const priorityCalls = analyzed
+        .sort((a, b) => a.analysis.score - b.analysis.score)
+        .slice(0, 6);
+    mount.innerHTML = `
+        <section class="ops-intelligence-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">ИИ-анализ звонков</h3>
+                    <p class="section-subtitle">Запись, голос в текст, качество фиксации разговора и сигналы для руководителя.</p>
+                </div>
+                <span class="ops-section-chip">ИИ-контроль</span>
+            </div>
+            <div class="ops-intelligence-metrics">
+                <div><span>Звонков</span><strong>${calls.length}</strong></div>
+                <div><span>С записью</span><strong>${recorded}</strong></div>
+                <div><span>Расшифровано</span><strong>${transcribed}</strong></div>
+                <div><span>Обработано</span><strong>${processed}</strong></div>
+                <div><span>Проверить</span><strong>${needsReview}</strong></div>
+                <div><span>Ошибки менеджеров</span><strong>${managerErrors}</strong></div>
+                <div><span>Риски</span><strong>${risky}</strong></div>
+                <div><span>Без привязки</span><strong>${unlinked}</strong></div>
+                <div><span>Качество</span><strong>${avgScore}%</strong></div>
+            </div>
+            <div class="ops-intelligence-list">
+                ${priorityCalls.length ? priorityCalls.map(({ call, analysis }) => `
+                    <div class="ops-intelligence-item">
+                        <div>
+                            <strong>${enterpriseEscape(call.contact_name || call.phone_number || 'Звонок')}</strong>
+                            <span>${enterpriseEscape(call.client_name || 'Клиент не определён')} · ${enterpriseEscape(call.line_name || 'без линии')} · ${formatOperationsDuration(call.duration_sec)}</span>
+                            <em>${enterpriseEscape(analysis.nextAction)}</em>
+                            <small>${analysis.flags.length ? analysis.flags.map(enterpriseEscape).join(' · ') : 'данные заполнены'}</small>
+                        </div>
+                        <span class="status-badge ${callIntelligenceBadgeClass(analysis.tone)}">${analysis.score}%</span>
+                    </div>
+                `).join('') : '<div class="empty-state">Звонков для анализа пока нет. Добавь запись или импортируй журнал телефонии.</div>'}
+            </div>
+        </section>
+    `;
+}
+
+function renderTelephonyImportResult() {
+    const mount = document.getElementById('telephonyImportResult');
+    if (!mount) return;
+    const payload = telephonyImportResultCache;
+    if (!payload) {
+        mount.innerHTML = '';
+        return;
+    }
+    const rows = Array.isArray(payload.results) ? payload.results : [];
+    mount.innerHTML = `
+        <section class="ops-intelligence-card telephony-import-result-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Результат распознавания записей</h3>
+                    <p class="section-subtitle">Создано ${payload.created || 0}, ошибок ${payload.failed || 0}, всего файлов ${payload.total || rows.length || 0}.</p>
+                </div>
+                <span class="ops-section-chip">ИИ-анализ</span>
+            </div>
+            <div class="ops-intelligence-list">
+                ${rows.length ? rows.map(item => {
+                    const ok = item.status === 'success';
+                    const duplicate = item.status === 'duplicate';
+                    const errors = Array.isArray(item.manager_errors) ? item.manager_errors : [];
+                    const dialog = Array.isArray(item.dialog) ? item.dialog : [];
+                    return `
+                        <div class="ops-intelligence-item telephony-import-result-row">
+                            <div>
+                                <strong>${enterpriseEscape(item.filename || 'recording')}</strong>
+                                <span>${ok ? `Звонок #${item.call_id || 0} · ${enterpriseEscape(item.manager_name || 'менеджер не указан')} · ${TELEPHONY_PROCESSING_LABELS[item.processing_status] || 'Расшифрован'} · ${TELEPHONY_RESULT_LABELS[item.call_result] || telephonyDealSignalLabel(item.deal_signal) || 'нужно уточнить'} · роли ${Math.round(Number(item.role_confidence || 0) * 100)}% · текст ${Math.round(Number(item.transcription_confidence || 0) * 100)}%` : duplicate ? `Такая запись уже есть в журнале · звонок #${item.call_id || 0}` : enterpriseEscape(telephonyImportErrorLabel(item.error || 'ошибка'))}</span>
+                                <em>${enterpriseEscape(item.summary || item.details || 'Подробности не получены')}</em>
+                                <small>${errors.length ? errors.map(err => `${err.type || 'ошибка'}: ${err.recommendation || ''}`).join(' · ') : (ok ? 'Критичных ошибок менеджера не найдено' : '')}</small>
+                                ${dialog.length ? `<small>${dialog.slice(0, 3).map(row => `${row.speaker === 'manager' ? 'Менеджер' : row.speaker === 'customer' ? 'Клиент' : 'Не определено'}: ${row.text || ''}`).join(' / ')}</small>` : ''}
+                            </div>
+                            <span class="status-badge ${ok || duplicate ? 'status-completed' : item.status === 'processing' ? 'status-active' : 'status-overdue'}">${ok ? 'готово' : duplicate ? 'уже загружено' : item.status === 'processing' ? 'идёт анализ' : 'ошибка'}</span>
+                        </div>
+                    `;
+                }).join('') : '<div class="empty-state">Результатов импорта пока нет.</div>'}
+            </div>
+        </section>
+    `;
+}
+
+function telephonyDealSignalLabel(value) {
+    return {
+        cold: 'холодный',
+        neutral: 'нейтральный',
+        warm: 'тёплый',
+        hot: 'горячий',
+        risk: 'риск',
+    }[String(value || '').trim()] || '';
+}
+
+function telephonyImportErrorLabel(value) {
+    return {
+        unsupported_audio_format: 'неподдерживаемый формат файла',
+        empty_file: 'пустой файл',
+        file_too_large: 'файл слишком большой',
+        invalid_audio_content: 'содержимое файла не похоже на аудиозапись',
+        too_many_files: 'за один раз можно загрузить не более 20 файлов',
+        gemini_unavailable: 'ИИ-сервис временно недоступен',
+        import_failed: 'не удалось загрузить файл',
+        forbidden: 'нет прав на загрузку звонков',
+        no_files: 'файлы не выбраны',
+    }[String(value || '').trim()] || 'не удалось распознать файл';
+}
+
+function promoteOperationsTelephonyPanel() {
+    // The operations workspace now has explicit tabs, so sections keep their
+    // stable DOM position instead of being moved during every render.
+}
+
+window.setOperationsTab = function(tabName, updateHash = true) {
+    const view = document.getElementById('operationsView');
+    if (!view) return;
+    const allowed = new Set(['calls', 'exchange', 'bank', 'reliability', 'reports']);
+    const target = allowed.has(tabName) ? tabName : 'calls';
+    window.__operationsActiveTab = target;
+    view.querySelectorAll('[data-operations-tab]').forEach(button => {
+        const active = button.dataset.operationsTab === target;
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    view.querySelectorAll('[data-operations-panel]').forEach(panel => {
+        const active = panel.dataset.operationsPanel === target;
+        panel.hidden = !active;
+        panel.classList.toggle('is-active', active);
+    });
+    if (updateHash) {
+        try { sessionStorage.setItem('korda_operations_tab', target); } catch (error) {}
+    }
+};
+
 async function renderOperationsCenter() {
     await loadOperationsCenterData();
+    promoteOperationsTelephonyPanel();
     renderOperationsRoleWorkbench();
     toggleRoleSecondarySections('operationsView', !!window.__operationsSecondaryExpanded);
     const cockpitTarget = document.getElementById('operationsCockpitMount');
@@ -1953,6 +2357,7 @@ async function renderOperationsCenter() {
     const runtimeList = document.getElementById('operationsRuntimeList');
     const eventStreamList = document.getElementById('operationsEventStreamList');
     if (!integrationList) return;
+    renderTelephonyImportResult();
 
     const renderList = (items, mapFn, emptyText) => (
         items && items.length ? items.map(mapFn).join('') : `<div class="empty-state">${emptyText}</div>`
@@ -1963,44 +2368,31 @@ async function renderOperationsCenter() {
     if (cockpitTarget) {
         const reliabilityMetrics = operationsReliabilityDB?.metrics || {};
         const mismatchTotal = reconciliationRunsDB.reduce((sum, run) => sum + Number(run.mismatch_count || 0), 0);
-        const unreconciledBank = bankStatementLinesOpsDB.filter(item => item.status !== 'reconciled').length;
-        const missedCalls = telephonyCallsOpsDB.filter(item => item.status === 'missed').length;
         cockpitTarget.innerHTML = `
-            <section class="surface-card surface-card--padded erp-cockpit-card">
+            <section class="operations-section operations-exchange-summary">
                 <div class="erp-cockpit-heading">
                     <div>
-                        <h3 class="section-title">Операционный cockpit</h3>
-                        <p class="section-subtitle">Короткий центр управления: что тормозит обмен, где несведение и какие операционные сигналы требуют реакции.</p>
+                        <h2 class="section-title">Состояние обмена с 1С</h2>
+                        <p class="section-subtitle">Главные показатели текущей синхронизации.</p>
                     </div>
-                    <span class="ops-section-chip">Пульт</span>
                 </div>
                 <div class="erp-cockpit-stats">
                     <div class="erp-cockpit-stat">
-                        <div class="erp-cockpit-label">Очередь / ошибки</div>
-                        <div class="erp-cockpit-value">${monitoringMetrics.queued || 0} / ${monitoringMetrics.failed || 0}</div>
+                        <div class="erp-cockpit-label">Ждут отправки</div>
+                        <div class="erp-cockpit-value">${monitoringMetrics.queued || 0}</div>
                     </div>
                     <div class="erp-cockpit-stat">
-                        <div class="erp-cockpit-label">Расхождения / зависания</div>
-                        <div class="erp-cockpit-value">${mismatchTotal} / ${monitoringMetrics.stale_processing || 0}</div>
+                        <div class="erp-cockpit-label">Ошибки</div>
+                        <div class="erp-cockpit-value">${monitoringMetrics.failed || 0}</div>
                     </div>
                     <div class="erp-cockpit-stat">
-                        <div class="erp-cockpit-label">Банк / пропущенные звонки</div>
-                        <div class="erp-cockpit-value">${unreconciledBank} / ${missedCalls}</div>
+                        <div class="erp-cockpit-label">Зависшие записи</div>
+                        <div class="erp-cockpit-value">${monitoringMetrics.stale_processing || 0}</div>
                     </div>
-                </div>
-            </section>
-            <section class="surface-card surface-card--padded erp-cockpit-card">
-                <div class="erp-cockpit-heading">
-                    <div>
-                        <h3 class="section-title">Надёжность за смену</h3>
-                        <p class="section-subtitle">Показывает, насколько жив основной контур и есть ли смысл идти в recovery прямо сейчас.</p>
+                    <div class="erp-cockpit-stat">
+                        <div class="erp-cockpit-label">Расхождения</div>
+                        <div class="erp-cockpit-value">${mismatchTotal}</div>
                     </div>
-                </div>
-                <div class="erp-cockpit-alerts">
-                    <div class="erp-cockpit-alert">Проверки контура: ${reliabilityMetrics.health_checks || 0}</div>
-                    <div class="erp-cockpit-alert">Проблемы целостности: ${reliabilityMetrics.integrity_issues || 0}</div>
-                    <div class="erp-cockpit-alert">Зависшие блокировки: ${reliabilityMetrics.stale_locks || 0}</div>
-                    <div class="erp-cockpit-alert">Кандидаты на восстановление: ${reliabilityMetrics.recovery_candidates || 0}</div>
                 </div>
             </section>
         `;
@@ -2113,36 +2505,48 @@ async function renderOperationsCenter() {
     }
 
     if (telephonyList) {
-        const accountsHtml = renderList(telephonyAccountsOpsDB.slice(0, 6), item => `
+        const callsHtml = renderList(telephonyCallsOpsDB.slice(0, 10), item => {
+            const analysis = analyzeTelephonyCall(item);
+            const control = parseTelephonyControl(item.summary);
+            const cleanSummary = stripTelephonyControlBlock(item.summary);
+            const managerName = control.manager_name || item.created_by || 'менеджер не указан';
+            const processingStatus = control.processing_status || (analysis.hasTranscript ? 'transcribed' : 'new');
+            const resultLabel = TELEPHONY_RESULT_LABELS[control.call_result] || 'результат не указан';
+            const nextAction = control.next_action || analysis.nextAction;
+            const managerComment = control.manager_comment || '';
+            const managerErrors = telephonyManagerErrorsCount(item.summary);
+            return `
             <div class="client360-item">
                 <div>
-                    <div class="client360-item-title">${item.line_name}</div>
-                    <div class="client360-item-meta">${item.provider_name || 'Провайдер?'} · ${item.external_line_id || 'без внешнего идентификатора'}</div>
+                    <div class="client360-item-title">${enterpriseEscape(item.contact_name || item.phone_number || 'Звонок')}</div>
+                    <div class="client360-item-meta">${enterpriseEscape(item.line_name || 'Без линии')} · ${operationsStateLabel(item.direction || 'inbound')} · ${item.call_at || 'время?'} · ${formatOperationsDuration(item.duration_sec)}</div>
+                    <div class="client360-item-meta">Менеджер: ${enterpriseEscape(managerName)} · ${resultLabel} · ошибок менеджера: ${managerErrors}</div>
+                    <div class="client360-item-meta">${enterpriseEscape(item.client_name || 'Клиент не определён')}${item.project_contract || item.project_name ? ` · ${enterpriseEscape(item.project_contract || item.project_name)}` : ''}</div>
+                    <div class="client360-item-meta">${enterpriseEscape(cleanSummary || 'Итог пока не заполнен')}</div>
+                    <div class="client360-item-meta">Следующий шаг: ${enterpriseEscape(nextAction || 'не задан')}</div>
+                    ${managerComment ? `<div class="client360-item-meta">Комментарий: ${enterpriseEscape(managerComment)}</div>` : ''}
+                    <div class="client360-item-meta">${item.recording_url ? 'Запись есть' : 'Без записи'} · ${analysis.hasTranscript ? 'расшифровка есть' : 'нет расшифровки'} · ${control.updated_at ? `контроль обновлён ${enterpriseEscape(control.updated_at)}` : 'контроль не обновлялся'}</div>
+                    ${item.recording_url ? `<audio class="telephony-audio" controls preload="none" src="${enterpriseEscape(item.recording_url)}"></audio>` : ''}
+                    ${cleanSummary ? `
+                        <details class="telephony-analysis-details">
+                            <summary>Расшифровка, роли и ошибки менеджера</summary>
+                            <pre>${enterpriseEscape(cleanSummary)}</pre>
+                        </details>
+                    ` : ''}
                 </div>
-                <div class="client360-item-side">${Number(item.is_active || 0) === 1 ? 'активна' : 'выкл'}</div>
-            </div>
-        `, 'Линии телефонии ещё не заведены.');
-        const callsHtml = renderList(telephonyCallsOpsDB.slice(0, 10), item => `
-            <div class="client360-item">
-                <div>
-                    <div class="client360-item-title">${item.contact_name || item.phone_number || 'Звонок'}</div>
-                    <div class="client360-item-meta">${item.line_name || 'Без линии'} · ${operationsStateLabel(item.direction || 'inbound')} · ${item.call_at || 'время?'}</div>
-                    <div class="client360-item-meta">${item.client_name || 'Клиент не определён'}${item.project_contract || item.project_name ? ` · ${item.project_contract || item.project_name}` : ''}</div>
-                    <div class="client360-item-meta">${item.summary || 'Итог пока не заполнен'}</div>
+                <div class="view-actions">
+                    <span class="status-badge ${telephonyProcessingBadgeClass(processingStatus)}">${TELEPHONY_PROCESSING_LABELS[processingStatus] || 'Новый'}</span>
+                    <span class="status-badge ${callIntelligenceBadgeClass(analysis.tone)}">${analysis.score}%</span>
+                    <span class="client360-item-side">${operationsStateLabel(item.status || 'answered')}</span>
+                    <button class="btn-secondary" onclick="quickUpdateTelephonyCall(${Number(item.id || 0)}, 'processed')">Обработан</button>
+                    <button class="btn-secondary" onclick="quickUpdateTelephonyCall(${Number(item.id || 0)}, 'follow_up')">Повтор</button>
+                    <button class="btn-secondary" onclick="quickUpdateTelephonyCall(${Number(item.id || 0)}, 'needs_review')">Проверить</button>
                 </div>
-                <div class="client360-item-side">${operationsStateLabel(item.status || 'answered')}</div>
-            </div>
-        `, 'Журнал звонков пока пуст.');
-        telephonyList.innerHTML = `
-            <div class="ops-inline-section">
-                <div class="ops-inline-title">Линии</div>
-                <div class="client360-list" style="margin-top:12px;">${accountsHtml}</div>
-            </div>
-            <div class="ops-inline-section" style="margin-top:16px;">
-                <div class="ops-inline-title">Последние звонки</div>
-                <div class="client360-list" style="margin-top:12px;">${callsHtml}</div>
             </div>
         `;
+        }, 'Журнал звонков пока пуст.');
+        telephonyList.innerHTML = callsHtml;
+        renderOperationsCallIntelligence();
     }
 
     if (reportsList) {
@@ -2159,7 +2563,7 @@ async function renderOperationsCenter() {
                     <button class="btn-danger" onclick="deleteOperationsSavedReport(${item.id})">Удалить</button>
                 </div>
             </div>
-        `, 'Сохранённых ERP-отчётов пока нет.');
+        `, 'Сохранённых операционных отчётов пока нет.');
     }
 
     if (reliabilityList) {
@@ -2177,20 +2581,20 @@ async function renderOperationsCenter() {
             ${renderList(moduleHealth, item => `
                 <div class="client360-item">
                     <div>
-                        <div class="client360-item-title">${item.module}</div>
-                        <div class="client360-item-meta">${item.summary || 'Без деталей'}</div>
+                        <div class="client360-item-title">${operationsModuleLabel(item.module)}</div>
+                        <div class="client360-item-meta">${enterpriseEscape(item.summary || 'Без деталей')}</div>
                     </div>
-                    <div class="client360-item-side">${item.status === 'ok' ? 'в норме' : item.status || 'ok'}</div>
+                    <div class="client360-item-side">${item.status === 'ok' ? 'в норме' : operationsSeverityLabel(item.status)}</div>
                 </div>
             `, 'Проверки состояния модулей пока пусты.')}
             ${renderList(integrityIssues, item => `
                 <div class="client360-item client360-item--stack">
-                    <div class="client360-item-title">${item.message}</div>
-                    <div class="client360-item-meta">${item.code} · уровень ${item.severity} · количество ${item.count}</div>
+                    <div class="client360-item-title">${enterpriseEscape(item.message || operationsIntegrityCodeLabel(item.code))}</div>
+                    <div class="client360-item-meta">${operationsIntegrityCodeLabel(item.code)} · уровень ${operationsSeverityLabel(item.severity)} · количество ${item.count}</div>
                     <div class="client360-list" style="margin-top:8px;">
                         ${(item.examples || []).slice(0, 3).map(example => `
                         <div class="client360-item">
-                                <div class="client360-item-meta">${enterpriseEscape(JSON.stringify(example).slice(0, 220))}</div>
+                                <div class="client360-item-meta">${enterpriseEscape(integrityExampleLabel(example))}</div>
                             </div>
                         `).join('') || '<div class="empty-state">Без примеров.</div>'}
                     </div>
@@ -2236,7 +2640,7 @@ async function renderOperationsCenter() {
                     ${renderList(jobRuns.slice(0, 8), item => `
                         <div class="client360-item">
                             <div>
-                                <div class="client360-item-title">${item.job_name}</div>
+                                <div class="client360-item-title">${operationsJobLabel(item.job_name)}</div>
                                 <div class="client360-item-meta">${jobGroupLabel(item.job_group)} · ${jobStatusLabel(item.status)}</div>
                                 <div class="client360-item-meta">последний сигнал ${new Date(Number(item.heartbeat_at || 0) * 1000).toLocaleString('ru-RU')}</div>
                             </div>
@@ -2286,13 +2690,18 @@ async function renderOperationsCenter() {
     if (eventStreamList) {
         eventStreamList.innerHTML = renderList(operationsEventStreamDB.slice(0, 20), item => `
             <div class="client360-item client360-item--stack">
-                <div class="client360-item-title">${enterpriseEscape(item.title || 'событие')}</div>
+                <div class="client360-item-title">${enterpriseEscape(operationsEventTitleLabel(item.title))}</div>
                 <div class="client360-item-meta">${enterpriseEscape(integrationEntityLabel(item.entity_type) || 'система')} · ${enterpriseEscape(item.entity_id || '')} · ${new Date(Number(item.timestamp || 0) * 1000).toLocaleString('ru-RU')}</div>
                 <div class="client360-item-meta">${enterpriseEscape(item.actor_name || item.actor_email || 'система')}</div>
                 <div class="client360-item-meta">${enterpriseEscape((item.message || '').slice(0, 220))}</div>
             </div>
         `, 'Событий пока нет.');
     }
+    let savedOperationsTab = window.__operationsActiveTab;
+    if (!savedOperationsTab) {
+        try { savedOperationsTab = sessionStorage.getItem('korda_operations_tab'); } catch (error) {}
+    }
+    setOperationsTab(savedOperationsTab || 'calls', false);
 }
 
 window.reloadOperationsCenter = async function() {
@@ -2384,6 +2793,193 @@ window.saveTelephonyAccount = async function() {
     showToast('Телефония', 'Линия сохранена');
 };
 
+window.prepareTelephonyDemoCall = function() {
+    const values = {
+        telephonyLineName: 'Отдел продаж',
+        telephonyProvider: 'Mango / demo',
+        telephonyManagerName: currentUser?.name || 'Анна менеджер',
+        telephonyContactName: 'Ирина Орлова',
+        telephonyPhone: '+7 927 333-78-90',
+        telephonyDirection: 'inbound',
+        telephonyCallStatus: 'answered',
+        telephonyDurationSec: '352',
+        telephonyCallSummary: 'Клиент запросил КП по шумозащитным кожухам, интерес к пилотному проекту, нужен расчет до пятницы.',
+        telephonyRecordingUrl: 'https://telephony.example.local/records/korda-demo-001.mp3',
+        telephonyProcessingStatus: 'transcribed',
+        telephonyCallResult: 'quote',
+        telephonyNextAction: 'Подготовить КП и запланировать повторный контакт на пятницу',
+        telephonyManagerComment: 'Клиент тёплый, просит быстро дать срок и цену.',
+        telephonyTranscript: 'Менеджер: Добрый день, компания Korda. Клиент: Нужен расчет по шумозащитным кожухам, бюджет около 3 млн, интересует срок и КП. Менеджер: Зафиксирую задачу и подготовлю предложение. Клиент: Жду до пятницы, если цена пройдет, готовы обсуждать пилот.',
+    };
+    Object.entries(values).forEach(([id, value]) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value;
+    });
+    showToast('Телефония', 'Демо-звонок подготовлен. Нажми «Звонок», чтобы сохранить.');
+};
+
+function setTelephonySpeechStatus(text, active = false) {
+    const status = document.getElementById('telephonySpeechStatus');
+    const startBtn = document.getElementById('telephonySpeechStartBtn');
+    const stopBtn = document.getElementById('telephonySpeechStopBtn');
+    if (status) {
+        status.textContent = text;
+        status.classList.toggle('is-active', !!active);
+    }
+    if (startBtn) startBtn.disabled = !!active;
+    if (stopBtn) stopBtn.disabled = !active;
+}
+
+window.startTelephonySpeechRecognition = function() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        customAlert('В этом браузере нет Web Speech Recognition. Открой CRM в Chrome или подключи серверный speech-to-text для записей.');
+        return;
+    }
+    const transcriptEl = document.getElementById('telephonyTranscript');
+    if (!transcriptEl) return customAlert('Поле расшифровки не найдено.');
+    if (telephonySpeechRecognition) {
+        try { telephonySpeechRecognition.stop(); } catch (_) {}
+        telephonySpeechRecognition = null;
+    }
+    telephonySpeechBaseText = String(transcriptEl.value || '').trim();
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'ru-RU';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onstart = () => setTelephonySpeechStatus('Распознаёт голос...', true);
+    recognition.onerror = event => {
+        const message = event?.error === 'not-allowed'
+            ? 'Нет доступа к микрофону'
+            : `Ошибка распознавания: ${event?.error || 'unknown'}`;
+        setTelephonySpeechStatus(message, false);
+    };
+    recognition.onend = () => {
+        telephonySpeechRecognition = null;
+        setTelephonySpeechStatus('Распознавание остановлено', false);
+    };
+    recognition.onresult = event => {
+        let finalText = '';
+        let interimText = '';
+        for (let i = 0; i < event.results.length; i += 1) {
+            const result = event.results[i];
+            const text = String(result?.[0]?.transcript || '').trim();
+            if (!text) continue;
+            if (result.isFinal) finalText += `${text}. `;
+            else interimText += `${text} `;
+        }
+        const parts = [telephonySpeechBaseText, finalText.trim(), interimText.trim()].filter(Boolean);
+        transcriptEl.value = parts.join('\n');
+    };
+    telephonySpeechRecognition = recognition;
+    recognition.start();
+};
+
+window.stopTelephonySpeechRecognition = function() {
+    if (!telephonySpeechRecognition) {
+        setTelephonySpeechStatus('Распознавание не запущено', false);
+        return;
+    }
+    try {
+        telephonySpeechRecognition.stop();
+    } catch (_) {
+        telephonySpeechRecognition = null;
+        setTelephonySpeechStatus('Распознавание остановлено', false);
+    }
+};
+
+window.openTelephonyFilePicker = function() {
+    const input = document.getElementById('telephonyRecordingFiles');
+    if (input) input.click();
+};
+
+window.updateTelephonyFileSelection = function() {
+    const input = document.getElementById('telephonyRecordingFiles');
+    const status = document.getElementById('telephonyFileSelectionStatus');
+    const panel = document.querySelector('.telephony-upload-panel');
+    const files = Array.from(input?.files || []);
+    if (panel) panel.classList.toggle('telephony-upload-panel--attention', false);
+    if (!status) return;
+    if (!files.length) {
+        status.textContent = 'Файлы не выбраны';
+        status.classList.remove('is-ready');
+        return;
+    }
+    const names = files.slice(0, 2).map(file => file.name).join(', ');
+    const tail = files.length > 2 ? ` и ещё ${files.length - 2}` : '';
+    status.textContent = `Выбрано: ${files.length} · ${names}${tail}`;
+    status.classList.add('is-ready');
+};
+
+window.importTelephonyRecordings = async function() {
+    const input = document.getElementById('telephonyRecordingFiles');
+    const files = Array.from(input?.files || []);
+    if (!files.length) {
+        const panel = document.querySelector('.telephony-upload-panel');
+        const status = document.getElementById('telephonyFileSelectionStatus');
+        if (panel) panel.classList.add('telephony-upload-panel--attention');
+        if (status) {
+            status.textContent = 'Сначала выбери записи звонков';
+            status.classList.remove('is-ready');
+        }
+        if (input) input.click();
+        return;
+    }
+    const formData = new FormData();
+    files.forEach(file => formData.append('files', file));
+    formData.append('line_name', (document.getElementById('telephonyLineName')?.value || 'Bitrix24').trim() || 'Bitrix24');
+    formData.append('provider_name', (document.getElementById('telephonyProvider')?.value || 'Bitrix24').trim() || 'Bitrix24');
+    formData.append('contact_name', (document.getElementById('telephonyContactName')?.value || '').trim());
+    formData.append('phone_number', (document.getElementById('telephonyPhone')?.value || '').trim());
+    formData.append('direction', document.getElementById('telephonyDirection')?.value || 'inbound');
+    formData.append('manager_name', (document.getElementById('telephonyManagerName')?.value || currentUser?.name || '').trim());
+    formData.append('manager_comment', (document.getElementById('telephonyManagerComment')?.value || '').trim());
+    telephonyImportResultCache = {
+        created: 0,
+        failed: 0,
+        total: files.length,
+        results: files.map(file => ({ filename: file.name, status: 'processing', summary: 'Файл отправлен на распознавание...' })),
+    };
+    renderTelephonyImportResult();
+    showToast('Телефония', `Отправлено файлов: ${files.length}`);
+    const result = await apiCall('/telephony/calls/import_recordings', 'POST', formData);
+    if (!result || result.error) {
+        telephonyImportResultCache = {
+            created: 0,
+            failed: files.length,
+            total: files.length,
+            results: files.map(file => ({ filename: file.name, status: 'failed', error: result?.message || result?.error || 'import_failed' })),
+        };
+        renderTelephonyImportResult();
+        return customAlert(result?.message || 'Не удалось распознать записи.');
+    }
+    telephonyImportResultCache = result;
+    if (input) input.value = '';
+    updateTelephonyFileSelection();
+    await renderOperationsCenter();
+    showToast('Телефония', `Распознано: ${result.created || 0}, ошибок: ${result.failed || 0}`);
+};
+
+window.quickUpdateTelephonyCall = async function(callId, processingStatus) {
+    const call = telephonyCallsOpsDB.find(item => Number(item.id || 0) === Number(callId || 0));
+    if (!call) return customAlert('Звонок не найден в текущем списке.');
+    const control = parseTelephonyControl(call.summary);
+    const payload = {
+        manager_name: control.manager_name || currentUser?.name || call.created_by || '',
+        processing_status: processingStatus || control.processing_status || 'processed',
+        call_result: control.call_result || (processingStatus === 'follow_up' ? 'follow_up' : ''),
+        next_action: control.next_action || (processingStatus === 'follow_up' ? 'Повторить контакт' : ''),
+        manager_comment: control.manager_comment || '',
+    };
+    if (processingStatus === 'needs_review' && !payload.manager_comment) {
+        payload.manager_comment = 'Нужна ручная проверка расшифровки или качества разговора.';
+    }
+    const res = await apiCall(`/telephony/calls/${Number(callId || 0)}/control`, 'PUT', payload);
+    if (!res || res.error) return customAlert(res?.message || res?.error || 'Не удалось обновить звонок.');
+    await renderOperationsCenter();
+    showToast('Телефония', 'Статус звонка обновлён');
+};
+
 window.saveTelephonyCall = async function() {
     const lineName = (document.getElementById('telephonyLineName')?.value || '').trim();
     const providerName = (document.getElementById('telephonyProvider')?.value || '').trim();
@@ -2391,6 +2987,26 @@ window.saveTelephonyCall = async function() {
     if (!accountId && telephonyAccountsOpsDB.length === 1) {
         accountId = Number(telephonyAccountsOpsDB[0].id || 0);
     }
+    if (!accountId && lineName && providerName) {
+        const accountRes = await apiCall('/telephony/accounts', 'POST', {
+            line_name: lineName,
+            provider_name: providerName,
+            external_line_id: '',
+            is_active: 1,
+        });
+        if (!accountRes || accountRes.error) return customAlert(accountRes?.error || 'Не удалось сохранить линию телефонии.');
+        accountId = Number(accountRes.id || 0);
+    }
+    const summary = (document.getElementById('telephonyCallSummary')?.value || '').trim();
+    const transcript = (document.getElementById('telephonyTranscript')?.value || '').trim();
+    const controlPayload = {
+        manager_name: (document.getElementById('telephonyManagerName')?.value || currentUser?.name || '').trim(),
+        processing_status: document.getElementById('telephonyProcessingStatus')?.value || (transcript ? 'transcribed' : 'new'),
+        call_result: document.getElementById('telephonyCallResult')?.value || '',
+        next_action: (document.getElementById('telephonyNextAction')?.value || '').trim(),
+        manager_comment: (document.getElementById('telephonyManagerComment')?.value || '').trim(),
+    };
+    const baseSummary = [summary, transcript ? `Транскрипт: ${transcript}` : ''].filter(Boolean).join('\n\n');
     const payload = {
         account_id: accountId,
         client_id: 0,
@@ -2400,15 +3016,21 @@ window.saveTelephonyCall = async function() {
         direction: document.getElementById('telephonyDirection')?.value || 'inbound',
         status: document.getElementById('telephonyCallStatus')?.value || 'answered',
         duration_sec: Number(document.getElementById('telephonyDurationSec')?.value || 0) || 0,
-        summary: (document.getElementById('telephonyCallSummary')?.value || '').trim(),
+        summary: buildTelephonySummaryWithControl(baseSummary, controlPayload),
+        recording_url: (document.getElementById('telephonyRecordingUrl')?.value || '').trim(),
     };
     if (!payload.contact_name && !payload.phone_number) return customAlert('Укажи хотя бы контакт или телефон.');
     const res = await apiCall('/telephony/calls', 'POST', payload);
     if (!res || res.error) return customAlert(res?.error || 'Не удалось сохранить звонок.');
-    ['telephonyContactName', 'telephonyPhone', 'telephonyDurationSec', 'telephonyCallSummary'].forEach(id => {
+    if (telephonySpeechRecognition) {
+        try { telephonySpeechRecognition.stop(); } catch (_) {}
+        telephonySpeechRecognition = null;
+    }
+    ['telephonyContactName', 'telephonyPhone', 'telephonyDurationSec', 'telephonyCallSummary', 'telephonyRecordingUrl', 'telephonyNextAction', 'telephonyManagerComment', 'telephonyTranscript'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
     });
+    setTelephonySpeechStatus('Ожидает запуска', false);
     await renderOperationsCenter();
     showToast('Телефония', 'Звонок сохранён');
 };

@@ -1147,8 +1147,10 @@ function renderFinanceJournal() {
         tbody.innerHTML = '<tr><td colspan="6" class="nsi-empty-row">Проводок пока нет.</td></tr>';
         return;
     }
-    tbody.innerHTML = financeJournalDB.map(item => `
-        <tr data-finance-id="${payment.id}" class="${typeof isWorkflowFocused === 'function' && isWorkflowFocused('finance', payment.id) ? 'workflow-row-highlight' : ''}">
+    tbody.innerHTML = financeJournalDB.map(item => {
+        const sourceId = Number(item.source_id || item.payment_id || 0);
+        return `
+        <tr ${sourceId ? `data-finance-id="${sourceId}"` : ''} class="${sourceId && typeof isWorkflowFocused === 'function' && isWorkflowFocused('finance', sourceId) ? 'workflow-row-highlight' : ''}">
             <td>${item.entry_date || '—'}</td>
             <td>
                 <div class="finance-row-title">${item.source_title || item.description || 'Финансовая операция'}</div>
@@ -1159,7 +1161,8 @@ function renderFinanceJournal() {
             <td>${item.period_key || '—'}</td>
             <td>${item.project_label || 'Без проекта'}<div class="finance-row-meta">${item.client_name || 'Без контрагента'} · ${item.treasury_article_name || 'Без статьи ДДС'}</div></td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
 }
 
 function renderFinancePeriodsAndControls() {

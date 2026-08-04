@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Korda CRM">
+  <rect width="64" height="64" rx="14" fill="#032d60"/>
+  <path d="M15 14h10v15l16-15h13L34 32l21 18H41L25 35v15H15V14z" fill="#ffffff"/>
+  <circle cx="49" cy="16" r="5" fill="#35c2ff"/>
+  <path d="M12 54h40" stroke="#35c2ff" stroke-width="4" stroke-linecap="round"/>
+</svg>

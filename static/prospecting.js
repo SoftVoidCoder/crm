@@ -17,6 +17,24 @@ let outreachReportExpanded = false;
 let outreachLastImportResult = null;
 let outreachImportPreview = null;
 
+const OUTREACH_KNOWLEDGE_BLOCKS = [
+    {
+        title: 'Адреса и реквизиты',
+        text: 'Единый источник для КП, писем, договоров и тендерных пакетов.',
+        items: ['юридический адрес', 'почтовый адрес', 'ИНН/КПП', 'типовая подпись'],
+    },
+    {
+        title: 'Шаблоны писем',
+        text: 'Готовые формулировки для первого касания, повторного письма и дожима тёплого клиента.',
+        items: ['первое письмо', 'follow-up', 'после звонка', 'запрос документов'],
+    },
+    {
+        title: 'Корпоративный стиль',
+        text: 'Одинаковый тон общения: коротко, по делу, без свободных обещаний и лишних скидок.',
+        items: ['тон письма', 'запрещённые формулировки', 'подпись', 'вложения'],
+    },
+];
+
 function outreachEscape(value) {
     return String(value ?? '')
         .replace(/&/g, '&amp;')
@@ -190,6 +208,66 @@ function outreachManagerConversion(row) {
     return { warmRate, leadRate, label: `${leadRate}%` };
 }
 
+function outreachManagerQuality(row) {
+    const plan = Number(row?.plan || 0);
+    const processed = Number(row?.processed || 0);
+    const overdue = Number(row?.overdue || 0);
+    const firstContactOverdue = Number(row?.first_contact_overdue || row?.firstContactOverdue || 0);
+    const calls = Number(row?.calls || 0);
+    const emails = Number(row?.emails || 0);
+    const submitted = !!row?.submitted;
+    const conversion = outreachManagerConversion(row);
+    const planRate = plan ? Math.min(140, Math.round((processed / plan) * 100)) : (processed ? 100 : 0);
+    const flags = [];
+    let score = 100;
+    if (!submitted) {
+        score -= 28;
+        flags.push('нет отчёта');
+    }
+    if (plan && processed < plan) {
+        score -= Math.min(28, Math.round(((plan - processed) / plan) * 28));
+        flags.push(`план ${planRate}%`);
+    }
+    if (overdue) {
+        score -= Math.min(20, overdue * 4);
+        flags.push(`просрочки ${overdue}`);
+    }
+    if (firstContactOverdue) {
+        score -= Math.min(18, firstContactOverdue * 6);
+        flags.push(`SLA ${firstContactOverdue}`);
+    }
+    if (processed > 0 && calls + emails === 0) {
+        score -= 10;
+        flags.push('нет касаний');
+    }
+    if (processed >= 5 && conversion.warmRate === 0) {
+        score -= 8;
+        flags.push('нет тёплых');
+    }
+    score = Math.max(0, Math.min(100, score));
+    const tone = score >= 82 ? 'positive' : score >= 62 ? 'attention' : 'critical';
+    const label = score >= 82 ? 'Хорошо' : score >= 62 ? 'Контроль' : 'Риск';
+    let recommendation = 'Оставить в плане, держит рабочий ритм.';
+    if (!submitted) recommendation = 'Потребовать дневной отчёт до конца дня.';
+    else if (firstContactOverdue) recommendation = 'Разобрать SLA первого касания и переназначить хвосты.';
+    else if (overdue) recommendation = 'Снять просрочки и поставить следующий шаг.';
+    else if (plan && processed < plan) recommendation = 'Дожать план-факт и зафиксировать причины отставания.';
+    else if (processed && !conversion.leadRate) recommendation = 'Проверить качество разговоров и тёплые переходы.';
+    return { score, tone, label, flags, recommendation, planRate };
+}
+
+function buildOutreachReportAnalysis(rows = []) {
+    const analyzed = rows.map(row => ({ row, quality: outreachManagerQuality(row) }));
+    const avgScore = analyzed.length ? Math.round(analyzed.reduce((sum, item) => sum + item.quality.score, 0) / analyzed.length) : 0;
+    return {
+        avgScore,
+        riskManagers: analyzed.filter(item => item.quality.score < 62).length,
+        needControl: analyzed.filter(item => item.quality.score >= 62 && item.quality.score < 82).length,
+        okManagers: analyzed.filter(item => item.quality.score >= 82).length,
+        topFlags: analyzed.flatMap(item => item.quality.flags).slice(0, 8),
+    };
+}
+
 function buildOutreachDepartmentMetrics(rows = []) {
     return rows.reduce((acc, row) => {
         acc.plan += Number(row.plan || 0);
@@ -239,6 +317,25 @@ function outreachRowHasProblem(row) {
     return noContact || noManager || !!row?.is_first_contact_overdue || noNextStep;
 }
 
+function outreachClientDossier(row) {
+    const activities = Array.isArray(row?.activities) ? row.activities : [];
+    const checks = [
+        { label: 'Компания', ok: !!String(row?.company_name || '').trim() },
+        { label: 'Контакт', ok: !!String(row?.contact_name || '').trim() },
+        { label: 'Телефон/email', ok: !!String(row?.phone || row?.email || '').trim() },
+        { label: 'Ответственный', ok: !!String(row?.manager_name || row?.manager_email || '').trim() },
+        { label: 'Источник', ok: !!String(row?.source_name || '').trim() },
+        { label: 'Следующий шаг', ok: !!String(row?.next_action || row?.next_action_date || '').trim() },
+        { label: 'История касаний', ok: activities.length > 0 },
+        { label: 'Комментарий', ok: !!String(row?.notes || '').trim() },
+    ];
+    const ready = checks.filter(item => item.ok).length;
+    const score = Math.round((ready / checks.length) * 100);
+    const tone = score >= 80 ? 'positive' : score >= 55 ? 'attention' : 'critical';
+    const missing = checks.filter(item => !item.ok).map(item => item.label.toLowerCase());
+    return { checks, score, tone, missing };
+}
+
 function buildOutreachLossReasons() {
     const rows = Array.isArray(outreachProspectsDB) ? outreachProspectsDB : [];
     const quality = buildOutreachQualityMetrics();
@@ -249,6 +346,25 @@ function buildOutreachLossReasons() {
         duplicates: quality.duplicates,
         archived: rows.filter(row => String(row.status || '') === 'archived').length,
     };
+}
+
+function buildOutreachImportProtocol(source) {
+    const latest = source || outreachImportPreview || outreachLastImportResult || (outreachImportsDB || [])[0] || null;
+    if (!latest) return [];
+    const rowsTotal = Number(latest.rows_total ?? latest.rows ?? 0);
+    const recognized = Number(latest.recognized_columns || 0);
+    const totalColumns = Number(latest.columns_total || 0);
+    const created = Number(latest.created_total ?? latest.created ?? 0);
+    const updated = Number(latest.updated_total ?? latest.updated ?? 0);
+    const skipped = Number(latest.skipped_total ?? latest.skipped ?? latest.problem_rows ?? 0);
+    const problemRows = Number(latest.problem_rows ?? skipped);
+    return [
+        { label: 'Файл прочитан', ok: rowsTotal > 0, value: `${rowsTotal} строк` },
+        { label: 'Колонки распознаны', ok: !totalColumns || recognized >= Math.min(totalColumns, 6), value: totalColumns ? `${recognized}/${totalColumns}` : 'история' },
+        { label: 'Дубли обработаны', ok: updated >= 0, value: `${updated} обновлено` },
+        { label: 'Новые записи созданы', ok: created > 0 || updated > 0, value: `${created} создано` },
+        { label: 'Проблемные строки выделены', ok: problemRows === 0, value: `${problemRows} проблем` },
+    ];
 }
 
 function outreachCsvEscape(value) {
@@ -277,6 +393,7 @@ function exportOutreachDirectorReport() {
     const dateKey = outreachToday().replace(/\./g, '-');
     const managerRows = rows.map(row => {
         const conversion = outreachManagerConversion(row);
+        const managerQuality = outreachManagerQuality(row);
         return {
             'Менеджер': row.name || row.email || 'Без имени',
             'Email': row.email || '',
@@ -290,6 +407,9 @@ function exportOutreachDirectorReport() {
             'Лиды': Number(row.leads || 0),
             'Конверсия в лид, %': Number(conversion.leadRate || 0),
             'Отчёт': row.submitted ? 'Сдан' : 'Нет',
+            'Качество, %': managerQuality.score,
+            'Контрольные флаги': managerQuality.flags.join(', '),
+            'Рекомендация': managerQuality.recommendation,
         };
     });
     if (window.XLSX?.utils && window.XLSX?.writeFile) {
@@ -329,7 +449,7 @@ function exportOutreachDirectorReport() {
         return;
     }
     const headers = Object.keys(managerRows[0] || {
-        'Менеджер': '', 'Email': '', 'План': '', 'Обработано': '', 'Звонки': '', 'Письма': '', 'Просрочено': '', 'SLA 24ч нарушено': '', 'Тёплые': '', 'Лиды': '', 'Конверсия в лид, %': '', 'Отчёт': '',
+        'Менеджер': '', 'Email': '', 'План': '', 'Обработано': '', 'Звонки': '', 'Письма': '', 'Просрочено': '', 'SLA 24ч нарушено': '', 'Тёплые': '', 'Лиды': '', 'Конверсия в лид, %': '', 'Отчёт': '', 'Качество, %': '', 'Контрольные флаги': '', 'Рекомендация': '',
     });
     const csv = [headers.join(';')]
         .concat(managerRows.map(row => headers.map(header => outreachCsvEscape(row[header])).join(';')))
@@ -515,6 +635,7 @@ function renderOutreachDirectorPanel() {
     const quality = buildOutreachQualityMetrics();
     const loss = buildOutreachLossReasons();
     const pushList = buildOutreachPushList();
+    const reportAnalysis = buildOutreachReportAnalysis(rows);
     const departmentPlanFact = dept.plan ? Math.round((dept.processed / dept.plan) * 100) : 0;
     mount.innerHTML = `
         <section class="prospecting-control-panel">
@@ -537,6 +658,7 @@ function renderOutreachDirectorPanel() {
                 <div><span>Лиды</span><strong>${dept.leads}</strong></div>
                 <div><span>Просрочки</span><strong>${dept.overdue}</strong></div>
                 <div><span>SLA 24ч</span><strong>${dept.firstContactOverdue}</strong></div>
+                <div><span>Качество отчётов</span><strong>${reportAnalysis.avgScore}%</strong><small>${reportAnalysis.riskManagers} в риске</small></div>
             </div>
             <div class="prospecting-control-layout">
                 <div class="table-shell prospecting-control-table">
@@ -554,11 +676,13 @@ function renderOutreachDirectorPanel() {
                                 <th class="is-num">Лиды</th>
                                 <th>Конверсия</th>
                                 <th>Отчёт</th>
+                                <th>Качество</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${rows.map(row => {
                                 const conversion = outreachManagerConversion(row);
+                                const managerQuality = outreachManagerQuality(row);
                                 return `
                                 <tr>
                                     <td class="crm-title-cell"><strong>${outreachEscape(row.name || row.email || 'Без имени')}</strong><div class="table-subtext">${outreachEscape(row.email || 'email не указан')}</div></td>
@@ -572,12 +696,28 @@ function renderOutreachDirectorPanel() {
                                     <td class="is-num">${row.leads}</td>
                                     <td><span class="crm-inline-pill crm-inline-pill--${conversion.leadRate ? 'positive' : conversion.warmRate ? 'attention' : 'neutral'}">${conversion.label}</span><div class="table-subtext">${row.processed} / ${row.warm} / ${row.leads}</div></td>
                                     <td><span class="crm-inline-pill crm-inline-pill--${row.submitted ? 'positive' : 'critical'}">${row.submitted ? 'Сдан' : 'Нет'}</span></td>
+                                    <td>
+                                        <span class="crm-inline-pill crm-inline-pill--${managerQuality.tone}">${managerQuality.score}% · ${outreachEscape(managerQuality.label)}</span>
+                                        <div class="table-subtext">${outreachEscape(managerQuality.recommendation)}</div>
+                                    </td>
                                 </tr>
-                            `; }).join('') || '<tr><td colspan="11"><div class="empty-state">Менеджеры пока не назначены.</div></td></tr>'}
+                            `; }).join('') || '<tr><td colspan="12"><div class="empty-state">Менеджеры пока не назначены.</div></td></tr>'}
                         </tbody>
                     </table>
                 </div>
                 <div class="prospecting-control-side">
+                    <div class="prospecting-quality-card">
+                        <div class="prospecting-side-title">Автоанализ отчётов</div>
+                        <div class="prospecting-quality-grid">
+                            <div><span>Среднее качество</span><strong>${reportAnalysis.avgScore}%</strong></div>
+                            <div><span>В риске</span><strong>${reportAnalysis.riskManagers}</strong></div>
+                            <div><span>На контроле</span><strong>${reportAnalysis.needControl}</strong></div>
+                            <div><span>Без замечаний</span><strong>${reportAnalysis.okManagers}</strong></div>
+                        </div>
+                        <div class="prospecting-mini-list">
+                            ${reportAnalysis.topFlags.map(flag => `<span>${outreachEscape(flag)}</span>`).join('') || '<span>Критичных флагов нет</span>'}
+                        </div>
+                    </div>
                     <div class="prospecting-quality-card">
                         <div class="prospecting-side-title">Качество базы</div>
                         <div class="prospecting-quality-grid">
@@ -610,6 +750,57 @@ function renderOutreachDirectorPanel() {
                                 <span>${outreachEscape(outreachStatusLabel(row.status))} · ${outreachEscape(row.next_action_date || row.planned_contact_date || 'без даты')}</span>
                             </button>
                         `).join('') || '<div class="empty-state">Нет срочных клиентов на дожим.</div>'}
+                    </div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+function askOutreachAssistant(text) {
+    const prompt = String(text || '').trim();
+    if (!prompt) return;
+    if (window.kordaAssistant?.ask) {
+        window.kordaAssistant.ask(prompt);
+    } else if (window.crmAssistantAsk) {
+        window.crmAssistantAsk(prompt);
+    } else {
+        customAlert('Ассистент пока не загружен.');
+    }
+}
+
+function renderOutreachKnowledgePanel() {
+    const mount = document.getElementById('outreachKnowledgePanel');
+    if (!mount) return;
+    mount.innerHTML = `
+        <section class="prospecting-knowledge-card">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">Единая база менеджера</h3>
+                    <p class="section-subtitle">Адреса, шаблоны писем, стиль общения и подсказки бота для обработки холодной базы.</p>
+                </div>
+                <div class="crm-toolbar__group">
+                    <button class="btn-secondary" onclick="askOutreachAssistant('Как менеджеру сегодня обработать назначенную базу развития?')">Спросить бота</button>
+                    <button class="btn-secondary" onclick="askOutreachAssistant('Покажи шаблон первого письма клиенту из базы развития')">Шаблон письма</button>
+                </div>
+            </div>
+            <div class="prospecting-knowledge-grid">
+                ${OUTREACH_KNOWLEDGE_BLOCKS.map(block => `
+                    <div class="prospecting-knowledge-block">
+                        <strong>${outreachEscape(block.title)}</strong>
+                        <p>${outreachEscape(block.text)}</p>
+                        <div class="prospecting-mini-list">
+                            ${block.items.map(item => `<span>${outreachEscape(item)}</span>`).join('')}
+                        </div>
+                    </div>
+                `).join('')}
+                <div class="prospecting-knowledge-block prospecting-knowledge-block--accent">
+                    <strong>Умный бот по системе</strong>
+                    <p>Отвечает по CRM: где база, что нажать, кому назначено, какие сроки и что показать директору.</p>
+                    <div class="prospecting-mini-list">
+                        <button type="button" onclick="askOutreachAssistant('Что мне сегодня контролировать в базе развития?')">контроль дня</button>
+                        <button type="button" onclick="askOutreachAssistant('Кто не сдал отчёт сегодня по менеджерам?')">отчёты</button>
+                        <button type="button" onclick="askOutreachAssistant('Как проверить качество импортированной базы?')">проверка базы</button>
                     </div>
                 </div>
             </div>
@@ -745,11 +936,22 @@ function renderOutreachImportResult() {
     const created = Number(latest.created_total ?? latest.created ?? 0);
     const updated = Number(latest.updated_total ?? latest.updated ?? 0);
     const skipped = Number(latest.skipped_total ?? latest.skipped ?? 0);
+    const protocol = buildOutreachImportProtocol(latest);
     mount.innerHTML = `
         <div class="prospecting-import-result__item"><span>Загружено</span><strong>${rowsTotal}</strong></div>
         <div class="prospecting-import-result__item"><span>Создано</span><strong>${created}</strong></div>
         <div class="prospecting-import-result__item"><span>Обновлено дублей</span><strong>${updated}</strong></div>
         <div class="prospecting-import-result__item"><span>Пропущено</span><strong>${skipped}</strong></div>
+        <div class="prospecting-import-protocol">
+            <div class="prospecting-side-title">Протокол проверки загрузки</div>
+            ${protocol.map(item => `
+                <div class="prospecting-protocol-row">
+                    <span class="crm-inline-pill crm-inline-pill--${item.ok ? 'positive' : 'critical'}">${item.ok ? 'OK' : 'Проверить'}</span>
+                    <strong>${outreachEscape(item.label)}</strong>
+                    <small>${outreachEscape(item.value)}</small>
+                </div>
+            `).join('')}
+        </div>
     `;
 }
 
@@ -766,6 +968,7 @@ function renderOutreachImportPreview() {
     const problemRows = Number(preview.problem_rows ?? preview.skipped ?? 0);
     const tone = problemRows ? 'critical' : 'positive';
     const columnsLabel = total ? `${recognized} из ${total}` : '0';
+    const protocol = buildOutreachImportProtocol(preview);
     mount.innerHTML = `
         <div class="prospecting-preview-head">
             <div>
@@ -783,6 +986,16 @@ function renderOutreachImportPreview() {
         ${(preview.problems || []).length ? `<div class="prospecting-preview-problems">
             ${(preview.problems || []).slice(0, 6).map(item => `<span>Строка ${Number(item.row || 0)}: ${outreachEscape(item.reason || 'ошибка')}</span>`).join('')}
         </div>` : ''}
+        <div class="prospecting-import-protocol">
+            <div class="prospecting-side-title">Тест перед загрузкой</div>
+            ${protocol.map(item => `
+                <div class="prospecting-protocol-row">
+                    <span class="crm-inline-pill crm-inline-pill--${item.ok ? 'positive' : 'critical'}">${item.ok ? 'OK' : 'Проверить'}</span>
+                    <strong>${outreachEscape(item.label)}</strong>
+                    <small>${outreachEscape(item.value)}</small>
+                </div>
+            `).join('')}
+        </div>
     `;
 }
 
@@ -800,6 +1013,7 @@ function syncOutreachFilterControls() {
 function renderOutreachDetail(row) {
     if (!row) return `<div class="empty-state">Выбери карточку из реестра или создай новую запись.</div>`;
     const activities = Array.isArray(row.activities) ? row.activities : [];
+    const dossier = outreachClientDossier(row);
     return `
         <div class="crm-detail-card prospecting-detail-card">
             <div class="crm-detail-head">
@@ -831,6 +1045,26 @@ function renderOutreachDetail(row) {
             </div>
             <div class="crm-tags">${(row.tags || []).map(tag => `<span class="crm-tag">${outreachEscape(tag)}</span>`).join('') || '<span class="crm-tag">Без тегов</span>'}</div>
             <div class="crm-detail-note">${outreachEscape(row.notes || 'Комментарий не заполнен.')}</div>
+            <div class="crm-activity-block">
+                <div class="section-header">
+                    <div>
+                        <h3 class="section-title">Досье клиента</h3>
+                        <p class="section-subtitle">Проверка полноты данных перед переводом в лид, клиента 360 или документооборот.</p>
+                    </div>
+                    <span class="crm-inline-pill crm-inline-pill--${dossier.tone}">${dossier.score}% готово</span>
+                </div>
+                <div class="prospecting-dossier-grid">
+                    ${dossier.checks.map(check => `
+                        <div class="prospecting-dossier-item">
+                            <span class="crm-inline-pill crm-inline-pill--${check.ok ? 'positive' : 'neutral'}">${check.ok ? 'Есть' : 'Нет'}</span>
+                            <strong>${outreachEscape(check.label)}</strong>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="prospecting-dossier-note">
+                    ${dossier.missing.length ? `Дозаполнить: ${outreachEscape(dossier.missing.join(', '))}.` : 'Карточка готова для дальнейшей работы.'}
+                </div>
+            </div>
             <div class="crm-activity-block">
                 <div class="section-header">
                     <div>
@@ -1343,6 +1577,7 @@ async function renderProspecting(forceReload = false) {
     syncOutreachFilterControls();
     renderOutreachSummary();
     renderOutreachDirectorPanel();
+    renderOutreachKnowledgePanel();
     renderOutreachReportPanel();
     const overdueBtn = document.getElementById('outreachOverdueBtn');
     const todayBtn = document.getElementById('outreachTodayBtn');
@@ -1373,6 +1608,7 @@ window.resetOutreachFilters = resetOutreachFilters;
 window.previewOutreachImport = previewOutreachImport;
 window.importOutreachFile = importOutreachFile;
 window.exportOutreachDirectorReport = exportOutreachDirectorReport;
+window.askOutreachAssistant = askOutreachAssistant;
 window.applyOutreachBulkAction = applyOutreachBulkAction;
 window.saveOutreachActivity = saveOutreachActivity;
 window.saveOutreachReport = saveOutreachReport;

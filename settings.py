@@ -21,6 +21,14 @@ DADATA_TOKEN = os.getenv("KORDA_DADATA_TOKEN", "").strip()
 DADATA_SECRET = os.getenv("KORDA_DADATA_SECRET", "").strip()
 KORDA_GEMINI_API_KEYS = os.getenv("KORDA_GEMINI_API_KEYS", "").strip()
 KORDA_AI_MODEL = os.getenv("KORDA_AI_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash"
+KORDA_AI_MODELS = os.getenv(
+    "KORDA_AI_MODELS",
+    f"{KORDA_AI_MODEL},gemini-3.1-flash-lite,gemini-2.5-flash",
+).strip()
+KORDA_AUDIO_AI_MODELS = os.getenv(
+    "KORDA_AUDIO_AI_MODELS",
+    os.getenv("KORDA_AUDIO_AI_MODEL", f"{KORDA_AI_MODEL},gemini-3.1-flash-lite,gemini-2.5-flash"),
+).strip()
 KORDA_AI_TIMEOUT_SECONDS = max(5, int(os.getenv("KORDA_AI_TIMEOUT_SECONDS", "8")))
 
 

@@ -172,6 +172,13 @@ function navigateTo(view, triggerRender = true) {
         return;
     }
     const previousView = window.__navCurrentView || '';
+    if (
+        previousView === 'accounting'
+        && nextView !== 'accounting'
+        && typeof releaseEplWaybillLock === 'function'
+    ) {
+        releaseEplWaybillLock(0, true);
+    }
     if (previousView && previousView !== nextView && !window.__navSkipHistoryPush) {
         const history = Array.isArray(window.__navHistory) ? window.__navHistory : [];
         if (history[history.length - 1] !== previousView) history.push(previousView);

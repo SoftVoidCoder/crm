@@ -656,9 +656,26 @@ window.assignContractManager = async function(contractId) {
 window.quickChangeContractStatus = async function(contractId) {
     const row = findContractRegistryRow(contractId);
     if (!row) return;
-    const nextStatus = await customPrompt('Статус договора: draft / active / pending / approved / closed', row.status || 'draft');
-    if (nextStatus === null) return;
-    await persistContractRegistryRow(contractId, { status: String(nextStatus || '').trim() || 'draft' });
+    const labels = {
+        draft: 'Черновик',
+        active: 'Действует',
+        pending: 'На согласовании',
+        approved: 'Согласован',
+        closed: 'Закрыт',
+    };
+    const aliases = Object.fromEntries(Object.entries(labels).flatMap(([code, label]) => [
+        [code, code],
+        [label.toLowerCase(), code],
+    ]));
+    const currentLabel = labels[String(row.status || '').toLowerCase()] || labels.draft;
+    const entered = await customPrompt('Новый статус: Черновик, Действует, На согласовании, Согласован или Закрыт.', currentLabel);
+    if (entered === null) return;
+    const nextStatus = aliases[String(entered || '').trim().toLowerCase()];
+    if (!nextStatus) {
+        await customAlert('Выберите один из указанных статусов договора.');
+        return;
+    }
+    await persistContractRegistryRow(contractId, { status: nextStatus });
     showToast('Контракт 360', 'Статус договора обновлён');
 };
 
