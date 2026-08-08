@@ -17,24 +17,20 @@ function clearDepartmentFilter(doRender = true) {
 window.__navHistory = window.__navHistory || [];
 window.__navCurrentView = window.__navCurrentView || '';
 const MOBILE_WORKSPACE_MAX_WIDTH = 768;
-const MOBILE_WORKSPACE_ALLOWED_VIEWS = new Set(['messenger']);
 
 function isMobileWorkspaceMode() {
     return window.matchMedia(`(max-width: ${MOBILE_WORKSPACE_MAX_WIDTH}px)`).matches;
 }
 
 function syncMobileWorkspaceMode() {
-    const enabled = isMobileWorkspaceMode();
-    document.documentElement.classList.toggle('krd-mobile-communication-mode', enabled);
-    document.body.classList.toggle('krd-mobile-communication-mode', enabled);
-    return enabled;
+    document.documentElement.classList.remove('krd-mobile-communication-mode');
+    document.body.classList.remove('krd-mobile-communication-mode');
+    return isMobileWorkspaceMode();
 }
 
 function coerceMobileWorkspaceView(view) {
     const nextView = String(view || '').trim();
-    if (!isMobileWorkspaceMode()) return nextView;
-    if (!nextView) return 'messenger';
-    return MOBILE_WORKSPACE_ALLOWED_VIEWS.has(nextView) ? nextView : 'messenger';
+    return nextView;
 }
 
 window.isMobileWorkspaceMode = isMobileWorkspaceMode;
@@ -157,6 +153,7 @@ function filterByDepartment(role, el) {
 }
 
 function navigateTo(view, triggerRender = true) {
+    document.body.classList.remove('mobile-menu-open');
     syncMobileWorkspaceMode();
     const nextView = coerceMobileWorkspaceView(view);
     if (!canAccessViewForCurrentRole(nextView)) {
@@ -434,8 +431,4 @@ window.addEventListener('resize', () => {
     const isMobile = syncMobileWorkspaceMode();
     if (wasMobile === isMobile) return;
     if (typeof applyRoleShell === 'function') applyRoleShell();
-    if (isMobile && window.__navCurrentView && !MOBILE_WORKSPACE_ALLOWED_VIEWS.has(window.__navCurrentView)) {
-        window.__navSkipHistoryPush = true;
-        navigateTo('messenger');
-    }
 });

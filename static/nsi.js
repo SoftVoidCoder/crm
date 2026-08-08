@@ -988,9 +988,17 @@ window.createNewProject = function() {
     if (typeof focusFieldById === 'function') focusFieldById('newProjName');
 };
 
-window.submitNewProject = async function() {
+window.submitNewProject = async function(event) {
+    event?.preventDefault();
     const name = document.getElementById('newProjName').value.trim();
-    if(!name) return customAlert("Введите наименование!");
+    const error = document.getElementById('createProjectError');
+    const submitButton = document.getElementById('createProjectSubmit');
+    if (error) { error.textContent = ''; error.classList.add('krd-is-hidden'); }
+    if(!name) {
+        if (error) { error.textContent = 'Введите наименование проекта.'; error.classList.remove('krd-is-hidden'); }
+        document.getElementById('newProjName')?.focus();
+        return;
+    }
 
     const contract = document.getElementById('newProjContract').value.trim();
     const client = document.getElementById('newProjClient').value;
@@ -1035,7 +1043,9 @@ window.submitNewProject = async function() {
         archive_details: window.pendingProjectArchiveDetails || {}
     };
 
+    if (submitButton) { submitButton.disabled = true; submitButton.textContent = 'Сохраняю...'; }
     const res = await apiCall('/projects', 'POST', req);
+    if (submitButton) { submitButton.disabled = false; submitButton.textContent = 'Создать проект'; }
     if(res && res.status === 'success') {
         document.getElementById('createProjectModal').style.display = 'none';
         await loadProjects();
@@ -1046,7 +1056,8 @@ window.submitNewProject = async function() {
             openProject(createdId);
         }
     } else {
-        customAlert("Ошибка при создании");
+        const message = res?.message || 'Не удалось создать проект. Проверьте поля и попробуйте ещё раз.';
+        if (error) { error.textContent = message; error.classList.remove('krd-is-hidden'); }
     }
 };
 

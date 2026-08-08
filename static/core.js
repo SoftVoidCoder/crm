@@ -893,7 +893,7 @@ const checklistTemplate = [
 // API/session/websocket helpers were extracted into app_api.js and app_shell.js.
 
 function checkOverdueTasksGlobal() {
-    if (typeof tasksDB === 'undefined' || !currentUser) return;
+    if (!Array.isArray(tasksDB) || !currentUser) return;
     const today = new Date(); today.setHours(0,0,0,0);
     let overdueCount = 0;
     tasksDB.forEach(t => {
@@ -923,9 +923,14 @@ window.onload = async () => {
         if (path.includes('login.html') || path.includes('register.html') || path === '/' || path === '') {
             window.location.href = '/app'; return;
         }
-        await fetchExchangeRates();
         await loadPermissions();
-        await loadProjects(); await loadClients(); await loadAllUsers(); await loadMeetings(); await loadCalendarEvents(); await loadCrmLeads(); await loadCrmDeals(); await loadEmailAccounts(); await loadDocuments(); await loadTasks(); await loadKnowledge(); await loadApprovals(); await loadClaims(); await loadCourtCases(); await loadAuditLogs(); await loadNotifications();
+        await Promise.all([
+            loadProjects(),
+            loadClients(),
+            loadAllUsers(),
+            loadTasks(),
+            loadNotifications(),
+        ]);
         
         if (document.getElementById('appLayout')) {
             document.getElementById('appLayout').classList.remove('krd-is-hidden');
@@ -958,6 +963,23 @@ window.onload = async () => {
             if (executiveBtn) executiveBtn.style.display = currentUser.role === 'Директор' ? 'flex' : 'none';
             if (typeof applyRoleShell === 'function') applyRoleShell();
             if (typeof syncMobileWorkspaceMode === 'function') syncMobileWorkspaceMode();
+
+            Promise.allSettled([
+                fetchExchangeRates(),
+                loadMeetings(),
+                loadCalendarEvents(),
+                loadCrmLeads(),
+                loadCrmDeals(),
+                loadEmailAccounts(),
+                loadDocuments(),
+                loadKnowledge(),
+                loadApprovals(),
+                loadClaims(),
+                loadCourtCases(),
+                loadAuditLogs(),
+            ]).then(() => {
+                if (typeof refreshCurrentView === 'function') refreshCurrentView();
+            });
             
             if (currentUser.role === 'Директор') {
                 const pUsers = await apiCall('/users/pending');

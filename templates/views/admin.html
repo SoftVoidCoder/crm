@@ -1,16 +1,27 @@
 <div id="adminView" class="view-page crm-page-shell" style="display: none;">
     <div class="view-header">
         <div class="view-heading">
-            <span class="view-eyebrow">Администрирование</span>
-            <h1 class="view-title">Заявки на доступ</h1>
-            <p class="view-subtitle">Очередь новых пользователей, роли и статусы согласования в одном экране без лишних переходов.</p>
+            <span class="view-eyebrow">Команда и доступы</span>
+            <h1 class="view-title">Сотрудники</h1>
+            <p class="view-subtitle">Добавляйте людей, назначайте роли и обрабатывайте заявки на доступ в одном месте.</p>
+        </div>
+        <div class="view-actions">
+            <button class="btn-secondary" type="button" onclick="openAdminPanelLogic()">Обновить</button>
+            <button class="btn-primary" type="button" onclick="openInviteEmployeeModal()">Добавить сотрудника</button>
         </div>
     </div>
-    <div class="surface-card surface-card--padded tw-flex tw-flex-col tw-gap-4">
+
+    <div class="admin-summary-grid" aria-label="Сводка по сотрудникам">
+        <div class="admin-summary-item"><span>Всего сотрудников</span><strong id="adminTotalUsers">0</strong></div>
+        <div class="admin-summary-item"><span>Ожидают решения</span><strong id="adminPendingUsers">0</strong></div>
+        <div class="admin-summary-item"><span>Руководители</span><strong id="adminHeadUsers">0</strong></div>
+    </div>
+
+    <section class="surface-card surface-card--padded admin-section">
         <div class="section-header">
             <div>
-                <h3 class="section-title">Очередь согласования</h3>
-                <p class="section-subtitle">Проверьте сотрудника, запрошенную роль и сразу примите решение по доступу к системе.</p>
+                <h2 class="section-title">Заявки на доступ</h2>
+                <p class="section-subtitle">Выберите роль и подтвердите человека, который зарегистрировался самостоятельно.</p>
             </div>
         </div>
         <div class="table-shell">
@@ -19,5 +30,23 @@
                 <tbody id="adminUsersList"></tbody>
             </table>
         </div>
-    </div>
+    </section>
+
+    <section class="surface-card surface-card--padded admin-section">
+        <div class="section-header">
+            <div>
+                <h2 class="section-title">Текущая команда</h2>
+                <p class="section-subtitle">Активные сотрудники, их роли и состояние доступа.</p>
+            </div>
+            <div class="admin-team-search">
+                <input id="adminTeamSearch" class="auth-input" type="search" placeholder="Поиск по имени, почте или роли" oninput="renderAdminTeamList()">
+            </div>
+        </div>
+        <div class="table-shell">
+            <table class="admin-table admin-team-table">
+                <thead><tr><th>Сотрудник</th><th>Роль</th><th>Статус</th><th>Управление</th></tr></thead>
+                <tbody id="adminTeamList"></tbody>
+            </table>
+        </div>
+    </section>
 </div>

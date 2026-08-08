@@ -1857,23 +1857,34 @@ async function mergeClientsPrompt() {
 }
 
 async function openAdminPanelLogic() { 
-    const users = await apiCall('/users/pending'); 
-    const tbody = document.getElementById('adminUsersList'); if(!tbody) return; 
-    tbody.innerHTML = ''; 
+    const pendingResponse = await apiCall('/users/pending');
+    const users = Array.isArray(pendingResponse) ? pendingResponse : [];
+    if (!Array.isArray(allUsersDB) || !allUsersDB.length) await loadAllUsers();
+    const tbody = document.getElementById('adminUsersList'); if(!tbody) return;
     const opts = availableRoles.map(r => `<option value="${r}">${r}</option>`).join(''); 
-    users.forEach((u, i) => { 
-        tbody.innerHTML += `<tr>
-            <td>${u.name}</td><td>${u.email}</td>
-            <td><select id="role_${i}"><option disabled selected>Выбрать</option>${opts}</select></td>
-            <td><label style="font-size:12px; display:flex; align-items:center; gap:5px;"><input type="checkbox" id="head_${i}"> Руководитель</label></td>
-            <td><button class="btn-primary" onclick="approveUser('${u.email}', ${i})">Одобрить</button></td>
-        </tr>`; 
-    }); 
+    tbody.innerHTML = users.length ? users.map((u, i) => `<tr>
+        <td><strong>${profileUiEscape(u.name || 'Без имени')}</strong></td>
+        <td>${profileUiEscape(u.email || '')}</td>
+        <td><select id="role_${i}" class="auth-input admin-role-select"><option value="" selected>Выберите роль</option>${opts}</select></td>
+        <td><label class="admin-head-check"><input type="checkbox" id="head_${i}"><span>Руководитель</span></label></td>
+        <td><button class="btn-primary" onclick="approveUser('${u.email}', ${i})">Принять</button></td>
+    </tr>`).join('') : `<tr><td colspan="5"><div class="admin-empty-state"><strong>Новых заявок нет</strong><span>Когда сотрудник запросит доступ, он появится здесь.</span></div></td></tr>`;
+
+    const approvedUsers = (allUsersDB || []).filter(user => user.status === 'approved');
+    const totalEl = document.getElementById('adminTotalUsers');
+    const pendingEl = document.getElementById('adminPendingUsers');
+    const headsEl = document.getElementById('adminHeadUsers');
+    if (totalEl) totalEl.textContent = approvedUsers.length;
+    if (pendingEl) pendingEl.textContent = users.length;
+    if (headsEl) headsEl.textContent = approvedUsers.filter(user => Number(user.is_head || 0) === 1).length;
+    renderAdminTeamList();
 }
 
 async function approveUser(e, i) { 
+    const role = document.getElementById(`role_${i}`)?.value || '';
+    if (!role) return customAlert('Сначала выберите роль сотрудника.');
     const isHead = document.getElementById(`head_${i}`).checked ? 1 : 0;
-    const res = await apiCall('/users/approve', 'POST', { email: e, role: document.getElementById(`role_${i}`).value, is_head: isHead });
+    const res = await apiCall('/users/approve', 'POST', { email: e, role, is_head: isHead });
     if (res && res.error) {
         return customAlert(res.error);
     }
@@ -1881,6 +1892,87 @@ async function approveUser(e, i) {
     await loadAllUsers();
     if (typeof loadAuditLogs === 'function') await loadAuditLogs();
     renderProfile();
+    showToast('Сотрудники', 'Доступ подтверждён');
+}
+
+function renderAdminTeamList() {
+    const tbody = document.getElementById('adminTeamList');
+    if (!tbody) return;
+    const query = String(document.getElementById('adminTeamSearch')?.value || '').trim().toLocaleLowerCase('ru');
+    const rows = (allUsersDB || [])
+        .filter(user => user.status === 'approved')
+        .filter(user => !query || [user.name, user.email, user.role].some(value => String(value || '').toLocaleLowerCase('ru').includes(query)))
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ru'));
+    tbody.innerHTML = rows.length ? rows.map(user => {
+        const isDirector = user.role === 'Директор';
+        const headLabel = Number(user.is_head || 0) === 1 ? '<span class="status-badge status-badge--info">Руководитель</span>' : '';
+        const actions = isDirector ? '<span class="admin-protected-label">Основной аккаунт</span>' : `
+            <button class="btn-secondary btn-compact" onclick="changeUserRole('${user.email}', '${profileUiEscape(user.role || '')}')">Сменить роль</button>
+            <button class="btn-secondary btn-compact" onclick="toggleHeadStatus('${user.email}', ${Number(user.is_head || 0) === 1 ? 0 : 1})">${Number(user.is_head || 0) === 1 ? 'Снять руководство' : 'Назначить руководителем'}</button>`;
+        return `<tr>
+            <td><div class="admin-person"><span class="admin-person__avatar">${profileUiEscape(String(user.name || user.email || '?').trim().slice(0, 1).toUpperCase())}</span><span><strong>${profileUiEscape(user.name || 'Без имени')}</strong><small>${profileUiEscape(user.email || '')}</small></span></div></td>
+            <td><div class="admin-role-cell"><strong>${profileUiEscape(user.role || 'Роль не назначена')}</strong>${headLabel}</div></td>
+            <td><span class="status-badge status-badge--success">Активен</span></td>
+            <td><div class="admin-row-actions">${actions}</div></td>
+        </tr>`;
+    }).join('') : '<tr><td colspan="4"><div class="admin-empty-state"><strong>Ничего не найдено</strong><span>Измените запрос поиска.</span></div></td></tr>';
+}
+
+function generateEmployeePassword() {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+    const values = new Uint32Array(14);
+    crypto.getRandomValues(values);
+    return Array.from(values, value => alphabet[value % alphabet.length]).join('');
+}
+
+function openInviteEmployeeModal() {
+    const modal = document.getElementById('inviteEmployeeModal');
+    const role = document.getElementById('inviteEmployeeRole');
+    if (!modal || !role) return;
+    role.innerHTML = '<option value="">Выберите роль</option>' + availableRoles
+        .filter(item => item !== 'Директор')
+        .map(item => `<option value="${item}">${item}</option>`).join('');
+    document.getElementById('inviteEmployeeName').value = '';
+    document.getElementById('inviteEmployeeEmail').value = '';
+    document.getElementById('inviteEmployeePassword').value = generateEmployeePassword();
+    document.getElementById('inviteEmployeeHead').checked = false;
+    const error = document.getElementById('inviteEmployeeError');
+    if (error) { error.textContent = ''; error.classList.add('krd-is-hidden'); }
+    modal.style.display = 'flex';
+    setTimeout(() => document.getElementById('inviteEmployeeName')?.focus(), 50);
+}
+
+function closeInviteEmployeeModal() {
+    const modal = document.getElementById('inviteEmployeeModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function submitInviteEmployee(event) {
+    event?.preventDefault();
+    const button = document.getElementById('inviteEmployeeSubmit');
+    const error = document.getElementById('inviteEmployeeError');
+    const payload = {
+        name: document.getElementById('inviteEmployeeName')?.value.trim() || '',
+        email: document.getElementById('inviteEmployeeEmail')?.value.trim() || '',
+        role: document.getElementById('inviteEmployeeRole')?.value || '',
+        password: document.getElementById('inviteEmployeePassword')?.value || '',
+        is_head: document.getElementById('inviteEmployeeHead')?.checked ? 1 : 0,
+    };
+    if (!payload.name || !payload.email || !payload.role || !payload.password) {
+        if (error) { error.textContent = 'Заполните все обязательные поля.'; error.classList.remove('krd-is-hidden'); }
+        return;
+    }
+    if (button) { button.disabled = true; button.textContent = 'Создаю...'; }
+    const res = await apiCall('/users/invite', 'POST', payload);
+    if (button) { button.disabled = false; button.textContent = 'Создать доступ'; }
+    if (!res || res.error) {
+        if (error) { error.textContent = res?.message || 'Не удалось создать сотрудника.'; error.classList.remove('krd-is-hidden'); }
+        return;
+    }
+    closeInviteEmployeeModal();
+    await loadAllUsers();
+    await openAdminPanelLogic();
+    showToast('Сотрудники', 'Доступ создан. Передайте сотруднику временный пароль.');
 }
 
 // Enterprise RLS panel overrides

@@ -2,6 +2,7 @@ from pydantic import BaseModel
 
 class AuthData(BaseModel): email: str; password: str = ""; name: str = ""; otp_code: str = ""
 class RoleData(BaseModel): email: str; role: str; is_head: int = 0
+class UserInviteData(BaseModel): email: str; name: str; role: str; password: str; is_head: int = 0
 class ClientData(BaseModel): name: str; inn: str = ""; kpp: str = ""; ogrn: str = ""; legal_address: str = ""; contact: str = ""
 class BusinessObjectData(BaseModel): client_id: int = 0; name: str = ""; code: str = ""; address: str = ""; city: str = ""; region: str = ""; responsible_name: str = ""; responsible_email: str = ""; comment: str = ""
 class ContractMasterData(BaseModel): project_id: int = 0; client_id: int = 0; object_id: int = 0; contract_number: str = ""; title: str = ""; status: str = "draft"; amount: float = 0; currency: str = "RUB"; start_date: str = ""; end_date: str = ""; manager_name: str = ""; manager_email: str = ""; comment: str = ""; custom_fields: list = []; contract_type: str = "standard"; category: str = ""; folder: str = "Все договоры"; vat_mode: str = "with_vat"; risk_level: str = "normal"

@@ -8,6 +8,46 @@
     </div>
 </div>
 
+<div id="inviteEmployeeModal" class="modal-overlay" style="display:none;">
+    <form class="modal-card employee-create-modal" onsubmit="submitInviteEmployee(event)">
+        <div class="modal-header employee-create-modal__head">
+            <div>
+                <span class="view-eyebrow">Новый доступ</span>
+                <h2>Добавить сотрудника</h2>
+                <p>Создайте учётную запись и сразу назначьте рабочую роль.</p>
+            </div>
+            <button class="icon-btn" type="button" aria-label="Закрыть" onclick="closeInviteEmployeeModal()">×</button>
+        </div>
+        <div class="employee-create-grid">
+            <label class="form-field employee-create-grid__wide">
+                <span>ФИО</span>
+                <input id="inviteEmployeeName" class="auth-input" autocomplete="off" placeholder="Иван Петров" required>
+            </label>
+            <label class="form-field employee-create-grid__wide">
+                <span>Эл. почта</span>
+                <input id="inviteEmployeeEmail" class="auth-input" type="email" autocomplete="off" placeholder="employee@company.ru" required>
+            </label>
+            <label class="form-field">
+                <span>Роль</span>
+                <select id="inviteEmployeeRole" class="auth-input" required></select>
+            </label>
+            <label class="form-field">
+                <span>Временный пароль</span>
+                <input id="inviteEmployeePassword" class="auth-input" type="text" autocomplete="off" placeholder="Не короче 8 символов" required>
+            </label>
+            <label class="employee-head-toggle employee-create-grid__wide">
+                <input id="inviteEmployeeHead" type="checkbox">
+                <span><strong>Руководитель отдела</strong><small>Разрешает видеть задачи и сотрудников своей роли.</small></span>
+            </label>
+        </div>
+        <div id="inviteEmployeeError" class="form-error krd-is-hidden" role="alert"></div>
+        <div class="modal-actions employee-create-modal__actions">
+            <button class="btn-secondary" type="button" onclick="closeInviteEmployeeModal()">Отмена</button>
+            <button id="inviteEmployeeSubmit" class="btn-primary" type="submit">Создать доступ</button>
+        </div>
+    </form>
+</div>
+
 <div id="workspaceConfigModal" class="modal-overlay" style="display: none; z-index: 99997;">
     <div class="modal-card workspace-config-modal">
         <div class="modal-header modal-header--stack">
@@ -174,18 +214,19 @@
 </div>
 
 <div id="createProjectModal" class="modal-overlay" style="display: none;">
-    <div class="modal-card project-create-modal">
+    <form class="modal-card project-create-modal" onsubmit="submitNewProject(event)">
         <div class="project-create-header">
             <div>
                 <h2 class="project-create-title">Создание проекта</h2>
-                <p class="project-create-subtitle">Собери проект в одном окне: карточка, заказчик, состав и доступы.</p>
+                <p class="project-create-subtitle">Заполните основные данные. Состав и доступы можно добавить сразу или позже.</p>
             </div>
+            <button class="icon-btn" type="button" aria-label="Закрыть" onclick="closeCreateModal()">×</button>
         </div>
 
         <div class="project-create-grid">
             <div class="project-create-field project-create-field--wide">
-                <label class="project-create-label" for="newProjName">Наименование проекта</label>
-                <input type="text" id="newProjName" class="auth-input" placeholder="Например, Модернизация линии упаковки">
+                <label class="project-create-label" for="newProjName">Наименование проекта <span class="form-required">*</span></label>
+                <input type="text" id="newProjName" class="auth-input" placeholder="Например, Модернизация линии упаковки" required>
             </div>
 
             <div class="project-create-field">
@@ -229,7 +270,7 @@
                 <input type="text" id="newProjNomInput" list="nomDataList" class="auth-input" placeholder="Начните вводить название позиции">
                 <datalist id="nomDataList"></datalist>
                 <input type="number" id="newProjNomQty" class="auth-input project-create-qty" placeholder="Кол-во">
-                <button class="btn-secondary" onclick="addNomToProjectList()">Добавить</button>
+                <button class="btn-secondary" type="button" onclick="addNomToProjectList()">Добавить</button>
             </div>
             <div id="newProjNomList" class="project-create-list"></div>
         </div>
@@ -260,11 +301,12 @@
             <span>Создать проект без стартового чек-листа</span>
         </label>
 
+        <div id="createProjectError" class="form-error krd-is-hidden" role="alert"></div>
         <div class="project-create-actions">
-            <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="closeCreateModal()">Отмена</button>
-            <button class="btn-primary" style="flex:1; justify-content:center;" onclick="submitNewProject()">Создать проект</button>
+            <button class="btn-secondary" type="button" onclick="closeCreateModal()">Отмена</button>
+            <button id="createProjectSubmit" class="btn-primary" type="submit">Создать проект</button>
         </div>
-    </div>
+    </form>
 </div>
 
 <div id="tenderImportModal" class="modal-overlay" style="display: none;">

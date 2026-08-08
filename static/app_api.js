@@ -130,17 +130,17 @@ async function loadProjects() {
 
 async function loadClients() {
     const data = await apiCall('/clients');
-    if (data) clientsDB = data;
+    clientsDB = Array.isArray(data) ? data : [];
 }
 
 async function loadAllUsers() {
     const data = await apiCall('/users/all');
-    if (data) allUsersDB = data;
+    allUsersDB = Array.isArray(data) ? data : [];
 }
 
 async function loadMeetings() {
     const data = await apiCall('/meetings');
-    if (data) meetingsDB = data;
+    meetingsDB = Array.isArray(data) ? data : [];
 }
 
 async function loadCalendarEvents() {
@@ -165,38 +165,36 @@ async function loadEmailAccounts() {
 
 async function loadDocuments() {
     const data = await apiCall('/documents');
-    if (data) documentsDB = data;
+    documentsDB = Array.isArray(data) ? data : [];
     if (typeof loadDocumentPackages === 'function') await loadDocumentPackages();
 }
 
 async function loadTasks() {
     const data = await apiCall('/tasks');
-    if (data) {
-        tasksDB = data;
-        if (typeof checkOverdueTasksGlobal === 'function') checkOverdueTasksGlobal();
-    }
+    tasksDB = Array.isArray(data) ? data : [];
+    if (typeof checkOverdueTasksGlobal === 'function') checkOverdueTasksGlobal();
 }
 
 async function loadKnowledge() {
     const data = await apiCall('/knowledge');
-    if (data) knowledgeDB = data;
+    knowledgeDB = Array.isArray(data) ? data : [];
 }
 
 async function loadApprovals() {
     const data = await apiCall('/approvals');
-    if (data) approvalsDB = data;
+    approvalsDB = Array.isArray(data) ? data : [];
     if (typeof loadWorkflowDefinitions === 'function') await loadWorkflowDefinitions();
     if (typeof loadWorkflowInstances === 'function') await loadWorkflowInstances();
 }
 
 async function loadClaims() {
     const data = await apiCall('/claims');
-    if (data) claimsDB = data;
+    claimsDB = Array.isArray(data) ? data : [];
 }
 
 async function loadCourtCases() {
     const data = await apiCall('/court_cases');
-    if (data) courtCasesDB = data;
+    courtCasesDB = Array.isArray(data) ? data : [];
 }
 
 async function loadAuditLogs(limit = 120) {

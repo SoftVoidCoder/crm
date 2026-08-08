@@ -1,6 +1,10 @@
 <header class="topbar no-print krd-shell-topbar">
     <!-- Navigation and search -->
     <div class="krd-shell-topbar__lead">
+        <button id="mobileMenuBtn" class="icon-btn mobile-menu-btn" type="button" onclick="const sidebar=document.querySelector('.sidebar'); if(sidebar) sidebar.scrollTop=0; document.body.classList.toggle('mobile-menu-open')" aria-label="Открыть меню">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="7" x2="20" y2="7"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="17" x2="20" y2="17"></line></svg>
+        </button>
+        <span class="mobile-bar-title">KORDA CRM</span>
         <button id="topbarBackBtn" class="icon-btn topbar-back-btn krd-topbar-back krd-is-hidden" type="button" onclick="if(typeof navigateBack === 'function') navigateBack()" aria-label="Назад">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"></path></svg>
         </button>

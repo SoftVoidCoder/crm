@@ -47,6 +47,7 @@ from services.system_readiness_service import build_system_readiness
 from schemas import (
     AuthData,
     RoleData,
+    UserInviteData,
     SignatureData,
     RemoveUserData,
     VacationData,
@@ -77,6 +78,17 @@ router = APIRouter()
 logger = get_logger("users")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BACKUP_DIR = os.path.join(BASE_DIR, "backups")
+ALLOWED_USER_ROLES = {
+    "Конструкторское бюро",
+    "Производство и ОТК",
+    "Склад",
+    "Менеджер",
+    "Бухгалтерия",
+    "Юрист",
+    "Секретарь / Канцелярия",
+    "Сотрудник",
+    "Директор",
+}
 
 
 def _postgres_conn_args():
@@ -545,6 +557,57 @@ def approve(data: RoleData, request: Request):
     audit_log("user_approved", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="user", entity_id=email, details={"role": data.role, "is_head": data.is_head}, ip_address=ip_address, user_agent=user_agent)
     create_notification("Доступ одобрен", f"Твоя заявка в Korda CRM одобрена. Роль: {data.role}.", user_email=email, category="user", entity_type="user", entity_id=email)
     return {"status": "success"}
+
+
+@router.post("/api/users/invite")
+def invite_user(data: UserInviteData, request: Request):
+    actor = _director_from_session(request)
+    if not actor:
+        return {"error": "forbidden"}
+
+    email = normalize_email(data.email)
+    name = (data.name or "").strip()
+    role = (data.role or "").strip()
+    password = data.password or ""
+    if not name or not email or not role:
+        return {"error": "validation_error", "message": "Заполните имя, почту и роль сотрудника."}
+    if role not in ALLOWED_USER_ROLES or role == "Директор":
+        return {"error": "validation_error", "message": "Выберите допустимую роль сотрудника."}
+    if not is_valid_email(email):
+        return {"error": "validation_error", "message": "Введите корректную почту сотрудника."}
+    password_error = validate_password_strength(password)
+    if password_error:
+        return {"error": "validation_error", "message": password_error}
+
+    conn = get_connection(row_factory=True)
+    c = conn.cursor()
+    c.execute("SELECT email FROM users WHERE email=?", (email,))
+    if c.fetchone():
+        conn.close()
+        return {"error": "already_exists", "message": "Сотрудник с такой почтой уже есть в системе."}
+    c.execute(
+        "INSERT INTO users (email, password, name, role, status, is_head) VALUES (?, ?, ?, ?, 'approved', ?)",
+        (email, hash_password(password), name, role, int(bool(data.is_head))),
+    )
+    conn.commit()
+    conn.close()
+    audit_log(
+        "user_invited",
+        actor_email=actor.get("email", ""),
+        actor_name=actor.get("name", ""),
+        entity_type="user",
+        entity_id=email,
+        details={"role": role, "is_head": int(bool(data.is_head))},
+    )
+    create_notification(
+        "Доступ создан",
+        f"Для вас создан доступ в Korda CRM. Роль: {role}.",
+        user_email=email,
+        category="user",
+        entity_type="user",
+        entity_id=email,
+    )
+    return {"status": "success", "email": email}
 
 @router.post("/api/users/make_head")
 def make_head(data: RoleData, request: Request):
