@@ -1,4 +1,5 @@
 import os, asyncio, datetime, time, json, traceback, html, mimetypes
+import httpx
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -576,6 +577,28 @@ def open_document_by_qr(doc_id: int, token: str = ""):
 @app.get("/api/health")
 def healthcheck():
     return {"status": "ok", "service": "korda-crm", "time": int(time.time())}
+
+
+@app.get("/api/exchange-rates")
+def exchange_rates():
+    """Proxy the public CBR feed so browsers do not depend on third-party CORS."""
+    try:
+        response = httpx.get("https://www.cbr-xml-daily.ru/daily_json.js", timeout=8.0)
+        response.raise_for_status()
+        payload = response.json()
+        valute = payload.get("Valute") or {}
+        return {
+            "status": "ok",
+            "rates": {
+                "RUB": 1,
+                "USD": float((valute.get("USD") or {}).get("Value") or 0),
+                "EUR": float((valute.get("EUR") or {}).get("Value") or 0),
+                "CNY": float((valute.get("CNY") or {}).get("Value") or 0),
+            },
+        }
+    except Exception as exc:
+        logger.warning("Exchange rate feed unavailable: %s", exc)
+        return {"status": "unavailable", "rates": {"RUB": 1, "USD": 0, "EUR": 0, "CNY": 0}}
 
 
 @app.get("/api/health/deep")

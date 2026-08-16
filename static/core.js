@@ -951,17 +951,10 @@ window.guardDangerousAction = guardDangerousAction;
 
 async function fetchExchangeRates() {
     try {
-        const res = await fetch('https://www.cbr-xml-daily.ru/daily_json.js');
+        const res = await fetch('/api/exchange-rates');
         const data = await res.json();
-        window.exchangeRates = {
-            RUB: 1,
-            USD: data.Valute.USD.Value,
-            EUR: data.Valute.EUR.Value,
-            CNY: data.Valute.CNY.Value
-        };
-    } catch (e) {
-        console.error('Ошибка парсинга курсов ЦБ', e);
-    }
+        if (data?.status === 'ok' && data?.rates) window.exchangeRates = data.rates;
+    } catch (_) {}
 }
 
 const checklistTemplate = [
