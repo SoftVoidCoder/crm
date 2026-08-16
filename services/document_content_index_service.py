@@ -38,7 +38,11 @@ def _row_dict(row) -> dict:
 
 
 def _normalize_text(value: str) -> str:
-    return re.sub(r"\s+", " ", _safe_text(value)).strip()
+    # PostgreSQL rejects NUL characters in text columns. They can legitimately
+    # appear in fallback extraction from binary PDF/Office files, so remove
+    # them before the extracted content is written to the search index.
+    cleaned = _safe_text(value).replace("\x00", " ")
+    return re.sub(r"\s+", " ", cleaned).strip()
 
 
 def _file_path_from_revision(revision: dict) -> str:

@@ -1,97 +1,56 @@
 <div id="messengerView" class="view-page crm-page-shell crm-page-shell--chat" style="display: none;">
-    <div class="view-header">
+    <div class="view-header messenger-page-header">
         <div class="view-heading">
             <span class="view-eyebrow">Коммуникации</span>
-            <h1 class="view-title">Лента и чаты</h1>
-            <p class="view-subtitle">Внутренняя лента компании для объявлений и опросов плюс рабочие чаты без переключения между разными разделами.</p>
+            <h1 class="view-title">Корпоративный чат</h1>
+            <p class="view-subtitle">Рабочие диалоги компании в одном месте.</p>
         </div>
         <div class="view-actions">
-            <button class="btn-secondary" onclick="messengerSwitchTab('feed')">Лента</button>
-            <button class="btn-secondary" onclick="messengerSwitchTab('chats')">Чаты</button>
-            <button class="btn-primary" onclick="openCreateChatModal()">+ Чат</button>
+            <button class="btn-primary" type="button" onclick="openCreateChatModal()">+ Новый чат</button>
         </div>
     </div>
 
-    <div class="surface-card messenger-hub">
-        <div class="messenger-hub-tabs">
-            <button class="tab active" id="messengerTabFeed" onclick="messengerSwitchTab('feed')">Лента компании</button>
-            <button class="tab" id="messengerTabChats" onclick="messengerSwitchTab('chats')">Корпоративные чаты</button>
-        </div>
-
-        <div id="messengerFeedPane" class="messenger-pane">
-            <div class="feed-shell">
-                <aside class="feed-side">
-                    <div class="feed-side-card">
-                        <div class="feed-side-card__title">Новая запись</div>
-                        <div class="feed-compose-type">
-                            <button class="btn-secondary is-active" id="feedTypeAnnouncement" onclick="setFeedPostType('announcement')">Объявление</button>
-                            <button class="btn-secondary" id="feedTypePoll" onclick="setFeedPostType('poll')">Опрос</button>
-                        </div>
-                        <input id="feedPostTitle" type="text" class="auth-input" placeholder="Заголовок">
-                        <textarea id="feedPostContent" class="auth-input" rows="5" placeholder="Текст записи, вводная, решение, что нужно от команды"></textarea>
-                        <div id="feedPollOptions" class="feed-poll-options" style="display:none;">
-                            <input id="feedPollOption1" type="text" class="auth-input" placeholder="Вариант 1">
-                            <input id="feedPollOption2" type="text" class="auth-input" placeholder="Вариант 2">
-                            <input id="feedPollOption3" type="text" class="auth-input" placeholder="Вариант 3 (необязательно)">
-                        </div>
-                        <label class="feed-target-label">Адресация по отделам</label>
-                        <div id="feedTargetRoles" class="feed-role-list"></div>
-                        <div class="feed-compose-actions">
-                            <label class="feed-pin-toggle"><input id="feedPinFlag" type="checkbox"> Закрепить сверху</label>
-                            <button class="btn-primary" onclick="submitFeedPost()">Опубликовать</button>
-                        </div>
-                    </div>
-                    <div class="feed-side-card">
-                        <div class="feed-side-card__title">Фокус</div>
-                        <div id="feedQuickStats" class="feed-quick-stats"></div>
-                    </div>
-                </aside>
-
-                <div class="feed-main">
-                    <div class="feed-toolbar">
-                        <div class="feed-toolbar__title">Лента компании</div>
-                        <div class="feed-toolbar__actions">
-                            <select id="feedRoleFilter" class="auth-input" onchange="setFeedRoleFilter(this.value)">
-                                <option value="all">Все отделы</option>
-                            </select>
-                            <select id="feedReadFilter" class="auth-input" onchange="setFeedReadFilter(this.value)">
-                                <option value="all">Все записи</option>
-                                <option value="unread">Только непрочитанные</option>
-                                <option value="pinned">Только закрепы</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div id="companyFeedList" class="company-feed-list"></div>
-                </div>
-            </div>
-        </div>
-
-        <div id="messengerChatsPane" class="messenger-pane" style="display:none;">
+    <div class="surface-card messenger-workspace">
+        <div id="messengerChatsPane" class="messenger-pane">
             <div class="crm-chat-shell">
                 <aside class="crm-chat-sidebar">
                     <div class="crm-chat-sidebar-head">
                         <div>
-                            <div class="section-title">Чаты</div>
-                            <div class="section-subtitle">Системные каналы и пользовательские группы</div>
+                            <div class="section-title">Диалоги</div>
+                            <div class="section-subtitle">Выберите общий чат, чат отдела или рабочую группу.</div>
                         </div>
                     </div>
+                    <label class="messenger-search" for="messengerChatSearch">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+                        <input id="messengerChatSearch" type="search" placeholder="Найти чат" autocomplete="off" oninput="filterMessengerChats(this.value)">
+                    </label>
                     <div id="messengerChatsList" class="crm-chat-list"></div>
                 </aside>
-                <div class="crm-chat-main">
+
+                <section class="crm-chat-main" aria-label="Переписка">
                     <div id="messengerHeader" class="crm-chat-main-head">
-                        <span id="mChatTitle">Выберите чат слева</span>
-                        <button id="btnDeleteChat" class="btn-danger" style="display: none; padding: 4px 8px; font-size: 12px; border-radius: 8px;" onclick="deleteCurrentChat()">Удалить чат</button>
+                        <div class="messenger-conversation-title">
+                            <span class="messenger-conversation-kicker">Переписка</span>
+                            <span id="mChatTitle">Выберите чат</span>
+                        </div>
+                        <button id="btnDeleteChat" class="messenger-delete-chat" type="button" style="display: none;" onclick="deleteCurrentChat()">Удалить чат</button>
                     </div>
                     <div id="messengerMessages" class="crm-chat-messages">
-                        <div style="text-align:center; color:var(--secondary); margin-top:50px;">Здесь пока пусто. Выберите чат или создайте новый.</div>
+                        <div class="crm-chat-empty-state">
+                            <div>
+                                <strong>Выберите диалог слева</strong>
+                                <span>После этого здесь появится переписка.</span>
+                            </div>
+                        </div>
                     </div>
                     <div id="messengerInputArea" class="crm-chat-input" style="display: none;">
-                        <input type="text" id="messengerInput" class="crm-chat-input-field" placeholder="Написать сообщение..." onkeypress="if(event.key === 'Enter') sendGlobalMessage()">
-                        <button class="btn-primary crm-chat-send-btn" onclick="sendGlobalMessage()">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width: 18px; height: 18px; margin-left: -2px;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                        <input type="text" id="messengerInput" class="crm-chat-input-field" placeholder="Напишите сообщение" onkeypress="if(event.key === 'Enter') sendGlobalMessage()">
+                        <button class="btn-primary crm-chat-send-btn" type="button" aria-label="Отправить сообщение" onclick="sendGlobalMessage()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                            <span>Отправить</span>
                         </button>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
     </div>

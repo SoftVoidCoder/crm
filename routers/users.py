@@ -642,6 +642,14 @@ def update_role(data: RoleData, request: Request):
     before = _load_user_snapshot(email)
     if not before:
         return {"error": "user_not_found"}
+    allowed_roles = {
+        "Конструкторское бюро", "Производство и ОТК", "Склад", "Менеджер",
+        "Бухгалтерия", "Юрист", "Секретарь / Канцелярия", "Сотрудник",
+    }
+    if data.role not in allowed_roles:
+        return {"error": "invalid_role"}
+    if before.get("role") == "Директор":
+        return {"error": "protected_account"}
     conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE users SET role=? WHERE email=?", (data.role, email))

@@ -2,11 +2,11 @@
 
 /* Aggregated stylesheet entrypoint. Keep this file stable for legacy HTML and deploy checks. */
 @import url('./styles/legacy/core.css?v=129');
-@import url('./styles/legacy/modules.css?v=128');
-@import url('./styles/legacy/workspace.css?v=128');
+@import url('./styles/legacy/modules.css?v=136');
+@import url('./styles/legacy/workspace.css?v=129');
 @import url('./styles/tailwind/foundation.css?v=128');
 @import url('./styles/tailwind/tokens.css?v=128');
 @import url('./styles/tailwind/components.css?v=128');
 @import url('./styles/tailwind/enterprise.css?v=128');
 @import url('./styles/tailwind/utilities.css?v=128');
-@import url('./styles/tailwind/redesign.css?v=154');
+@import url('./styles/tailwind/redesign.css?v=178');

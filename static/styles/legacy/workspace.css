@@ -1312,6 +1312,276 @@ body[data-role-slug="director"] #operationsView .workbench-strip {
     }
 }
 
+/* Payments and costs: compact request workflow and project-style detail card */
+#expensesView .ops-form-card,
+#expensesView .ops-list-card,
+#expensesView .expense-request-detail {
+    border: 1px solid #dbe4ee;
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(15, 35, 65, 0.05);
+}
+
+#expensesView .expense-form-sections {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+#expensesView .expense-form-section {
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid #e0e7ef;
+    border-radius: 14px;
+    background: #f9fbfd;
+}
+
+#expensesView .expense-form-section:first-child {
+    grid-column: 1 / -1;
+}
+
+#expensesView .expense-form-section__heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e4eaf1;
+}
+
+#expensesView .expense-form-section__heading > span,
+#expensesView .expense-detail-section__title > span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    color: #fff;
+    background: #118578;
+    font-size: 12px;
+    font-weight: 800;
+    flex: 0 0 28px;
+}
+
+#expensesView .expense-form-section__heading strong,
+#expensesView .expense-form-section__heading small {
+    display: block;
+}
+
+#expensesView .expense-form-section__heading strong {
+    color: #17243a;
+    font-size: 14px;
+}
+
+#expensesView .expense-form-section__heading small {
+    margin-top: 2px;
+    color: #748196;
+    font-size: 11px;
+}
+
+#expensesView .expense-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+#expensesView .expense-field {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 7px;
+}
+
+#expensesView .expense-field--wide,
+#expensesView .expense-field--comment {
+    grid-column: 1 / -1;
+}
+
+#expensesView .expense-field--comment {
+    margin-top: 14px;
+}
+
+#expensesView .expense-field > span {
+    color: #59687b;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+#expensesView .expense-field .auth-input,
+#expensesView .expense-field .ui-date-field,
+#expensesView .expense-field .ui-client-picker {
+    width: 100%;
+    margin: 0 !important;
+}
+
+#expensesView .expense-field textarea.auth-input {
+    min-height: 86px !important;
+    resize: vertical;
+}
+
+#expensesView .finance-actions-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+#expensesView .ops-list-card .admin-table th:last-child,
+#expensesView .ops-list-card .admin-table td:last-child {
+    width: 170px;
+    text-align: right;
+}
+
+#expensesView .expense-request-detail[hidden] {
+    display: none !important;
+}
+
+#expensesView .expense-request-detail {
+    margin-top: 16px;
+    overflow: hidden;
+}
+
+#expensesView .expense-detail-card {
+    padding: 22px;
+}
+
+#expensesView .expense-detail-card__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid #e1e7ef;
+}
+
+#expensesView .expense-detail-card__header h2 {
+    margin: 10px 0 4px;
+    color: #152238;
+    font-size: 24px;
+    line-height: 1.25;
+}
+
+#expensesView .expense-detail-card__header p {
+    margin: 0;
+    color: #718096;
+    font-size: 13px;
+}
+
+#expensesView .expense-detail-card__actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+#expensesView .expense-detail-card__facts {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    padding: 18px 0;
+}
+
+#expensesView .expense-detail-card__facts > div {
+    min-width: 0;
+    padding: 13px 14px;
+    border: 1px solid #e0e7ef;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+#expensesView .expense-detail-card__facts span {
+    display: block;
+    margin-bottom: 5px;
+    color: #748196;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+#expensesView .expense-detail-card__facts strong {
+    display: block;
+    color: #17243a;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+}
+
+#expensesView .expense-detail-card__sections {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+#expensesView .expense-detail-section {
+    min-width: 0;
+    padding: 18px;
+    border: 1px solid #e0e7ef;
+    border-radius: 14px;
+    background: #fff;
+}
+
+#expensesView .expense-detail-section__title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e6ebf1;
+}
+
+#expensesView .expense-detail-section__title h3 {
+    margin: 0;
+    color: #17243a;
+    font-size: 16px;
+}
+
+#expensesView .expense-detail-section dl {
+    margin: 0;
+}
+
+#expensesView .expense-detail-section dl > div {
+    display: grid;
+    grid-template-columns: minmax(130px, .8fr) minmax(0, 1.2fr);
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid #edf1f5;
+}
+
+#expensesView .expense-detail-section dl > div:last-child {
+    border-bottom: 0;
+}
+
+#expensesView .expense-detail-section dt {
+    color: #718096;
+    font-size: 12px;
+}
+
+#expensesView .expense-detail-section dd {
+    margin: 0;
+    color: #17243a;
+    font-size: 13px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 820px) {
+    #expensesView .expense-form-sections,
+    #expensesView .expense-detail-card__sections,
+    #expensesView .expense-detail-card__facts {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    #expensesView .expense-form-section:first-child { grid-column: auto; }
+    #expensesView .expense-detail-card__header { flex-direction: column; }
+    #expensesView .expense-detail-card__actions { justify-content: flex-start; }
+}
+
+@media (max-width: 560px) {
+    #expensesView .expense-form-grid,
+    #expensesView .expense-detail-section dl > div {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 .app-language-switcher {
     display: inline-flex;
     align-items: center;
@@ -2329,5 +2599,3 @@ body[data-role-slug="director"] #operationsView .workbench-strip {
         grid-template-columns: 1fr;
     }
 }
-
-

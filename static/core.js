@@ -516,7 +516,7 @@ function getRoleSlug(roleName = '') {
     return 'default';
 }
 
-function getRoleUiConfig(roleName = '') {
+function getBaseRoleUiConfig(roleName = '') {
     const role = normalizeRoleName(roleName || currentUser?.role || '');
     const common = {
         showDeptFilters: false,
@@ -532,9 +532,9 @@ function getRoleUiConfig(roleName = '') {
             showDeptFilters: true,
             visibleNav: [
                 'navDashboard', 'navDocuments', 'navTasks', 'navApprovals', 'navClaims', 'navFinance', 'navAccounting', 'navIntegrations',
-                'navSupply', 'navSales', 'navProspecting', 'navBitrixImport', 'navLeads', 'navDeals', 'navProduction', 'navRequests', 'navService', 'navExecutive',
+                'navSupply', 'navSales', 'navProspecting', 'navMyProspecting', 'navBitrixImport', 'navLeads', 'navDeals', 'navProduction', 'navExpenses', 'navRequests', 'navResources', 'navService', 'navExecutive',
                 'navOperations', 'navClients', 'navClient360', 'navContract360', 'navKnowledge', 'navMessenger',
-                'navEmails', 'navMeetings', 'navNomenclature', 'navContacts', 'navAnalytics',
+                'navEmails', 'navMeetings', 'navNomenclature', 'navContacts',
                 'navKpi', 'navProfile', 'adminBtn'
             ],
         };
@@ -546,7 +546,7 @@ function getRoleUiConfig(roleName = '') {
             quickTaskLabel: 'Задача',
             visibleNav: [
                 'navDashboard', 'navDocuments', 'navTasks', 'navApprovals', 'navClaims', 'navFinance', 'navIntegrations',
-                'navSupply', 'navSales', 'navProspecting', 'navBitrixImport', 'navLeads', 'navDeals', 'navExpenses', 'navRequests', 'navResources', 'navService', 'navContract360',
+                'navSupply', 'navSales', 'navProspecting', 'navMyProspecting', 'navBitrixImport', 'navLeads', 'navDeals', 'navExpenses', 'navRequests', 'navResources', 'navService', 'navContract360',
                 'navClients', 'navClient360', 'navKnowledge', 'navMessenger', 'navEmails', 'navMeetings', 'navProfile'
             ],
         };
@@ -620,6 +620,78 @@ function getRoleUiConfig(roleName = '') {
     return { ...common, slug: 'default' };
 }
 
+const NAV_PERMISSION_REQUIREMENTS = Object.freeze({
+    navDashboard: [['projects', 'read']],
+    navApprovals: [['approvals', 'read']],
+    navTasks: [['tasks', 'read']],
+    navExecutive: [['executive', 'read']],
+    navClients: [['clients', 'read']],
+    navProspecting: [['clients', 'read']],
+    navMyProspecting: [['clients', 'read']],
+    navBitrixImport: [['clients', 'import'], ['clients', 'update']],
+    navLeads: [['sales', 'read']],
+    navDeals: [['sales', 'read']],
+    navClient360: [['clients', 'read']],
+    navContract360: [['projects', 'read']],
+    navSales: [['sales', 'read']],
+    navClaims: [['requests', 'read']],
+    navDocuments: [['documents', 'read']],
+    navEmails: [['emails', 'read']],
+    navMeetings: [['meetings', 'read']],
+    navMessenger: [['chats', 'read']],
+    navKnowledge: [['knowledge', 'read']],
+    navFinance: [['finance', 'read']],
+    navAccounting: [['finance', 'read']],
+    navExpenses: [['expenses', 'read']],
+    navSupply: [['supply', 'read']],
+    navProduction: [['production', 'read']],
+    navOperations: [['production', 'read']],
+    navService: [['service', 'read']],
+    navResources: [['resources', 'read']],
+    navRequests: [['requests', 'read']],
+    navNomenclature: [['nsi', 'read']],
+    navContacts: [['clients', 'read']],
+    navIntegrations: [
+        ['finance', 'sync_1c'],
+        ['supply', 'update'],
+        ['production', 'update'],
+        ['clients', 'import'],
+    ],
+    navKpi: [['executive', 'read']],
+    adminBtn: [['users', 'read']],
+});
+
+function hasCurrentPermission(moduleName, actionName = 'read', permissionSet = null) {
+    const permissions = permissionSet && typeof permissionSet === 'object'
+        ? permissionSet
+        : (typeof currentPermissions === 'object' && currentPermissions ? currentPermissions : {});
+    const actions = permissions[moduleName];
+    return Array.isArray(actions) && actions.includes(actionName);
+}
+
+function isNavAllowedByPermissions(navId, permissionSet = null) {
+    const id = String(navId || '').trim();
+    if (id === 'navProfile') return true;
+    const requirements = NAV_PERMISSION_REQUIREMENTS[id];
+    if (!Array.isArray(requirements) || !requirements.length) return false;
+    return requirements.some(([moduleName, actionName]) => hasCurrentPermission(moduleName, actionName, permissionSet));
+}
+
+function getRoleUiConfig(roleName = '') {
+    const config = getBaseRoleUiConfig(roleName);
+    return {
+        ...config,
+        visibleNav: (config.visibleNav || []).filter(navId => isNavAllowedByPermissions(navId)),
+    };
+}
+
+function isNavAvailableForCurrentRole(navId) {
+    const id = String(navId || '').trim();
+    if (id === 'navProfile') return true;
+    const config = getRoleUiConfig(currentUser?.role || '');
+    return Array.isArray(config.visibleNav) && config.visibleNav.includes(id);
+}
+
 function setRoleShellAttributes(roleName = '') {
     const slug = getRoleSlug(roleName);
     document.body.dataset.roleSlug = slug;
@@ -634,13 +706,14 @@ function setRoleShellAttributes(roleName = '') {
 function setNavVisibility(navId, isVisible) {
     const el = document.getElementById(navId);
     if (!el) return;
-    el.style.display = isVisible ? 'flex' : 'none';
+    el.style.setProperty('display', isVisible ? 'flex' : 'none', 'important');
 }
 
 function refreshSidebarGroupsVisibility() {
     document.querySelectorAll('.nav-group[data-nav-group]').forEach(group => {
-        const visibleItems = Array.from(group.querySelectorAll('.nav-item')).filter(item => item.style.display !== 'none');
-        group.style.display = visibleItems.length ? '' : 'none';
+        const visibleItems = Array.from(group.querySelectorAll('.nav-item')).filter(item => getComputedStyle(item).display !== 'none');
+        if (visibleItems.length) group.style.removeProperty('display');
+        else group.style.setProperty('display', 'none', 'important');
     });
 }
 
@@ -651,7 +724,7 @@ window.applyRoleShell = function() {
         'navDashboard', 'navApprovals', 'navTasks', 'navKnowledge', 'navDocuments', 'navMessenger',
         'navEmails', 'navMeetings', 'navFinance', 'navAccounting', 'navIntegrations', 'navSupply', 'navSales', 'navProspecting', 'navBitrixImport', 'navLeads', 'navDeals',
         'navProduction', 'navExpenses', 'navRequests', 'navResources', 'navService', 'navExecutive',
-        'navOperations', 'navClients', 'navClient360', 'navClaims', 'navNomenclature', 'navContacts', 'navAnalytics',
+        'navOperations', 'navClients', 'navClient360', 'navClaims', 'navNomenclature', 'navContacts',
         'navContract360', 'navKpi', 'navProfile', 'adminBtn'
     ];
     allNavIds.forEach(id => {
@@ -662,17 +735,24 @@ window.applyRoleShell = function() {
     const deptLabel = document.querySelector('.krd-shell-sidebar__footer .nav-label');
     if (deptLabel) deptLabel.style.display = config.showDeptFilters ? '' : 'none';
     document.querySelectorAll('.dept-item').forEach(el => {
-        el.style.display = config.showDeptFilters ? 'flex' : 'none';
+        el.style.setProperty('display', config.showDeptFilters ? 'flex' : 'none', 'important');
     });
     const deptGroup = document.querySelector('.krd-shell-sidebar__footer');
-    if (deptGroup) deptGroup.style.display = config.showDeptFilters ? '' : 'none';
+    if (deptGroup) {
+        if (config.showDeptFilters) deptGroup.style.removeProperty('display');
+        else deptGroup.style.setProperty('display', 'none', 'important');
+    }
     const taskBtn = document.getElementById('topbarQuickTaskBtn');
     if (taskBtn) {
+        taskBtn.style.setProperty('display', hasCurrentPermission('tasks', 'create') ? 'inline-flex' : 'none', 'important');
         const label = document.getElementById('topbarQuickTaskLabel');
         if (label) label.textContent = config.quickTaskLabel;
     }
     const scanBtn = document.getElementById('topbarQuickScanBtn');
-    if (scanBtn) scanBtn.style.display = config.showScanner ? 'inline-flex' : 'none';
+    const canScanDocuments = config.showScanner && hasCurrentPermission('documents', 'create');
+    if (scanBtn) scanBtn.style.setProperty('display', canScanDocuments ? 'inline-flex' : 'none', 'important');
+    const mobileScanNav = document.getElementById('navMobileScanner');
+    if (mobileScanNav) mobileScanNav.style.setProperty('display', canScanDocuments ? 'flex' : 'none', 'important');
     const searchInput = document.getElementById('searchInput');
     if (searchInput) searchInput.placeholder = config.searchPlaceholder;
     if (typeof applyWorkspaceConfig === 'function') applyWorkspaceConfig();
@@ -681,6 +761,9 @@ window.applyRoleShell = function() {
 
 window.getRoleUiConfig = getRoleUiConfig;
 window.getRoleSlug = getRoleSlug;
+window.hasCurrentPermission = hasCurrentPermission;
+window.isNavAllowedByPermissions = isNavAllowedByPermissions;
+window.isNavAvailableForCurrentRole = isNavAvailableForCurrentRole;
 
 window.getRoleLandingView = function() {
     const role = String(currentUser?.role || '').trim();

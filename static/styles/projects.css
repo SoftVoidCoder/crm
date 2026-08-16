@@ -1,0 +1,885 @@
+/* Final project-workspace overrides. Loaded after legacy and CRM styles. */
+.projects-workspace > #dashboardFirstRunMount,
+.projects-workspace > #dashboardRoleWorkbenchMount,
+.projects-workspace > #managerDealWorkbenchMount,
+.projects-workspace > #dashboardTodayMount,
+.projects-workspace > #dashboardQuickAccessMount,
+.projects-workspace > #dashboardWorkbenchStrip,
+.projects-workspace > #dashboardSavedFiltersMount {
+    display: none !important;
+}
+
+.projects-workspace #projectsList.projects-registry-list {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 0 !important;
+    padding: 6px 22px 18px !important;
+}
+
+.projects-workspace .project-registry-row {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+}
+
+.projects-workspace #kanbanBoard.projects-registry-board {
+    padding: 18px !important;
+}
+
+.projects-registry-search {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 18px 22px 12px;
+    border-bottom: 1px solid #e4e9f0;
+}
+
+.projects-registry-search > span {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    color: #6b7a90;
+}
+
+.projects-registry-search input {
+    min-width: 0;
+    height: 42px;
+    width: 100%;
+    padding: 0 13px;
+    border: 1px solid #cfd8e3;
+    border-radius: 9px;
+    background: #fff;
+    color: #172236;
+    outline: none;
+}
+
+.projects-registry-search input:focus {
+    border-color: #16877b;
+    box-shadow: 0 0 0 3px rgba(22, 135, 123, .12);
+}
+
+.projects-registry-search button {
+    width: auto !important;
+    min-width: max-content !important;
+    height: 40px !important;
+    margin: 0 !important;
+    padding: 0 14px !important;
+    border: 1px solid #d5dde6 !important;
+    border-radius: 9px !important;
+    background: #fff !important;
+    color: #46556a !important;
+    font-weight: 600 !important;
+}
+
+.project-clean-view .project-workspace-panel {
+    display: none !important;
+}
+
+.project-clean-view .project-workspace-panel.is-active {
+    display: block !important;
+}
+
+.project-clean-view #projectReadCard.krd-is-hidden,
+.project-clean-view #projectEditCard.krd-is-hidden,
+.project-clean-view #projectEditButton.krd-is-hidden {
+    display: none !important;
+}
+
+#createProjectModal #projectCreateBack.krd-is-hidden,
+#createProjectModal #projectCreateNext.krd-is-hidden,
+#createProjectModal #createProjectSubmit.krd-is-hidden,
+#createProjectModal .project-create-stage:not(.is-active) {
+    display: none !important;
+}
+
+.project-clean-view .project-clean-header,
+.project-clean-view .project-overview-card,
+.project-clean-view .project-edit-card,
+.project-clean-view .project-workspace-panel,
+.project-clean-view .project-workflow-tabs {
+    width: 100% !important;
+    max-width: none !important;
+    box-sizing: border-box !important;
+}
+
+.project-clean-view .project-overview-main,
+.project-clean-view .project-overview-metrics,
+.project-clean-view .project-edit-grid,
+.project-clean-view .project-workflow-tabs,
+.project-clean-view .project-overview-secondary {
+    width: 100% !important;
+}
+
+.project-clean-view .project-clean-header h1 {
+    overflow: visible !important;
+    white-space: normal !important;
+    line-height: 1.25 !important;
+}
+
+.project-clean-view .project-contract-extra {
+    padding: 0 16px 16px;
+}
+
+.project-clean-view #extendedContractDetails.contract-meta-card {
+    padding: 0 !important;
+    background: #f8fafc !important;
+}
+
+.project-clean-view #fileUploadInput {
+    display: none !important;
+}
+
+.project-clean-view #projectToolbarStatusActions,
+.project-clean-view #projectOpsSummary,
+.project-clean-view #btnShowTree,
+.project-clean-view .file-tree-toggle,
+.project-clean-view .document-tree-toggle {
+    display: none !important;
+}
+
+.project-clean-view .project-actions-menu__panel {
+    width: min(300px, calc(100vw - 32px)) !important;
+    padding: 8px !important;
+    border: 1px solid #d9e1ea !important;
+    border-radius: 12px !important;
+    background: #fff !important;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, .16) !important;
+}
+
+.project-clean-view .project-actions-menu__panel button {
+    width: 100% !important;
+    min-height: 40px !important;
+    margin: 0 !important;
+    padding: 9px 12px !important;
+    justify-content: flex-start !important;
+    border: 0 !important;
+    border-radius: 8px !important;
+    background: transparent !important;
+    color: #243247 !important;
+    text-align: left !important;
+    font-weight: 600 !important;
+}
+
+.project-clean-view .project-actions-menu__panel button:hover {
+    background: #f2f6f8 !important;
+}
+
+.project-clean-view .project-actions-menu__panel #btnCancel {
+    color: #b42318 !important;
+}
+
+.project-clean-view .project-actions-menu__panel #btnCancel:hover {
+    background: #fff1f0 !important;
+}
+
+.project-clean-view #btnCompleteProject:disabled {
+    cursor: not-allowed;
+    opacity: .5;
+}
+
+.project-clean-view .project-document-primary-actions,
+.project-clean-view .project-compact-details__actions,
+.project-clean-view .project-file-card__actions,
+.project-clean-view .project-stage-card__actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.project-clean-view .project-files-list {
+    display: grid !important;
+    gap: 10px !important;
+    margin-top: 18px;
+}
+
+.project-clean-view .project-file-card {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+    padding: 14px 16px;
+    border: 1px solid #e0e6ed;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.project-clean-view .project-file-card__icon {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: #edf8f6;
+    color: #0f8276;
+    font-weight: 800;
+}
+
+.project-clean-view .project-file-card__info {
+    min-width: 0;
+}
+
+.project-clean-view .project-file-card__info strong,
+.project-clean-view .project-file-card__info span {
+    display: block;
+}
+
+.project-clean-view .project-file-card__info strong {
+    overflow: hidden;
+    color: #162235;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.project-clean-view .project-file-card__info span {
+    margin-top: 3px;
+    color: #708096;
+    font-size: 12px;
+}
+
+.project-clean-view .project-file-card__actions button,
+.project-clean-view .project-file-card__actions a {
+    flex: 0 0 auto;
+    min-width: max-content;
+}
+
+.project-clean-view .project-compact-details,
+.project-clean-view .project-discussion,
+.project-clean-view .project-advanced-tools {
+    margin-top: 16px;
+    border: 1px solid #dfe6ed;
+    border-radius: 12px;
+    background: #fbfcfd;
+}
+
+.project-clean-view .project-compact-details > summary,
+.project-clean-view .project-discussion > summary,
+.project-clean-view .project-advanced-tools > summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 14px 16px;
+    color: #223047;
+    font-weight: 700;
+}
+
+.project-clean-view .project-compact-details > summary::-webkit-details-marker,
+.project-clean-view .project-discussion > summary::-webkit-details-marker,
+.project-clean-view .project-advanced-tools > summary::-webkit-details-marker {
+    display: none;
+}
+
+.project-clean-view .project-compact-details > summary::before,
+.project-clean-view .project-discussion > summary::before,
+.project-clean-view .project-advanced-tools > summary::before {
+    content: '›';
+    display: inline-block;
+    margin-right: 9px;
+    color: #0f8276;
+    transition: transform .16s ease;
+}
+
+.project-clean-view details[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.project-clean-view .project-compact-details__body,
+.project-clean-view .project-compact-details__actions {
+    padding: 0 16px 16px;
+}
+
+.project-clean-view .project-simple-workspace {
+    display: block !important;
+    margin-top: 18px;
+}
+
+.project-clean-view .project-workflow-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.project-clean-view .project-workflow-summary > div {
+    min-width: 0;
+    padding: 14px 16px;
+    border: 1px solid #e0e6ed;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.project-clean-view .project-workflow-summary span,
+.project-clean-view .project-workflow-summary strong {
+    display: block;
+}
+
+.project-clean-view .project-workflow-summary span {
+    margin-bottom: 5px;
+    color: #708096;
+    font-size: 12px;
+}
+
+.project-clean-view .project-workflow-summary strong {
+    overflow-wrap: anywhere;
+    color: #172236;
+    font-size: 16px;
+}
+
+.project-clean-view .project-stage-list {
+    display: grid;
+    gap: 12px;
+}
+
+.project-clean-view .project-stage-card {
+    overflow: hidden;
+    border: 1px solid #dfe6ed;
+    border-radius: 14px;
+    background: #fff;
+}
+
+.project-clean-view .project-stage-card.is-in_progress {
+    border-color: #58b8ad;
+    box-shadow: inset 3px 0 0 #12877b;
+}
+
+.project-clean-view .project-stage-card.is-done {
+    border-color: #b9ddd8;
+    background: #fbfefd;
+}
+
+.project-clean-view .project-stage-card__head {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 15px 16px;
+    border-bottom: 1px solid #edf0f4;
+}
+
+.project-clean-view .project-stage-card__head-actions {
+    display: flex;
+    align-items: center;
+    justify-self: end;
+    gap: 8px;
+}
+
+.project-clean-view .project-stage-card__number {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #e9f6f4;
+    color: #0c7d72;
+    font-weight: 800;
+}
+
+.project-clean-view .project-stage-card__title h3 {
+    margin: 0 0 3px;
+    color: #172236;
+    font-size: 16px;
+}
+
+.project-clean-view .project-stage-card__title p {
+    margin: 0;
+    color: #718096;
+    font-size: 13px;
+}
+
+.project-clean-view .project-stage-status {
+    padding: 6px 9px;
+    border-radius: 999px;
+    background: #eef2f6;
+    color: #627187;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+}
+
+.project-clean-view .project-stage-status.is-in_progress {
+    background: #e5f6f3;
+    color: #087c70;
+}
+
+.project-clean-view .project-stage-status.is-done {
+    background: #e9f7ef;
+    color: #177245;
+}
+
+.project-clean-view .project-stage-card__body {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(160px, 1fr));
+    gap: 14px;
+    padding: 16px;
+}
+
+.project-clean-view .project-stage-field,
+.project-clean-view .project-stage-responsible {
+    min-width: 0;
+}
+
+.project-clean-view .project-stage-progress-card {
+    min-width: 0;
+}
+
+.project-clean-view .project-stage-progress-card > span,
+.project-clean-view .project-stage-progress-card > strong {
+    display: block;
+}
+
+.project-clean-view .project-stage-progress-card > span {
+    margin-bottom: 6px;
+    color: #65748a;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.project-clean-view .project-stage-progress-card > strong {
+    margin-bottom: 8px;
+    color: #1d2a3d;
+    font-size: 15px;
+}
+
+.project-clean-view .project-stage-progress-card > div {
+    overflow: hidden;
+    height: 6px;
+    border-radius: 999px;
+    background: #e8edf2;
+}
+
+.project-clean-view .project-stage-progress-card i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: #13867a;
+    transition: width .2s ease;
+}
+
+.project-clean-view .project-stage-timer {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    padding: 4px 5px 4px 9px;
+    border: 1px solid #dde5ec;
+    border-radius: 999px;
+    background: #f8fafc;
+}
+
+.project-clean-view .project-stage-timer.is-running {
+    border-color: #8ccfc7;
+    background: #f0faf8;
+}
+
+.project-clean-view .project-stage-timer > strong {
+    min-width: 65px;
+    margin: 0;
+    color: #172236;
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    line-height: 1;
+    letter-spacing: .02em;
+    text-align: center;
+}
+
+.project-clean-view .project-stage-timer.is-running > strong {
+    color: #0d7f73;
+}
+
+.project-clean-view .project-stage-timer__actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.project-clean-view .project-stage-timer__button {
+    display: inline-grid;
+    place-items: center;
+    width: 27px;
+    height: 27px;
+    min-width: 27px;
+    min-height: 27px !important;
+    padding: 0 !important;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: #516175;
+    cursor: pointer;
+    transition: background-color .15s ease, color .15s ease;
+}
+
+.project-clean-view .project-stage-timer__button svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+}
+
+.project-clean-view .project-stage-timer__button:hover:not(:disabled),
+.project-clean-view .project-stage-timer__button:focus-visible {
+    background: #dcefeb;
+    color: #087c70;
+    outline: none;
+}
+
+.project-clean-view .project-stage-timer__button.is-play:not(:disabled) {
+    color: #087c70;
+}
+
+.project-clean-view .project-stage-timer__button.is-finish:not(:disabled) {
+    color: #177245;
+}
+
+.project-clean-view .project-stage-timer__button:disabled {
+    cursor: not-allowed;
+    opacity: .28;
+}
+
+.project-clean-view .project-stage-field > span,
+.project-clean-view .project-stage-responsible > span {
+    display: block;
+    margin-bottom: 6px;
+    color: #65748a;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.project-clean-view .project-stage-responsible strong {
+    display: flex;
+    align-items: center;
+    min-height: 42px;
+    overflow-wrap: anywhere;
+    color: #253248;
+}
+
+.project-clean-view .project-stage-field--wide,
+.project-clean-view .project-stage-file,
+.project-clean-view .project-stage-card__actions,
+.project-clean-view .project-stage-checklist {
+    grid-column: 1 / -1;
+}
+
+.project-clean-view .project-stage-checklist {
+    overflow: hidden;
+    border: 1px solid #dde5ec;
+    border-radius: 11px;
+    background: #fbfcfd;
+}
+
+.project-clean-view .project-stage-checklist__head {
+    padding: 12px 14px;
+    border-bottom: 1px solid #e8edf2;
+    background: #f5f8fa;
+}
+
+.project-clean-view .project-stage-checklist__head span,
+.project-clean-view .project-stage-checklist__head strong {
+    display: block;
+}
+
+.project-clean-view .project-stage-checklist__head span {
+    color: #223047;
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.project-clean-view .project-stage-checklist__head strong {
+    margin-top: 3px;
+    color: #718096;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.project-clean-view .project-stage-checklist__items {
+    display: grid;
+    gap: 1px;
+    background: #e8edf2;
+}
+
+.project-clean-view .project-stage-check,
+.project-clean-view .project-stage-checklist__empty {
+    min-width: 0;
+    background: #fff;
+}
+
+.project-clean-view .project-stage-check {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    min-height: 46px;
+    padding: 10px 12px;
+    cursor: pointer;
+}
+
+.project-clean-view .project-stage-check input {
+    width: 17px;
+    height: 17px;
+    margin: 0;
+    accent-color: #12877b;
+}
+
+.project-clean-view .project-stage-check > span {
+    overflow-wrap: anywhere;
+    color: #263449;
+    font-size: 14px;
+}
+
+.project-clean-view .project-stage-check.is-done > span {
+    color: #718096;
+    text-decoration: line-through;
+}
+
+.project-clean-view .project-stage-check__actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.project-clean-view .project-stage-check__actions button {
+    min-height: 30px;
+    padding: 5px 8px;
+    border: 1px solid #d8e0e8;
+    border-radius: 7px;
+    background: #fff;
+    color: #46556a;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.project-clean-view .project-stage-check__actions button:hover {
+    background: #f2f6f8;
+}
+
+.project-clean-view .project-stage-check__actions button.is-danger {
+    color: #a9362d;
+}
+
+.project-clean-view .project-stage-check__actions button.is-danger:hover {
+    background: #fff0f1;
+    color: #b42318;
+}
+
+.project-clean-view .project-stage-checklist__empty {
+    padding: 16px;
+    color: #718096;
+    font-size: 13px;
+    text-align: center;
+}
+
+.project-clean-view .project-stage-checklist__create {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 12px;
+    border-top: 1px solid #e8edf2;
+    background: #fff;
+}
+
+.project-clean-view .project-stage-complete {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: min(100%, 400px);
+    margin-left: auto;
+}
+
+.project-clean-view .project-stage-complete > span {
+    color: #718096;
+    font-size: 12px;
+    text-align: right;
+}
+
+.project-clean-view .project-stage-complete button {
+    flex: 0 0 auto;
+    min-width: max-content;
+}
+
+.project-clean-view .project-stage-complete button:disabled {
+    cursor: not-allowed;
+    opacity: .48;
+}
+
+.project-clean-view .project-stage-field textarea {
+    width: 100%;
+    resize: vertical;
+}
+
+.project-clean-view .project-stage-file {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 42px;
+    padding: 10px 12px;
+    border: 1px dashed #d7e0e8;
+    border-radius: 9px;
+    color: #718096;
+    font-size: 13px;
+}
+
+.project-clean-view .project-stage-file.has-file {
+    border-style: solid;
+    background: #f2faf8;
+}
+
+.project-clean-view .project-discussion .project-chat-panel {
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 16px 16px !important;
+    border-radius: 10px !important;
+}
+
+.project-clean-view .project-advanced-tools > summary {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 8px;
+}
+
+.project-clean-view .project-advanced-tools > summary::before {
+    grid-row: 1 / 3;
+    align-self: center;
+}
+
+.project-clean-view .project-advanced-tools > summary strong,
+.project-clean-view .project-advanced-tools > summary span {
+    display: block;
+}
+
+.project-clean-view .project-advanced-tools > summary span {
+    margin-top: 3px;
+    color: #718096;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.project-clean-view .project-advanced-tools__body {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 0 16px 16px;
+}
+
+.project-clean-view .project-advanced-card {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 12px;
+    padding: 15px;
+    border: 1px solid #e0e6ed;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.project-clean-view .project-advanced-card__head {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 10px;
+}
+
+.project-clean-view .project-advanced-card__head > span {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #e9f6f4;
+    color: #0b7e73;
+    font-weight: 800;
+}
+
+.project-clean-view .project-advanced-card h3,
+.project-clean-view .project-advanced-card p {
+    margin: 0;
+}
+
+.project-clean-view .project-advanced-card h3 {
+    color: #172236;
+    font-size: 15px;
+}
+
+.project-clean-view .project-advanced-card p {
+    margin-top: 4px;
+    color: #718096;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.project-clean-view .project-advanced-card textarea,
+.project-clean-view .project-advanced-card input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+@media (max-width: 1100px) {
+    .projects-workspace .project-registry-row {
+        grid-template-columns: minmax(230px, 1.5fr) 1fr 1fr auto !important;
+    }
+
+    .project-clean-view .project-stage-card__body,
+    .project-clean-view .project-advanced-tools__body {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 760px) {
+    .projects-workspace .project-registry-row {
+        grid-template-columns: minmax(0, 1fr) auto !important;
+    }
+
+    .projects-registry-search,
+    .project-clean-view .project-workflow-summary,
+    .project-clean-view .project-stage-card__body,
+    .project-clean-view .project-advanced-tools__body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .projects-registry-search > span {
+        display: none;
+    }
+
+    .project-clean-view .project-stage-card__head {
+        grid-template-columns: 36px minmax(0, 1fr);
+    }
+
+    .project-clean-view .project-stage-card__head-actions {
+        grid-column: 2;
+        justify-self: start;
+        flex-wrap: wrap;
+    }
+
+    .project-clean-view .project-file-card {
+        grid-template-columns: 40px minmax(0, 1fr);
+    }
+
+    .project-clean-view .project-file-card__actions {
+        grid-column: 1 / -1;
+    }
+
+    .project-clean-view .project-stage-checklist__create {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .project-clean-view .project-stage-check {
+        grid-template-columns: 20px minmax(0, 1fr);
+    }
+
+    .project-clean-view .project-stage-check__actions {
+        grid-column: 2;
+    }
+
+    .project-clean-view .project-stage-complete {
+        width: 100%;
+        margin-left: 0;
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .project-clean-view .project-stage-complete > span {
+        text-align: left;
+    }
+}

@@ -1,91 +1,70 @@
-<div id="client360View" class="view-page" style="display: none;">
-    <div class="view-header">
+<div id="client360View" class="view-page client360-page" style="display:none;">
+    <header class="view-header">
         <div class="view-heading">
-    <span class="view-eyebrow">Клиент 360</span>
+            <span class="view-eyebrow">CRM и продажи</span>
             <h1 class="view-title">Контрагент 360</h1>
-            <p class="view-subtitle">Полная картина по клиенту: сделки, контакты, финансы, документы, претензии и суды в одном окне.</p>
+            <p class="view-subtitle">Сделки, контакты, документы и финансы компании в одном досье.</p>
         </div>
-    </div>
+        <div class="view-actions">
+            <button class="btn-secondary" type="button" onclick="navigateTo('clients')">К базе контрагентов</button>
+        </div>
+    </header>
 
-    <div id="client360EmptyState" class="surface-card surface-card--padded">
-        <div class="empty-state">Выбери контрагента из базы клиентов или открой первый доступный, чтобы увидеть полное досье.</div>
-    </div>
+    <section id="client360EmptyState" class="client360-empty-state">
+        <div class="client360-empty-state__icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M8 15c1.2-2 2.6-3 4-3s2.8 1 4 3"></path><circle cx="12" cy="8" r="2"></circle></svg>
+        </div>
+        <div>
+            <h2>Контрагент не выбран</h2>
+            <p>Откройте компанию из базы контрагентов, чтобы увидеть её полное досье.</p>
+        </div>
+        <button class="btn-primary" type="button" onclick="navigateTo('clients')">Выбрать контрагента</button>
+    </section>
 
     <div id="client360Content" class="client360-content" style="display:none;">
-        <div class="surface-card surface-card--padded">
-            <div class="client360-hero">
-                <div>
-                    <div class="client360-title-row">
-                        <h2 id="client360Name" class="section-title" style="margin:0;"></h2>
-                        <span id="client360Inn" class="email-mailbox-chip"></span>
-                    </div>
-                    <p id="client360Contact" class="section-subtitle" style="margin-top:8px;"></p>
-                </div>
-                <div class="view-actions">
-                    <button class="btn-secondary" onclick="navigateTo('clients')">К базе клиентов</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="ops-overview-card">
+        <section class="client360-identity">
             <div>
-                <div class="ops-overview-title">Единое досье по контрагенту</div>
-                <div class="ops-overview-text">Этот экран собирает сделки, контакты, деньги, закупки, производство и юридическую историю в одном месте. Он должен отвечать на вопрос “что сейчас происходит по клиенту?” без похода по разным разделам.</div>
+                <span class="view-eyebrow">Карточка компании</span>
+                <div class="client360-title-row">
+                    <h2 id="client360Name" class="client360-company-name"></h2>
+                    <span id="client360Inn" class="status-badge status-badge--info"></span>
+                </div>
+                <p id="client360Contact" class="section-subtitle"></p>
             </div>
-            <div class="ops-overview-pills">
-                <span class="ops-pill">Сделки</span>
-                <span class="ops-pill">Финансы</span>
-                <span class="ops-pill">История</span>
-            </div>
-        </div>
+        </section>
 
-        <div id="client360Metrics" class="metrics-grid"></div>
+        <div id="client360Metrics" class="metrics-grid client360-metrics"></div>
 
-        <div class="client360-grid">
-            <section class="surface-card surface-card--padded">
-                <h3 class="section-title">Проекты и сделки</h3>
+        <div class="client360-sections">
+            <details class="client360-section" open>
+                <summary><span>Проекты и сделки</span><small>Активная работа с контрагентом</small></summary>
                 <div id="client360Projects" class="client360-list"></div>
-            </section>
-            <section class="surface-card surface-card--padded">
-                <h3 class="section-title">Контакты</h3>
+            </details>
+            <details class="client360-section" open>
+                <summary><span>Контакты</span><small>Люди, телефоны и почта</small></summary>
                 <div id="client360Contacts" class="client360-list"></div>
-            </section>
-            <section class="surface-card surface-card--padded">
-                <h3 class="section-title">Финансовый контур</h3>
+            </details>
+            <details class="client360-section">
+                <summary><span>Финансы</span><small>Оплаты, задолженность и условия</small></summary>
                 <div id="client360Finance" class="client360-list"></div>
-            </section>
-            <section class="surface-card surface-card--padded">
-                <h3 class="section-title">Коммерческие условия</h3>
                 <div id="client360Commercial" class="client360-list"></div>
-            </section>
-            <section class="surface-card surface-card--padded">
-                <h3 class="section-title">Закупки и производство</h3>
-                <div id="client360Ops" class="client360-list"></div>
-            </section>
-            <section class="surface-card surface-card--padded">
-                <h3 class="section-title">1С ЭПЛ</h3>
-                <div id="client360Epl" class="client360-list"></div>
-            </section>
-            <section class="surface-card surface-card--padded">
-                <h3 class="section-title">Интеграции и коммуникации</h3>
-                <div id="client360Integrations" class="client360-list"></div>
-            </section>
-            <section class="surface-card surface-card--padded">
-                <h3 class="section-title">Документы</h3>
+            </details>
+            <details class="client360-section">
+                <summary><span>Документы</span><small>Договоры, письма и файлы</small></summary>
                 <div id="client360Documents" class="client360-list"></div>
-            </section>
-            <section class="surface-card surface-card--padded">
-                <h3 class="section-title">Претензии и суды</h3>
-                <div id="client360Legal" class="client360-list"></div>
-            </section>
-            <section class="surface-card surface-card--padded">
-                <h3 class="section-title">Сервис и гарантия</h3>
+            </details>
+            <details class="client360-section">
+                <summary><span>Операции</span><small>Закупки, производство и сервис</small></summary>
+                <div id="client360Ops" class="client360-list"></div>
                 <div id="client360Service" class="client360-list"></div>
-            </section>
-            <section class="surface-card surface-card--padded">
-                <h3 class="section-title">Лента событий</h3>
+                <div id="client360Epl" class="client360-list"></div>
+            </details>
+            <details class="client360-section">
+                <summary><span>История и связи</span><small>События, интеграции и юридическая работа</small></summary>
+                <div id="client360Integrations" class="client360-list"></div>
+                <div id="client360Legal" class="client360-list"></div>
                 <div id="client360Timeline" class="client360-list"></div>
-            </section>
+            </details>
         </div>
     </div>
 </div>

@@ -1,75 +1,45 @@
 <div id="resourcesView" class="view-page" style="display:none;">
-    <div class="view-header">
-        <div class="view-heading">
-    <span class="view-eyebrow">Ресурсы</span>
-            <h1 class="view-title">Календарь ресурсов</h1>
-            <p class="view-subtitle">Загрузка менеджеров, КБ, производства, бухгалтерии и юристов по проектам и датам.</p>
+    <div class="surface-card surface-card--padded resources-simple-shell">
+        <div class="view-header">
+            <div class="view-heading"><span class="view-eyebrow">Планирование</span><h1 class="view-title">Календарь ресурсов</h1><p class="view-subtitle">Кто, на каком проекте и в какие даты занят.</p></div>
+            <div class="view-actions"><button class="btn-primary" onclick="openSimpleResourceEditor()">+ Запланировать ресурс</button></div>
         </div>
-    </div>
-    <div class="ops-overview-card">
-        <div>
-            <div class="ops-overview-title">Занятость по отделам</div>
-            <div class="ops-overview-text">Этот экран показывает не просто задачи, а реальную загрузку людей и подразделений по проектам, периодам и проценту занятости.</div>
+        <div class="resources-simple-guide">
+            <div><span>1</span><strong>Выберите проект</strong><small>Укажите, для какой работы нужен ресурс.</small></div>
+            <div><span>2</span><strong>Назначьте человека или команду</strong><small>Заполните отдел, ФИО и функцию.</small></div>
+            <div><span>3</span><strong>Укажите период и загрузку</strong><small>Система покажет занятость и перегруз.</small></div>
         </div>
-        <div class="ops-overview-pills">
-            <span class="ops-pill">Загрузка</span>
-            <span class="ops-pill">Даты</span>
-            <span class="ops-pill">Отделы</span>
+        <div id="resourcesSimpleMetrics" class="resources-simple-metrics"></div>
+        <div class="resources-simple-toolbar">
+            <input id="resourcesSimpleSearch" class="auth-input" type="search" placeholder="Найти сотрудника, отдел или проект" oninput="setSimpleResourceSearch(this.value)">
+            <select id="resourcesSimpleDepartment" class="auth-input" onchange="setSimpleResourceDepartment(this.value)"><option value="">Все отделы</option><option value="Директор">Руководство</option><option value="Менеджер">Менеджмент</option><option value="Конструкторское бюро">Конструкторское бюро</option><option value="Производство и ОТК">Производство и ОТК</option><option value="Склад и закупки">Склад и закупки</option><option value="Сервис и монтаж">Сервис и монтаж</option><option value="Бухгалтерия">Бухгалтерия</option><option value="Юрист">Юрист</option></select>
+            <button class="btn-secondary" onclick="resetSimpleResourceFilters()">Сбросить</button>
         </div>
-    </div>
-    <div id="resourcesMetricsGrid" class="metrics-grid metrics-grid--info-rail"></div>
-    <div class="finance-layout">
-        <section class="surface-card surface-card--padded ops-form-card">
-            <div class="section-header">
-                <div>
-                    <h3 class="section-title">Новая загрузка ресурса</h3>
-                    <p class="section-subtitle">Фиксируй занятость по проекту, роли и временному диапазону.</p>
-                </div>
-      <span class="ops-section-chip">Рабочее место ресурсов</span>
+        <div id="resourcesSimpleList" class="resources-simple-list"></div>
+        <div id="resourcesSimpleDetail" class="resources-simple-detail"></div>
+
+        <section id="resourceEditorCard" class="resources-simple-editor" hidden>
+            <div class="production-simple-editor__head"><div><span class="view-eyebrow">Планирование загрузки</span><h2 id="resourceEditorTitle">Новая загрузка</h2><p>Заполните только то, что нужно для бронирования.</p></div><button class="btn-secondary" onclick="closeSimpleResourceEditor()">Закрыть</button></div>
+            <div class="resources-simple-editor__steps">
+                <section><div class="production-simple-step-head"><span>1</span><div><h3>Проект и отдел</h3><p>Где потребуется ресурс.</p></div></div><div class="production-simple-form-grid">
+                    <label><span>Проект</span><select id="resourceProjectId" class="auth-input"><option value="0">Без проекта</option></select></label>
+                    <label><span>Отдел</span><select id="resourceDepartment" class="auth-input"><option value="Директор">Руководство</option><option value="Менеджер">Менеджмент</option><option value="Конструкторское бюро">Конструкторское бюро</option><option value="Производство и ОТК">Производство и ОТК</option><option value="Склад и закупки">Склад и закупки</option><option value="Сервис и монтаж">Сервис и монтаж</option><option value="Бухгалтерия">Бухгалтерия</option><option value="Юрист">Юрист</option></select></label>
+                </div></section>
+                <section><div class="production-simple-step-head"><span>2</span><div><h3>Кого планируем</h3><p>Сотрудник или рабочая команда.</p></div></div><div class="production-simple-form-grid">
+                    <label><span>ФИО / название ресурса *</span><input id="resourceName" class="auth-input" placeholder="Например, Иванов Сергей"></label>
+                    <label><span>Функция</span><input id="resourceRoleName" class="auth-input" placeholder="Например, инженер-конструктор"></label>
+                    <input id="resourceCrewName" type="hidden"><input id="resourceCrewType" type="hidden">
+                </div></section>
+                <section><div class="production-simple-step-head"><span>3</span><div><h3>Когда и насколько</h3><p>Период работы и процент занятости.</p></div></div><div class="production-simple-form-grid">
+                    <label><span>Дата начала *</span><input id="resourceDateFrom" class="auth-input date-picker" placeholder="дд.мм.гггг"></label>
+                    <label><span>Дата окончания *</span><input id="resourceDateTo" class="auth-input date-picker" placeholder="дд.мм.гггг"></label>
+                    <label><span>Загрузка, % *</span><input id="resourceLoadPercent" class="auth-input" type="number" min="1" max="100" placeholder="Например, 50"></label>
+                    <label><span>Статус</span><select id="resourceStatus" class="auth-input"><option value="planned">План</option><option value="confirmed">Подтверждено</option><option value="overloaded">Перегруз</option><option value="released">Освобожден</option></select></label>
+                    <label class="is-wide"><span>Объект / место работы</span><input id="resourceLocation" class="auth-input" placeholder="Цех, объект или офис"></label>
+                    <label class="is-wide"><span>Комментарий</span><textarea id="resourceComment" class="auth-input" rows="3" placeholder="Ограничения или важные условия"></textarea></label>
+                </div></section>
             </div>
-            <div class="finance-form-grid">
-                <select id="resourceProjectId" class="auth-input"><option value="0">Без проекта</option></select>
-                <select id="resourceDepartment" class="auth-input">
-                    <option value="Менеджер">Менеджмент</option>
-                    <option value="Конструкторское бюро">Конструкторское бюро</option>
-                    <option value="Производство и ОТК">Производство и ОТК</option>
-                    <option value="Бухгалтерия">Бухгалтерия</option>
-                    <option value="Юрист">Юрист</option>
-                </select>
-                <input id="resourceName" class="auth-input" placeholder="ФИО сотрудника">
-                <input id="resourceRoleName" class="auth-input" placeholder="Роль / функция">
-                <input id="resourceCrewName" class="auth-input" placeholder="Монтажная бригада / звено">
-                <select id="resourceCrewType" class="auth-input">
-                    <option value="">Без бригады</option>
-                    <option value="installation">Монтаж</option>
-                    <option value="field_service">Выездной сервис</option>
-                    <option value="commissioning">ПНР</option>
-                </select>
-                <input id="resourceLoadPercent" class="auth-input" placeholder="Загрузка %">
-                <input id="resourceDateFrom" class="auth-input" placeholder="Дата начала">
-                <input id="resourceDateTo" class="auth-input" placeholder="Дата окончания">
-                <input id="resourceLocation" class="auth-input" placeholder="Объект / локация">
-                <select id="resourceStatus" class="auth-input">
-                    <option value="planned">План</option>
-                    <option value="confirmed">Подтверждено</option>
-                    <option value="overloaded">Перегруз</option>
-                    <option value="released">Освобожден</option>
-                </select>
-                <textarea id="resourceComment" class="auth-input" style="margin:0; min-height:96px; grid-column:1 / -1;" placeholder="Комментарий по загрузке, ограничения, примечания"></textarea>
-            </div>
-            <div class="finance-actions-row">
-                <button class="btn-secondary" onclick="resetResourceForm()">Очистить</button>
-                <button class="btn-primary" onclick="saveResourceAllocation()">Сохранить загрузку</button>
-            </div>
-        </section>
-        <section class="surface-card surface-card--padded ops-list-card">
-            <div class="section-header">
-                <div>
-                    <h3 class="section-title">Карта загрузки</h3>
-                    <p class="section-subtitle">Реестр занятости по отделам и проектам.</p>
-                </div>
-            </div>
-            <div id="resourceAllocationsList" class="client360-list"></div>
+            <div class="production-simple-editor__actions"><button class="btn-secondary" onclick="closeSimpleResourceEditor()">Отмена</button><button id="resourceSaveButton" class="btn-primary" onclick="saveResourceAllocation()">Добавить в календарь</button></div>
         </section>
     </div>
 </div>

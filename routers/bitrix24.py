@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Body, Request
 
-from permissions import has_permission, require_approved_user
+from permissions import DIRECTOR_ROLE, MANAGER_ROLE, has_permission, require_approved_user
 from services.bitrix24_service import (
     _bitrix_call,
     bitrix24_config_status,
@@ -15,19 +15,18 @@ from services.bitrix24_service import (
 router = APIRouter()
 
 
-def _can_manage_bitrix(actor: dict) -> bool:
-    return bool(actor) and (
-        actor.get("role") == "Директор"
-        or actor.get("role") == "Р”РёСЂРµРєС‚РѕСЂ"
-        or has_permission(actor, "integrations", "manage")
-        or has_permission(actor, "integrations", "update")
-    )
+def _can_configure_bitrix(actor: dict) -> bool:
+    return bool(actor) and has_permission(actor, "clients", "import")
+
+
+def _can_use_bitrix(actor: dict) -> bool:
+    return bool(actor) and actor.get("role") in {DIRECTOR_ROLE, MANAGER_ROLE} and has_permission(actor, "clients", "read")
 
 
 @router.get("/api/integrations/bitrix24/status")
 def get_bitrix24_status(request: Request):
     actor = require_approved_user(request)
-    if not _can_manage_bitrix(actor):
+    if not _can_use_bitrix(actor):
         return {"error": "forbidden"}
     return {"status": "success", **bitrix24_config_status()}
 
@@ -35,7 +34,7 @@ def get_bitrix24_status(request: Request):
 @router.post("/api/integrations/bitrix24/test")
 def test_bitrix24_connection(request: Request, payload: dict = Body(default={})):
     actor = require_approved_user(request)
-    if not _can_manage_bitrix(actor):
+    if not _can_configure_bitrix(actor):
         return {"error": "forbidden"}
     webhook_url = str((payload or {}).get("webhook_url") or "").strip()
     try:
@@ -48,7 +47,7 @@ def test_bitrix24_connection(request: Request, payload: dict = Body(default={}))
 @router.post("/api/integrations/bitrix24/configure")
 def configure_bitrix24(request: Request, payload: dict = Body(default={})):
     actor = require_approved_user(request)
-    if not _can_manage_bitrix(actor):
+    if not _can_configure_bitrix(actor):
         return {"error": "forbidden"}
     webhook_url = str((payload or {}).get("webhook_url") or "").strip()
     try:
@@ -62,7 +61,7 @@ def configure_bitrix24(request: Request, payload: dict = Body(default={})):
 @router.post("/api/integrations/bitrix24/sync")
 def sync_bitrix24(request: Request, payload: dict = Body(default={})):
     actor = require_approved_user(request)
-    if not _can_manage_bitrix(actor):
+    if not _can_use_bitrix(actor):
         return {"error": "forbidden"}
     webhook_url = str((payload or {}).get("webhook_url") or "").strip()
     raw_limit = str((payload or {}).get("limit") or "").strip()
@@ -82,7 +81,7 @@ def sync_bitrix24(request: Request, payload: dict = Body(default={})):
 @router.delete("/api/integrations/bitrix24/outreach")
 def clear_bitrix24_outreach(request: Request):
     actor = require_approved_user(request)
-    if not _can_manage_bitrix(actor):
+    if not _can_configure_bitrix(actor):
         return {"error": "forbidden"}
     try:
         return clear_bitrix24_outreach_clients(actor=actor)
@@ -93,7 +92,7 @@ def clear_bitrix24_outreach(request: Request):
 @router.post("/api/integrations/bitrix24/search")
 def search_bitrix24(request: Request, payload: dict = Body(default={})):
     actor = require_approved_user(request)
-    if not _can_manage_bitrix(actor):
+    if not _can_use_bitrix(actor):
         return {"error": "forbidden"}
     webhook_url = str((payload or {}).get("webhook_url") or "").strip()
     query = str((payload or {}).get("query") or "").strip()
@@ -107,7 +106,7 @@ def search_bitrix24(request: Request, payload: dict = Body(default={})):
 @router.post("/api/integrations/bitrix24/import_selected")
 def import_selected_bitrix24(request: Request, payload: dict = Body(default={})):
     actor = require_approved_user(request)
-    if not _can_manage_bitrix(actor):
+    if not _can_use_bitrix(actor):
         return {"error": "forbidden"}
     webhook_url = str((payload or {}).get("webhook_url") or "").strip()
     items = (payload or {}).get("items") or []

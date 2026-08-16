@@ -10,6 +10,7 @@ let companyFeedDB = [];
 let currentFeedPostType = 'announcement';
 let currentFeedRoleFilter = 'all';
 let currentFeedReadFilter = 'all';
+let messengerChatSearch = '';
 
 function feedFormatDateTime(timestamp) {
     const date = new Date(Number(timestamp || 0) * 1000);
@@ -18,17 +19,16 @@ function feedFormatDateTime(timestamp) {
 }
 
 function messengerSwitchTab(tab) {
-    messengerActiveTab = tab;
+    messengerActiveTab = 'chats';
     const feedPane = document.getElementById('messengerFeedPane');
     const chatsPane = document.getElementById('messengerChatsPane');
     const feedBtn = document.getElementById('messengerTabFeed');
     const chatsBtn = document.getElementById('messengerTabChats');
-    if (feedPane) feedPane.style.display = tab === 'feed' ? 'block' : 'none';
-    if (chatsPane) chatsPane.style.display = tab === 'chats' ? 'block' : 'none';
-    if (feedBtn) feedBtn.classList.toggle('active', tab === 'feed');
-    if (chatsBtn) chatsBtn.classList.toggle('active', tab === 'chats');
-    if (tab === 'feed') loadCompanyFeed();
-    else loadGlobalChats();
+    if (feedPane) feedPane.style.display = 'none';
+    if (chatsPane) chatsPane.style.display = 'block';
+    if (feedBtn) feedBtn.classList.remove('active');
+    if (chatsBtn) chatsBtn.classList.add('active');
+    loadGlobalChats();
 }
 
 function getGlobalChatMeta(chat) {
@@ -56,8 +56,12 @@ function renderGlobalChats() {
     const container = document.getElementById('messengerChatsList');
     if (!container) return;
 
+    const query = messengerChatSearch.trim().toLocaleLowerCase('ru');
+    const visibleChats = query
+        ? globalChats.filter(chat => String(chat.name || '').toLocaleLowerCase('ru').includes(query))
+        : globalChats;
     let html = '';
-    const sysChats = globalChats.filter(chat => chat.type === 'system' || chat.type === 'role');
+    const sysChats = visibleChats.filter(chat => chat.type === 'system' || chat.type === 'role');
     if (sysChats.length > 0) {
         html += '<div class="crm-chat-group-label">Системные чаты</div>';
         sysChats.forEach(chat => {
@@ -79,7 +83,7 @@ function renderGlobalChats() {
         });
     }
 
-    const customChats = globalChats.filter(chat => chat.type === 'custom');
+    const customChats = visibleChats.filter(chat => chat.type === 'custom');
     if (customChats.length > 0) {
         html += '<div class="crm-chat-group-label">Мои чаты</div>';
         customChats.forEach(chat => {
@@ -98,7 +102,12 @@ function renderGlobalChats() {
             `;
         });
     }
-    container.innerHTML = html;
+    container.innerHTML = html || '<div class="messenger-list-empty">По вашему запросу чаты не найдены.</div>';
+}
+
+function filterMessengerChats(value) {
+    messengerChatSearch = String(value || '');
+    renderGlobalChats();
 }
 
 async function openGlobalChat(id) {
@@ -404,3 +413,4 @@ window.markFeedPostRead = markFeedPostRead;
 window.toggleFeedPin = toggleFeedPin;
 window.setFeedRoleFilter = setFeedRoleFilter;
 window.setFeedReadFilter = setFeedReadFilter;
+window.filterMessengerChats = filterMessengerChats;

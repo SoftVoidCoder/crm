@@ -519,3 +519,455 @@ function downloadPDF() {
     html += `<div style="margin-top: 30px; page-break-inside: avoid;"><h3 style="font-size: 14px;">ИТОГОВОЕ ЗАКРЫТИЕ СДЕЛКИ:</h3><p style="font-size: 12px; margin-bottom: 5px;">Все этапы чек-листа пройдены. Оригинал передан в архив.</p><p style="font-size: 12px; margin-bottom: 20px;"><b>Папка:</b> ${folder} | <b>Стеллаж:</b> ${rack} | <b>Дата передачи:</b> ${aDate}</p><p style="font-size: 14px; margin-bottom: 5px;">Руководитель проекта: ___________________ / _______________________ /</p><p style="font-size: 14px; margin-bottom: 20px;">Дата: «___» _______ 202__ г.</p></div>`;
     container.innerHTML = html; const opt = { margin: [15, 15, 15, 15], filename: `Чек-лист_${currentName}.pdf`, image: { type: 'jpeg', quality: 1 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }; html2pdf().set(opt).from(container).save().then(() => { appendLog("Скачал ГОСТ PDF-отчет"); });
 }
+
+/* ------------------------------------------------------------------
+   Simplified project workflow. The legacy task/timer engine remains
+   available for old exports, while the daily UI uses four clear stages.
+   ------------------------------------------------------------------ */
+const projectWorkflowStages = [
+    {
+        title: 'Подготовка',
+        description: 'Уточните задачу, заказчика, состав проекта и ответственных.',
+        responsible: 'Менеджер проекта',
+    },
+    {
+        title: 'Согласование',
+        description: 'Зафиксируйте требования, бюджет, сроки и согласованные документы.',
+        responsible: 'Менеджер и согласующие отделы',
+    },
+    {
+        title: 'Выполнение',
+        description: 'Ведите основные работы, производство, поставку или оказание услуги.',
+        responsible: 'Рабочая группа проекта',
+    },
+    {
+        title: 'Завершение',
+        description: 'Проверьте результат, закрывающие документы и передачу заказчику.',
+        responsible: 'Менеджер и ответственные за закрытие',
+    },
+];
+
+function projectWorkflowEscape(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function projectWorkflowKey(index) {
+    return `workflow_stage_${index}`;
+}
+
+function projectWorkflowState(project, index) {
+    if (project?.status === 'archive') return 'done';
+    const key = projectWorkflowKey(index);
+    const raw = String(project?.checkedState?.[key] || '');
+    if (raw.startsWith('DONE')) return 'done';
+    if (raw.startsWith('IN_PROGRESS')) return 'in_progress';
+    const items = Array.isArray(project?.subtasks?.[key]) ? project.subtasks[key] : [];
+    if (items.length > 0 && items.every(item => Boolean(item.done))) return 'done';
+    const timer = projectWorkflowTimer(project, index);
+    if (timer.running || Number(timer.elapsed_seconds || 0) > 0) return 'in_progress';
+    return 'planned';
+}
+
+function projectWorkflowNote(project, index) {
+    const value = project?.comments?.[projectWorkflowKey(index)];
+    if (Array.isArray(value) && value.length) return String(value[value.length - 1]?.text || '');
+    return typeof value === 'string' ? value : '';
+}
+
+function projectWorkflowItems(project, index) {
+    if (!project.subtasks || typeof project.subtasks !== 'object') project.subtasks = {};
+    const key = projectWorkflowKey(index);
+    if (!Array.isArray(project.subtasks[key])) project.subtasks[key] = [];
+    return project.subtasks[key];
+}
+
+function projectWorkflowCanPlan(project) {
+    return currentUser?.role === 'Директор' || String(project?.manager || '') === String(currentUser?.name || '');
+}
+
+function projectWorkflowTimers(project) {
+    if (!project.archive_details || typeof project.archive_details !== 'object') project.archive_details = {};
+    if (!project.archive_details.workflow_timers || typeof project.archive_details.workflow_timers !== 'object') {
+        project.archive_details.workflow_timers = {};
+    }
+    return project.archive_details.workflow_timers;
+}
+
+function projectWorkflowTimer(project, index) {
+    const timers = projectWorkflowTimers(project);
+    const key = projectWorkflowKey(index);
+    if (!timers[key] || typeof timers[key] !== 'object') {
+        timers[key] = { elapsed_seconds: 0, running: false, started_at: null };
+    }
+    return timers[key];
+}
+
+function projectWorkflowTimerSeconds(project, index) {
+    const timer = projectWorkflowTimer(project, index);
+    const stored = Math.max(0, Number(timer.elapsed_seconds || 0));
+    if (!timer.running || !timer.started_at) return Math.floor(stored);
+    return Math.floor(stored + Math.max(0, Date.now() - Number(timer.started_at)) / 1000);
+}
+
+function projectWorkflowFormatTime(totalSeconds) {
+    const value = Math.max(0, Math.floor(Number(totalSeconds || 0)));
+    const hours = String(Math.floor(value / 3600)).padStart(2, '0');
+    const minutes = String(Math.floor((value % 3600) / 60)).padStart(2, '0');
+    const seconds = String(value % 60).padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
+}
+
+function projectWorkflowStopTimer(project, index) {
+    const timer = projectWorkflowTimer(project, index);
+    timer.elapsed_seconds = projectWorkflowTimerSeconds(project, index);
+    timer.running = false;
+    timer.started_at = null;
+    return timer;
+}
+
+function startProjectWorkflowTicker() {
+    if (window.projectWorkflowTicker) clearInterval(window.projectWorkflowTicker);
+    const project = projectsDB.find(item => Number(item.id) === Number(currentProjectId));
+    if (!project || !projectWorkflowStages.some((_, index) => projectWorkflowTimer(project, index).running)) return;
+    window.projectWorkflowTicker = setInterval(() => {
+        const activeProject = projectsDB.find(item => Number(item.id) === Number(currentProjectId));
+        if (!activeProject) return;
+        document.querySelectorAll('[data-workflow-timer]').forEach(element => {
+            element.textContent = projectWorkflowFormatTime(projectWorkflowTimerSeconds(activeProject, Number(element.dataset.workflowTimer)));
+        });
+    }, 1000);
+}
+
+function projectWorkflowItemSummary(project, index) {
+    const items = projectWorkflowItems(project, index);
+    const done = items.filter(item => Boolean(item.done)).length;
+    return { items, done, total: items.length, allDone: items.length > 0 && done === items.length };
+}
+
+function projectWorkflowProgress(project) {
+    const done = projectWorkflowStages.filter((_, index) => projectWorkflowState(project, index) === 'done').length;
+    const progress = Math.round((done / projectWorkflowStages.length) * 100);
+    if (project) project.progress = progress;
+    const bar = document.getElementById('progressBar');
+    if (bar) bar.style.width = `${progress}%`;
+    const completeButton = document.getElementById('btnCompleteProject');
+    if (completeButton && project?.status === 'active') {
+        completeButton.disabled = done < projectWorkflowStages.length;
+        completeButton.title = done < projectWorkflowStages.length
+            ? 'Сначала завершите все четыре этапа проекта'
+            : 'Все этапы завершены — проект можно закрыть';
+    }
+    if (typeof renderProjectSummaryCard === 'function') renderProjectSummaryCard();
+    return { done, progress };
+}
+
+function renderChecklist() {
+    const container = document.getElementById('checklist');
+    const project = projectsDB.find(item => Number(item.id) === Number(currentProjectId));
+    if (!container || !project) return;
+    if (!project.checkedState || typeof project.checkedState !== 'object') project.checkedState = {};
+    if (!project.comments || typeof project.comments !== 'object') project.comments = {};
+    if (!project.deadlines || typeof project.deadlines !== 'object') project.deadlines = {};
+    if (!project.taskFiles || typeof project.taskFiles !== 'object') project.taskFiles = {};
+    if (!project.subtasks || typeof project.subtasks !== 'object') project.subtasks = {};
+
+    const summary = projectWorkflowProgress(project);
+    const nextStage = projectWorkflowStages.find((_, index) => projectWorkflowState(project, index) !== 'done');
+    const locked = project.status === 'archive' || project.status === 'canceled';
+    const canPlan = projectWorkflowCanPlan(project);
+    const statusLabels = { planned: 'Не начат', in_progress: 'В работе', done: 'Завершён' };
+
+    container.innerHTML = `
+        <div class="project-workflow-summary">
+            <div><span>Пройдено этапов</span><strong>${summary.done} из ${projectWorkflowStages.length}</strong></div>
+            <div><span>Текущий шаг</span><strong>${nextStage ? nextStage.title : 'Все этапы завершены'}</strong></div>
+            <div><span>Готовность</span><strong>${summary.progress}%</strong></div>
+        </div>
+        <div class="project-stage-list">
+            ${projectWorkflowStages.map((stage, index) => {
+                const key = projectWorkflowKey(index);
+                const status = projectWorkflowState(project, index);
+                const note = projectWorkflowNote(project, index);
+                const deadline = project.deadlines?.[`workflow_${index}`] || '';
+                const file = project.taskFiles?.[key];
+                const itemSummary = projectWorkflowItemSummary(project, index);
+                const previousDone = index === 0 || projectWorkflowState(project, index - 1) === 'done';
+                const timer = projectWorkflowTimer(project, index);
+                const timerSeconds = projectWorkflowTimerSeconds(project, index);
+                const timerCanStart = !locked && previousDone && !timer.running;
+                const timerCanFinish = !locked && timer.running;
+                return `
+                    <article class="project-stage-card is-${status}">
+                        <div class="project-stage-card__head">
+                            <div class="project-stage-card__number">${index + 1}</div>
+                            <div class="project-stage-card__title">
+                                <h3>${stage.title}</h3>
+                                <p>${stage.description}</p>
+                            </div>
+                            <div class="project-stage-card__head-actions">
+                                <span class="project-stage-status is-${status}">${statusLabels[status]}</span>
+                                <div class="project-stage-timer ${timer.running ? 'is-running' : ''}" aria-label="Таймер этапа">
+                                    <strong data-workflow-timer="${index}">${projectWorkflowFormatTime(timerSeconds)}</strong>
+                                    <div class="project-stage-timer__actions">
+                                        <button class="project-stage-timer__button is-play" type="button" onclick="startProjectStageTimer(${index})" title="${timerSeconds > 0 || status === 'done' ? 'Продолжить этап' : 'Начать этап'}" aria-label="${timerSeconds > 0 || status === 'done' ? 'Продолжить этап' : 'Начать этап'}" ${timerCanStart ? '' : 'disabled'}>
+                                            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.5 4.5v11l8-5.5-8-5.5Z"/></svg>
+                                        </button>
+                                        <button class="project-stage-timer__button is-finish" type="button" onclick="finishProjectStageTimer(${index})" title="Завершить этап" aria-label="Завершить этап" ${timerCanFinish ? '' : 'disabled'}>
+                                            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7.9 14.6-4.2-4.2 1.8-1.8 2.4 2.4 6.6-6.6 1.8 1.8-8.4 8.4Z"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="project-stage-card__body">
+                            <div class="project-stage-progress-card">
+                                <span>Готовность этапа</span>
+                                <strong>${itemSummary.done} из ${itemSummary.total}</strong>
+                                <div><i style="width:${itemSummary.total ? Math.round((itemSummary.done / itemSummary.total) * 100) : 0}%"></i></div>
+                            </div>
+                            <label class="project-stage-field">
+                                <span>Выполнить до</span>
+                                <input class="auth-input project-stage-date" value="${projectWorkflowEscape(deadline)}" placeholder="дд.мм.гггг" data-stage-index="${index}" ${locked ? 'disabled' : ''}>
+                            </label>
+                            <div class="project-stage-responsible"><span>Кто отвечает</span><strong>${stage.responsible}</strong></div>
+                            <section class="project-stage-checklist">
+                                <div class="project-stage-checklist__head">
+                                    <div><span>Пункты работы</span><strong>${itemSummary.total ? `${itemSummary.done} из ${itemSummary.total} выполнено` : 'Список пока пуст'}</strong></div>
+                                </div>
+                                <div class="project-stage-checklist__items">
+                                    ${itemSummary.items.length ? itemSummary.items.map(item => `
+                                        <div class="project-stage-check ${item.done ? 'is-done' : ''}">
+                                            <input type="checkbox" ${item.done ? 'checked' : ''} onchange="toggleProjectStageItem(${index}, '${projectWorkflowEscape(item.id)}', this.checked)" ${locked || !previousDone ? 'disabled' : ''}>
+                                            <span>${projectWorkflowEscape(item.text)}</span>
+                                            ${canPlan && !locked ? `<div class="project-stage-check__actions"><button type="button" onclick="editProjectStageItem(${index}, '${projectWorkflowEscape(item.id)}')">Изменить</button><button class="is-danger" type="button" onclick="removeProjectStageItem(${index}, '${projectWorkflowEscape(item.id)}')">Удалить</button></div>` : ''}
+                                        </div>`).join('') : '<div class="project-stage-checklist__empty">Руководитель проекта ещё не добавил пункты работы.</div>'}
+                                </div>
+                                ${canPlan && !locked && status !== 'done' ? `
+                                    <div class="project-stage-checklist__create">
+                                        <input id="projectStageItem_${index}" class="auth-input" type="text" placeholder="Например: согласовать техническое задание" onkeypress="if(event.key === 'Enter'){event.preventDefault(); addProjectStageItem(${index});}">
+                                        <button class="btn-secondary" type="button" onclick="addProjectStageItem(${index})">Добавить пункт</button>
+                                    </div>` : ''}
+                            </section>
+                            <label class="project-stage-field project-stage-field--wide">
+                                <span>Результат и важная информация</span>
+                                <textarea id="projectStageNote_${index}" class="auth-input" rows="3" placeholder="Коротко напишите, что сделано, что согласовано или что мешает двигаться дальше" ${locked ? 'disabled' : ''}>${projectWorkflowEscape(note)}</textarea>
+                            </label>
+                            <div id="file_${key}" class="project-stage-file ${file ? 'has-file' : ''}">
+                                ${file ? `<span>Прикреплён файл</span><a href="${file.url}" target="_blank" rel="noopener">${projectWorkflowEscape(file.name)}</a>` : '<span>Подтверждающий файл не прикреплён</span>'}
+                            </div>
+                            <div class="project-stage-card__actions no-print">
+                                <input type="file" id="finput_${key}" hidden onchange="uploadTaskFile(event, '${key}')">
+                                <button class="btn-secondary" type="button" onclick="document.getElementById('finput_${key}').click()" ${locked ? 'disabled' : ''}>Прикрепить файл</button>
+                                <button class="btn-primary" type="button" onclick="saveProjectStageNote(${index})" ${locked ? 'disabled' : ''}>Сохранить запись</button>
+                            </div>
+                        </div>
+                    </article>`;
+            }).join('')}
+        </div>`;
+
+    if (typeof flatpickr === 'function') {
+        container.querySelectorAll('.project-stage-date').forEach(input => {
+            flatpickr(input, {
+                locale: 'ru',
+                dateFormat: 'd.m.Y',
+                disableMobile: true,
+                defaultDate: input.value || null,
+                onChange: (_dates, value) => saveProjectWorkflowDeadline(Number(input.dataset.stageIndex), value),
+            });
+        });
+    }
+    startProjectWorkflowTicker();
+}
+
+async function addProjectStageItem(index) {
+    const project = projectsDB.find(item => Number(item.id) === Number(currentProjectId));
+    const input = document.getElementById(`projectStageItem_${index}`);
+    if (!project || !input || !projectWorkflowCanPlan(project)) return;
+    const text = input.value.trim();
+    if (!text) return showToast('Пункты работы', 'Напишите, что нужно выполнить', 'error');
+    const items = projectWorkflowItems(project, index);
+    items.push({ id: `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`, text, done: false, createdBy: currentUser.name });
+    appendLog(`Добавил пункт работы «${text}» в этап «${projectWorkflowStages[index].title}»`);
+    const response = await syncProject(project);
+    if (!response || response.error) return showToast('Пункты работы', response?.message || 'Не удалось сохранить пункт', 'error');
+    renderChecklist(true);
+}
+
+async function toggleProjectStageItem(index, itemId, done) {
+    const project = projectsDB.find(item => Number(item.id) === Number(currentProjectId));
+    if (!project) return;
+    const item = projectWorkflowItems(project, index).find(entry => String(entry.id) === String(itemId));
+    if (!item) return;
+    if (done && projectWorkflowState(project, index) === 'planned') {
+        showToast('Пункты работы', 'Сначала запустите таймер этапа', 'error');
+        renderChecklist(true);
+        return;
+    }
+    item.done = Boolean(done);
+    item.completedBy = done ? currentUser.name : '';
+    item.completedAt = done ? new Date().toLocaleString('ru-RU') : '';
+    const key = projectWorkflowKey(index);
+    if (!project.checkedState) project.checkedState = {};
+    const summary = projectWorkflowItemSummary(project, index);
+    const previousDone = index === 0 || projectWorkflowState(project, index - 1) === 'done';
+    if (summary.allDone && previousDone) {
+        projectWorkflowStopTimer(project, index);
+        project.checkedState[key] = `DONE | ${currentUser.name} | ${new Date().toLocaleString('ru-RU')}`;
+        appendLog(`Автоматически завершён этап «${projectWorkflowStages[index].title}»: выполнены все пункты`);
+    } else if (projectWorkflowState(project, index) === 'done' && !done) {
+        project.checkedState[key] = `IN_PROGRESS | ${currentUser.name} | ${new Date().toLocaleString('ru-RU')}`;
+    }
+    projectWorkflowProgress(project);
+    appendLog(`${done ? 'Выполнил' : 'Вернул в работу'} пункт «${item.text}» этапа «${projectWorkflowStages[index].title}»`);
+    const response = await syncProject(project);
+    if (!response || response.error) return showToast('Пункты работы', response?.message || 'Не удалось сохранить отметку', 'error');
+    renderChecklist(true);
+}
+
+async function editProjectStageItem(index, itemId) {
+    const project = projectsDB.find(item => Number(item.id) === Number(currentProjectId));
+    if (!project || !projectWorkflowCanPlan(project)) return;
+    const item = projectWorkflowItems(project, index).find(entry => String(entry.id) === String(itemId));
+    if (!item) return;
+    const nextText = String(await customPrompt('Измените пункт работы:', item.text) || '').trim();
+    if (!nextText || nextText === item.text) return;
+    const previousText = item.text;
+    item.text = nextText;
+    item.updatedBy = currentUser.name;
+    item.updatedAt = new Date().toLocaleString('ru-RU');
+    appendLog(`Изменил пункт «${previousText}» на «${nextText}»`);
+    const response = await syncProject(project);
+    if (!response || response.error) {
+        item.text = previousText;
+        return showToast('Пункты работы', response?.message || 'Не удалось изменить пункт', 'error');
+    }
+    renderChecklist(true);
+}
+
+async function removeProjectStageItem(index, itemId) {
+    const project = projectsDB.find(item => Number(item.id) === Number(currentProjectId));
+    if (!project || !projectWorkflowCanPlan(project)) return;
+    const items = projectWorkflowItems(project, index);
+    const item = items.find(entry => String(entry.id) === String(itemId));
+    if (!item || !(await customConfirm(`Удалить пункт «${item.text}»?`))) return;
+    project.subtasks[projectWorkflowKey(index)] = items.filter(entry => String(entry.id) !== String(itemId));
+    const remaining = projectWorkflowItemSummary(project, index);
+    if (remaining.allDone && (index === 0 || projectWorkflowState(project, index - 1) === 'done')) {
+        projectWorkflowStopTimer(project, index);
+        project.checkedState[projectWorkflowKey(index)] = `DONE | ${currentUser.name} | ${new Date().toLocaleString('ru-RU')}`;
+    } else if (!remaining.total && projectWorkflowState(project, index) === 'done') {
+        const timer = projectWorkflowTimer(project, index);
+        if (Number(timer.elapsed_seconds || 0) > 0) {
+            project.checkedState[projectWorkflowKey(index)] = `IN_PROGRESS | ${currentUser.name} | ${new Date().toLocaleString('ru-RU')}`;
+        } else {
+            delete project.checkedState[projectWorkflowKey(index)];
+        }
+    }
+    projectWorkflowProgress(project);
+    appendLog(`Удалил пункт работы «${item.text}» из этапа «${projectWorkflowStages[index].title}»`);
+    const response = await syncProject(project);
+    if (!response || response.error) return showToast('Пункты работы', response?.message || 'Не удалось удалить пункт', 'error');
+    renderChecklist(true);
+}
+
+async function startProjectStageTimer(index) {
+    const project = projectsDB.find(item => Number(item.id) === Number(currentProjectId));
+    if (!project) return;
+    const summary = projectWorkflowItemSummary(project, index);
+    if (index > 0 && projectWorkflowState(project, index - 1) !== 'done') {
+        return showToast('Таймер этапа', 'Сначала завершите предыдущий этап', 'error');
+    }
+    const wasDone = projectWorkflowState(project, index) === 'done';
+    const timer = projectWorkflowTimer(project, index);
+    if (timer.running) return;
+    if (wasDone) {
+        const lastCompletedItem = [...summary.items].reverse().find(item => item.done);
+        if (lastCompletedItem) {
+            lastCompletedItem.done = false;
+            lastCompletedItem.completedBy = '';
+            lastCompletedItem.completedAt = '';
+        }
+    }
+    timer.running = true;
+    timer.started_at = Date.now();
+    timer.started_by = currentUser.name;
+    if (!project.checkedState) project.checkedState = {};
+    project.checkedState[projectWorkflowKey(index)] = `IN_PROGRESS | ${currentUser.name} | ${new Date().toLocaleString('ru-RU')}`;
+    appendLog(`${Number(timer.elapsed_seconds || 0) > 0 ? 'Продолжил' : 'Запустил'} таймер этапа «${projectWorkflowStages[index].title}»`);
+    const response = await syncProject(project);
+    if (!response || response.error) return showToast('Таймер этапа', response?.message || 'Не удалось запустить таймер', 'error');
+    renderChecklist(true);
+}
+
+async function finishProjectStageTimer(index) {
+    const project = projectsDB.find(item => Number(item.id) === Number(currentProjectId));
+    if (!project) return;
+    const timer = projectWorkflowTimer(project, index);
+    if (!timer.running) return;
+    projectWorkflowStopTimer(project, index);
+    const completedAt = new Date().toLocaleString('ru-RU');
+    projectWorkflowItems(project, index).forEach(item => {
+        item.done = true;
+        item.completedBy = currentUser.name;
+        item.completedAt = completedAt;
+    });
+    if (!project.checkedState) project.checkedState = {};
+    project.checkedState[projectWorkflowKey(index)] = `DONE | ${currentUser.name} | ${completedAt}`;
+    timer.finished_by = currentUser.name;
+    timer.finished_at = Date.now();
+    projectWorkflowProgress(project);
+    appendLog(`Завершил этап «${projectWorkflowStages[index].title}». Таймер остановлен`);
+    const response = await syncProject(project);
+    if (!response || response.error) return showToast('Таймер этапа', response?.message || 'Не удалось завершить этап', 'error');
+    showToast('Этап проекта', `Этап «${projectWorkflowStages[index].title}» завершён`);
+    renderChecklist(true);
+}
+
+async function saveProjectStageNote(index) {
+    const project = projectsDB.find(item => Number(item.id) === Number(currentProjectId));
+    const input = document.getElementById(`projectStageNote_${index}`);
+    if (!project || !input) return;
+    const text = input.value.trim();
+    if (!text) return showToast('Этап проекта', 'Напишите результат или важную информацию', 'error');
+    if (!project.comments) project.comments = {};
+    const now = new Date().toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+    project.comments[projectWorkflowKey(index)] = [{ text, author: currentUser.name, time: now }];
+    appendLog(`Обновил запись по этапу «${projectWorkflowStages[index].title}»`);
+    const response = await syncProject(project);
+    if (!response || response.error) return showToast('Этап проекта', response?.message || 'Не удалось сохранить запись', 'error');
+    showToast('Этап проекта', 'Запись сохранена');
+    renderChecklist(true);
+}
+
+async function saveProjectWorkflowDeadline(index, value) {
+    const project = projectsDB.find(item => Number(item.id) === Number(currentProjectId));
+    if (!project) return;
+    if (!project.deadlines) project.deadlines = {};
+    project.deadlines[`workflow_${index}`] = value;
+    appendLog(`Установил срок этапа «${projectWorkflowStages[index].title}»: ${value}`);
+    const response = await syncProject(project);
+    if (!response || response.error) showToast('Этап проекта', response?.message || 'Не удалось сохранить срок', 'error');
+}
+
+function updateChecklistUI() {
+    renderChecklist(true);
+}
+
+function updateProgress() {
+    const project = projectsDB.find(item => Number(item.id) === Number(currentProjectId));
+    if (project) projectWorkflowProgress(project);
+}
+
+window.saveProjectStageNote = saveProjectStageNote;
+window.saveProjectWorkflowDeadline = saveProjectWorkflowDeadline;
+window.addProjectStageItem = addProjectStageItem;
+window.toggleProjectStageItem = toggleProjectStageItem;
+window.editProjectStageItem = editProjectStageItem;
+window.removeProjectStageItem = removeProjectStageItem;
+window.startProjectStageTimer = startProjectStageTimer;
+window.finishProjectStageTimer = finishProjectStageTimer;

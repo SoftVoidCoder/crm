@@ -1,0 +1,359 @@
+.main-content #contract360View.contract360-simple {
+    --c360-border: #dce4ec;
+    --c360-muted: #69778b;
+    --c360-text: #172236;
+    --c360-accent: #0b8075;
+    max-width: 1500px;
+    margin: 0 auto;
+}
+
+.contract360-page-header {
+    align-items: flex-end;
+    margin-bottom: 18px;
+}
+
+.contract360-route {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.contract360-route > div {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 2px 10px;
+    align-items: center;
+    padding: 13px 14px;
+    border: 1px solid var(--c360-border);
+    border-radius: 12px;
+    background: #fff;
+}
+
+.contract360-route span {
+    grid-row: 1 / 3;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #e8f5f3;
+    color: var(--c360-accent);
+    font-weight: 800;
+}
+
+.contract360-route strong {
+    color: var(--c360-text);
+    font-size: 14px;
+}
+
+.contract360-route small {
+    color: var(--c360-muted);
+    font-size: 12px;
+}
+
+.contract360-empty {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    padding: 52px 24px;
+    text-align: center;
+}
+
+.contract360-empty h2,
+.contract360-empty p {
+    margin: 0;
+}
+
+.contract360-empty p {
+    max-width: 620px;
+    color: var(--c360-muted);
+}
+
+.main-content #contract360View .contract360-workspace {
+    display: block !important;
+    overflow: hidden;
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 1px solid var(--c360-border);
+    border-radius: 16px;
+    background: #fff;
+}
+
+.main-content #contract360View .contract360-tablist {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 4px;
+    overflow: visible !important;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--c360-border);
+    background: #f7f9fb;
+}
+
+.main-content #contract360View .contract360-tablist .krd-tab {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    min-height: 38px;
+    padding: 8px 14px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #56657a;
+    font-weight: 700;
+}
+
+.main-content #contract360View .contract360-tablist .krd-tab.active,
+.main-content #contract360View .contract360-tablist .krd-tab.is-active {
+    background: #fff;
+    color: var(--c360-accent);
+    box-shadow: 0 1px 4px rgba(20, 35, 55, .1);
+}
+
+.main-content #contract360View .contract360-panel {
+    min-width: 0;
+    max-width: 100%;
+    padding: 20px;
+}
+
+.contract360-panel-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.contract360-panel-heading h2,
+.contract360-panel-heading p {
+    margin: 0;
+}
+
+.contract360-panel-heading h2 {
+    color: var(--c360-text);
+    font-size: 20px;
+}
+
+.contract360-panel-heading p {
+    margin-top: 4px;
+    color: var(--c360-muted);
+    font-size: 13px;
+}
+
+.contract360-searchbar {
+    display: grid;
+    grid-template-columns: minmax(280px, 1fr) minmax(190px, 240px) auto;
+    gap: 10px;
+    align-items: end;
+    margin: 16px 0;
+    padding: 12px;
+    border: 1px solid var(--c360-border);
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.contract360-searchbar label > span {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--c360-muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.main-content #contract360View .contract360-registry-counters {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+}
+
+.main-content #contract360View .contract360-registry-counter {
+    min-width: 0;
+    min-height: 92px;
+    padding: 13px 14px;
+    border: 1px solid var(--c360-border);
+    border-radius: 12px;
+    background: #fff;
+}
+
+.main-content #contract360View .contract360-registry-counter__value {
+    margin: 5px 0 2px;
+    color: var(--c360-text);
+    font-size: 24px;
+    line-height: 1;
+}
+
+.main-content #contract360View .contract360-registry-counter__label,
+.main-content #contract360View .contract360-registry-counter__note {
+    color: var(--c360-muted);
+    font-size: 12px;
+}
+
+.contract360-simple-table {
+    min-width: 850px !important;
+}
+
+.contract360-content,
+.contract360-registry-list,
+.contract-registry-table-shell {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.contract-registry-table-shell {
+    overflow-x: auto;
+}
+
+.contract360-simple-table tbody tr {
+    cursor: pointer;
+}
+
+.contract360-simple-table tbody tr:hover {
+    background: #f3f8f7;
+}
+
+.contract360-risk-note {
+    color: #b33c38 !important;
+}
+
+.contract360-card-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+    padding: 18px 20px 4px;
+}
+
+.contract360-back {
+    padding: 7px 0;
+    border: 0;
+    background: transparent;
+    color: var(--c360-accent);
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.contract360-card-title h2,
+.contract360-card-title p {
+    margin: 0;
+}
+
+.contract360-card-title h2 {
+    color: var(--c360-text);
+    font-size: 22px;
+}
+
+.contract360-card-title p {
+    margin-top: 5px;
+    color: var(--c360-muted);
+    font-size: 13px;
+}
+
+.main-content #contract360View #contract360Metrics {
+    display: none !important;
+}
+
+.main-content #contract360View .contract360-action-hidden {
+    display: none !important;
+}
+
+.main-content #contract360View .contract360-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 13px 14px;
+}
+
+.main-content #contract360View .contract360-form-grid--primary {
+    padding: 16px;
+    border: 1px solid var(--c360-border);
+    border-radius: 12px;
+}
+
+.main-content #contract360View .contract360-field-full {
+    grid-column: 1 / -1;
+}
+
+.main-content #contract360View .contract360-editable:disabled {
+    border-color: transparent;
+    background: #f6f8fa;
+    color: #233147;
+    opacity: 1;
+    -webkit-text-fill-color: #233147;
+    cursor: default;
+}
+
+.main-content #contract360View select.contract360-editable:disabled {
+    appearance: none;
+    background-image: none !important;
+}
+
+.contract360-extra {
+    margin-top: 12px;
+    border: 1px solid var(--c360-border);
+    border-radius: 12px;
+    background: #fbfcfd;
+}
+
+.contract360-extra summary {
+    padding: 13px 15px;
+    color: #344258;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.contract360-extra[open] .contract360-form-grid {
+    padding: 2px 15px 15px;
+}
+
+.contract360-history-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+@media (max-width: 900px) {
+    .contract360-route,
+    .main-content #contract360View .contract360-registry-counters,
+    .contract360-history-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .contract360-searchbar {
+        grid-template-columns: minmax(0, 1fr) minmax(180px, .6fr);
+    }
+
+    .main-content #contract360View .contract360-tablist {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .contract360-page-header,
+    .contract360-panel-heading {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .contract360-route,
+    .main-content #contract360View .contract360-registry-counters,
+    .contract360-searchbar,
+    .main-content #contract360View .contract360-form-grid,
+    .contract360-history-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .main-content #contract360View .contract360-field-full {
+        grid-column: auto;
+    }
+
+    .contract360-card-header {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .main-content #contract360View .contract360-tablist {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}

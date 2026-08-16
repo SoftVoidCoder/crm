@@ -1,51 +1,79 @@
-<div id="clientsView" class="view-page" style="display: none;">
-    <div class="surface-card surface-card--padded">
-        <div class="view-header view-header--tight">
-            <div class="view-heading">
-    <span class="view-eyebrow">Клиенты</span>
-                <h1 class="view-title">База контрагентов</h1>
-                <p class="view-subtitle">Единый каталог заказчиков и партнёров с быстрым доступом к досье по сделкам, претензиям и судам.</p>
-            </div>
+<div id="clientsView" class="view-page clients-page" style="display:none;">
+    <header class="view-header">
+        <div class="view-heading">
+            <span class="view-eyebrow">CRM и продажи</span>
+            <h1 class="view-title">База контрагентов</h1>
+            <p class="view-subtitle">Компании и предприниматели, с которыми работает команда.</p>
         </div>
-        <div class="workbench-strip">
-            <div class="workbench-card">
-                <div class="workbench-card-title">Основной сценарий</div>
-                <div class="workbench-card-text">Сначала найди или создай контрагента, потом сразу открой досье и уже оттуда переходи в договоры, документы и деньги.</div>
-            </div>
-            <div class="workbench-card">
-                <div class="workbench-card-title">Быстро</div>
-                <div class="workbench-card-actions">
-                    <button class="btn-primary" onclick="focusFieldById('addClientName')">Новый контрагент</button>
-                    <button class="btn-secondary" onclick="openFirstClientCard()">Открыть первое досье</button>
-                </div>
-            </div>
+        <div class="view-actions">
+            <button class="btn-secondary" type="button" onclick="openFirstClientCard()">Открыть первое досье</button>
+            <button class="btn-primary" type="button" onclick="focusFieldById('addClientName')">Новый контрагент</button>
         </div>
-        <div class="client-form">
-            <div><label class="field-label">Название (ООО/ИП)</label><input type="text" id="addClientName" class="auth-input"></div>
+    </header>
+
+    <section class="surface-card surface-card--padded client-create-panel">
+        <div class="section-header">
             <div>
-                <label class="field-label">ИНН</label>
-                <div style="display:flex; gap:10px; align-items:center;">
-                    <input type="text" id="addClientInn" data-field="addClientInn" class="auth-input">
-                    <button class="btn-secondary" type="button" style="height:46px; white-space:nowrap;" onclick="lookupClientInn()">Проверить ИНН</button>
-                </div>
-                <span class="form-error" data-error-for="addClientInn"></span>
+                <h2 class="section-title">Новый контрагент</h2>
+                <p class="section-subtitle">Достаточно названия и ИНН. Остальные реквизиты можно заполнить позже.</p>
             </div>
-            <div><label class="field-label">КПП</label><input type="text" id="addClientKpp" class="auth-input"></div>
-            <div><label class="field-label">ОГРН</label><input type="text" id="addClientOgrn" class="auth-input"></div>
-            <div><label class="field-label">Юридический адрес</label><input type="text" id="addClientLegalAddress" class="auth-input"></div>
-            <div><label class="field-label">Контакты (телефон / почта)</label><input type="text" id="addClientContact" class="auth-input"></div>
-            <button class="btn-primary" style="height: 46px;" onclick="addClient()">+ Добавить</button>
         </div>
-        <div class="finance-actions-row" style="margin-bottom:16px;">
-            <input id="clientsImportFile" type="file" accept=".csv,.json" class="auth-input" style="margin:0; max-width:320px;">
-        <button class="btn-secondary" onclick="importClientsFile()">Импорт данных</button>
-            <button class="btn-secondary" onclick="mergeClientsPrompt()">Слить дубли</button>
+        <div class="client-form client-form--clean">
+            <label class="form-field client-field--name">
+                <span class="form-label">Название ООО или ИП <span class="form-required">*</span></span>
+                <input type="text" id="addClientName" class="auth-input" placeholder="Например, ООО «КОРДА»">
+            </label>
+            <label class="form-field client-field--inn">
+                <span class="form-label">ИНН</span>
+                <span class="client-inn-control">
+                    <input type="text" id="addClientInn" data-field="addClientInn" class="auth-input" inputmode="numeric" placeholder="10 или 12 цифр">
+                    <button class="btn-secondary" type="button" onclick="lookupClientInn()">Проверить</button>
+                </span>
+                <span class="form-error" data-error-for="addClientInn"></span>
+            </label>
+            <label class="form-field">
+                <span class="form-label">КПП</span>
+                <input type="text" id="addClientKpp" class="auth-input" inputmode="numeric" placeholder="9 цифр">
+            </label>
+            <label class="form-field">
+                <span class="form-label">ОГРН</span>
+                <input type="text" id="addClientOgrn" class="auth-input" inputmode="numeric" placeholder="13 или 15 цифр">
+            </label>
+            <label class="form-field client-field--address">
+                <span class="form-label">Юридический адрес</span>
+                <input type="text" id="addClientLegalAddress" class="auth-input" placeholder="Город, улица, дом">
+            </label>
+            <label class="form-field client-field--contact">
+                <span class="form-label">Телефон или почта</span>
+                <input type="text" id="addClientContact" class="auth-input" placeholder="+7 900 000-00-00 или office@company.ru">
+            </label>
         </div>
-        <div class="table-shell">
+        <div class="client-form-actions">
+            <button class="btn-primary" type="button" onclick="addClient()">Добавить контрагента</button>
+        </div>
+    </section>
+
+    <section class="surface-card clients-registry-panel">
+        <div class="clients-registry-head">
+            <div>
+                <h2 class="section-title">Список контрагентов</h2>
+                <p class="section-subtitle">Откройте строку, чтобы перейти в полное досье.</p>
+            </div>
+            <details class="client-tools-details">
+                <summary>Импорт и обслуживание</summary>
+                <div class="client-tools-menu">
+                    <input id="clientsImportFile" type="file" accept=".csv,.txt,.json,.xlsx,.xlsm" class="auth-input">
+                    <button class="btn-secondary" type="button" onclick="importClientsFile()">Импортировать</button>
+                    <button class="btn-secondary" type="button" onclick="mergeClientsPrompt()">Объединить дубли</button>
+                    <button id="btnExportClients" class="btn-secondary" type="button" onclick="exportDataToExcel(clientsDB, 'Реестр_Контрагентов')">Экспортировать</button>
+                </div>
+            </details>
+        </div>
+        <div class="table-shell clients-table-shell">
             <table class="admin-table">
                 <thead><tr><th>Название</th><th>ИНН / КПП</th><th>ОГРН</th><th>Юридический адрес</th><th>Контакты</th></tr></thead>
                 <tbody id="clientsListTable"></tbody>
             </table>
         </div>
-    </div>
+    </section>
 </div>

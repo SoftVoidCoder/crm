@@ -110,6 +110,115 @@ function normalizeProjectCollection(projects) {
 window.normalizeProjectPayload = normalizeProjectPayload;
 window.normalizeProjectCollection = normalizeProjectCollection;
 
+let projectCreateStep = 1;
+
+function setProjectCreateStep(step) {
+    const target = Math.max(1, Math.min(3, Number(step) || 1));
+    if (target > 1) {
+        const nameInput = document.getElementById('newProjName');
+        if (nameInput && !nameInput.value.trim()) {
+            nameInput.focus();
+            const error = document.getElementById('createProjectError');
+            if (error) {
+                error.textContent = 'Укажите наименование проекта.';
+                error.classList.remove('krd-is-hidden');
+            }
+            return;
+        }
+    }
+    projectCreateStep = target;
+    document.querySelectorAll('[data-project-create-panel]').forEach(panel => {
+        panel.classList.toggle('is-active', Number(panel.dataset.projectCreatePanel) === target);
+    });
+    document.querySelectorAll('[data-project-create-step]').forEach(button => {
+        const value = Number(button.dataset.projectCreateStep);
+        button.classList.toggle('is-active', value === target);
+        button.classList.toggle('is-complete', value < target);
+    });
+    const back = document.getElementById('projectCreateBack');
+    const next = document.getElementById('projectCreateNext');
+    const submit = document.getElementById('createProjectSubmit');
+    if (back) back.classList.toggle('krd-is-hidden', target === 1);
+    if (next) next.classList.toggle('krd-is-hidden', target === 3);
+    if (submit) submit.classList.toggle('krd-is-hidden', target !== 3);
+    const error = document.getElementById('createProjectError');
+    if (error) error.classList.add('krd-is-hidden');
+}
+
+function nextProjectCreateStep() {
+    setProjectCreateStep(projectCreateStep + 1);
+}
+
+function projectStatusLabel(status) {
+    return ({
+        active: 'В работе',
+        archive: 'Завершён',
+        canceled: 'Отменён',
+        terminated: 'Расторгнут',
+        prolongation: 'На продлении',
+    })[String(status || '')] || 'В работе';
+}
+
+function projectMoney(value) {
+    return `${Math.round(Number(value || 0)).toLocaleString('ru-RU')} ₽`;
+}
+
+function renderProjectSummaryCard() {
+    const p = normalizeProjectPayload(projectsDB.find(item => Number(item.id) === Number(currentProjectId)));
+    if (!p) return;
+    const costsInput = document.getElementById('projCosts');
+    const costs = costsInput ? Number(costsInput.value || 0) : Number(p.costs || 0);
+    const budget = Number(p.budget || document.getElementById('projBudget')?.value || 0);
+    const margin = budget - costs;
+    const values = {
+        projectSummaryName: p.name || 'Без названия',
+        projectSummaryCaption: [p.contract, p.client].filter(Boolean).join(' · ') || 'Карточка проекта',
+        projectSummaryStatus: projectStatusLabel(p.status),
+        projectSummaryClient: p.client || 'Не указан',
+        projectSummaryContract: p.contract || 'Не указан',
+        projectSummaryManager: p.manager || 'Не назначен',
+        projectSummaryBudget: projectMoney(budget),
+        projectSummaryCosts: projectMoney(costs),
+        projectSummaryMargin: projectMoney(margin),
+        projectSummaryProgress: `${Number(p.progress || 0)}%`,
+        projectSummaryTeam: Array.isArray(p.team) && p.team.length ? p.team.join(', ') : 'Не назначена',
+        projectSummaryFiles: String(Array.isArray(p.files) ? p.files.length : 0),
+        projectSummaryItems: String(Array.isArray(p.nomenclature) ? p.nomenclature.length : 0),
+    };
+    Object.entries(values).forEach(([id, value]) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    });
+    const status = document.getElementById('projectSummaryStatus');
+    if (status) status.dataset.status = String(p.status || 'active');
+    const progress = document.getElementById('projectSummaryProgressBar');
+    if (progress) progress.style.width = `${Math.max(0, Math.min(100, Number(p.progress || 0)))}%`;
+}
+
+function setProjectEditMode(editing) {
+    const readCard = document.getElementById('projectReadCard');
+    const editCard = document.getElementById('projectEditCard');
+    const editButton = document.getElementById('projectEditButton');
+    if (readCard) readCard.classList.toggle('krd-is-hidden', !!editing);
+    if (editCard) editCard.classList.toggle('krd-is-hidden', !editing);
+    if (editButton) editButton.classList.toggle('krd-is-hidden', !!editing);
+    if (!editing) renderProjectSummaryCard();
+    if (editing && editCard) editCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function switchProjectWorkspaceTab(tab, shouldScroll = true) {
+    const target = String(tab || 'overview');
+    document.querySelectorAll('[data-project-tab]').forEach(button => button.classList.toggle('is-active', button.dataset.projectTab === target));
+    document.querySelectorAll('[data-project-panel]').forEach(panel => panel.classList.toggle('is-active', panel.dataset.projectPanel === target));
+    const panel = document.querySelector(`[data-project-panel="${target}"]`);
+    if (panel && shouldScroll) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+window.setProjectCreateStep = setProjectCreateStep;
+window.nextProjectCreateStep = nextProjectCreateStep;
+window.setProjectEditMode = setProjectEditMode;
+window.switchProjectWorkspaceTab = switchProjectWorkspaceTab;
+
 function createNewProject() { 
     const sel = document.getElementById('newProjClient');
     if(sel) sel.innerHTML = '<option value="">Свободный ввод или выберите из базы</option>' + clientsDB.map(c => `<option value="${c.name}">${c.name} (ИНН: ${c.inn})</option>`).join('');
@@ -130,17 +239,22 @@ function createNewProject() {
     if (contractInput) contractInput.value = autoContractNum;
     
     const nameInput = document.getElementById('newProjName'); if (nameInput) nameInput.value = '';
-    const managerInput = document.getElementById('newProjManager'); if (managerInput) managerInput.value = '';
+    const managerInput = document.getElementById('newProjManager'); if (managerInput) managerInput.value = currentUser?.name || '';
     const budgetInput = document.getElementById('newProjBudget'); if (budgetInput) budgetInput.value = '';
 
     ProjectRolesManager.renderSelector('newProjRoles', []);
+
+    const emptyChecklist = document.getElementById('isEmptyChecklist');
+    if (emptyChecklist) emptyChecklist.checked = false;
+    setProjectCreateStep(1);
 
     const modal = document.getElementById('createProjectModal'); if(modal) modal.style.display = 'flex'; 
 }
 
 function closeCreateModal() { const modal = document.getElementById('createProjectModal'); if(modal) modal.style.display = 'none'; }
 
-async function submitNewProject() {
+async function submitNewProject(event) {
+    if (event?.preventDefault) event.preventDefault();
     const nIn = document.getElementById('newProjName'); const name = nIn ? nIn.value.trim() : ''; if (!name) return;
     const cIn = document.getElementById('newProjClient'); const client = cIn ? cIn.value : '';
     const conIn = document.getElementById('newProjContract'); const contract = conIn ? conIn.value.trim() : 'ТБД';
@@ -151,7 +265,7 @@ async function submitNewProject() {
     
     const budgetInput = document.getElementById('newProjBudget'); const budget = budgetInput ? parseFloat(budgetInput.value) || 0 : 0;
     
-    const isEmptyChecked = document.getElementById('isEmptyChecklist').checked;
+    const isEmptyChecked = !!document.getElementById('isEmptyChecklist')?.checked;
     let dynamicChecklist = [];
     
     if (!isEmptyChecked) {
@@ -172,7 +286,7 @@ async function submitNewProject() {
 
     const allowed_roles = ProjectRolesManager.getSelected('newProjRoles');
 
-    await apiCall('/projects', 'POST', { 
+    const created = await apiCall('/projects', 'POST', {
         name: name, 
         contract: contract, 
         client: client, 
@@ -183,8 +297,14 @@ async function submitNewProject() {
         allowed_roles: allowed_roles 
     });
     
-    closeCreateModal(); await loadProjects(); renderDashboard();
+    closeCreateModal();
+    await loadProjects();
+    renderDashboard();
     showToast("Успех", "Проект успешно создан");
+    const createdId = Number(created?.id || created?.project?.id || 0);
+    const createdProject = projectsDB.find(item => Number(item.id) === createdId)
+        || [...projectsDB].reverse().find(item => item.name === name && item.contract === contract);
+    if (createdProject) openProject(createdProject.id);
 }
 
 function applyChatVisibility() {
@@ -217,7 +337,7 @@ function openProject(id) {
     if (mainContent) mainContent.scrollTop = 0;
     window.scrollTo(0, 0);
 
-    ['dashboardView', 'analyticsView', 'adminView', 'clientsView', 'bitrixImportView', 'prospectingView', 'leadsView', 'dealsView', 'profileView', 'emailsView', 'meetingsView', 'messengerView', 'documentsView', 'financeView', 'accountingView', 'client360View', 'contract360View', 'supplyView', 'salesView', 'productionView', 'expensesView', 'requestsView', 'resourcesView', 'serviceView', 'executiveView', 'operationsView'].forEach(v => { const e = document.getElementById(v); if(e) e.style.display = 'none'; });
+    ['dashboardView', 'analyticsView', 'adminView', 'clientsView', 'bitrixImportView', 'prospectingView', 'myProspectingView', 'leadsView', 'dealsView', 'profileView', 'emailsView', 'meetingsView', 'messengerView', 'documentsView', 'financeView', 'accountingView', 'client360View', 'contract360View', 'supplyView', 'salesView', 'productionView', 'expensesView', 'requestsView', 'resourcesView', 'serviceView', 'executiveView', 'operationsView'].forEach(v => { const e = document.getElementById(v); if(e) e.style.display = 'none'; });
     
     const pView = document.getElementById('projectView'); if(pView) { pView.classList.remove('krd-is-hidden'); pView.style.display = 'block'; }
     if (typeof mountSectionGuideForView === 'function') mountSectionGuideForView('projectView');
@@ -233,14 +353,9 @@ function openProject(id) {
     const contractBlock = document.getElementById('projContract')?.parentElement;
     if (contractBlock && !document.getElementById('extendedContractDetails')) {
         const extHtml = `
-            <div id="extendedContractDetails" class="contract-meta-card">
-                <div class="contract-meta-header">
-                    <div class="contract-meta-title">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                    Свойства и реквизиты договора
-                    </div>
-                </div>
-                
+            <details id="extendedContractDetails" class="contract-meta-card project-edit-optional">
+                <summary>Дополнительные реквизиты договора</summary>
+                <div class="project-contract-extra">
                 <div class="contract-meta-grid">
                     <div class="field-stack">
                         <label class="field-label">Доп. номер</label>
@@ -274,7 +389,8 @@ function openProject(id) {
                     </div>
                     <div id="customFieldsContainer" class="custom-field-list"></div>
                 </div>
-            </div>
+                </div>
+            </details>
         `;
         contractBlock.insertAdjacentHTML('afterend', extHtml);
     }
@@ -302,25 +418,13 @@ function openProject(id) {
 
     document.querySelectorAll('.finance-block').forEach(el => el.style.display = ['Директор', 'Бухгалтерия', 'Менеджер'].includes(currentUser.role) ? 'flex' : 'none');
     
-    // ИНЖЕКЦИЯ КНОПОК СТАТУСОВ ДОГОВОРА
+    // Редкие договорные действия больше не смешиваются с ежедневной работой.
     const btnContainer = document.getElementById('projectToolbarStatusActions');
-    if (btnContainer && !document.getElementById('btnProlong')) {
-        btnContainer.innerHTML = `
-            <button id="btnProlong" class="btn-secondary btn-prolong" onclick="prolongProject()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                Перевести на пролонгацию
-            </button>
-            <button id="btnTerminate" class="btn-danger btn-terminate" onclick="terminateProject()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
-                Расторгнуть договор
-            </button>
-        `;
-    }
+    if (btnContainer) btnContainer.innerHTML = '';
     
     const bCancel = document.getElementById('btnCancel'); if(bCancel) bCancel.style.display = p.status === 'active' ? 'block' : 'none';
     const bRestore = document.getElementById('btnRestore'); if(bRestore) bRestore.style.display = (p.status === 'canceled' || p.status === 'archive' || p.status === 'terminated') ? 'block' : 'none';
-    const bProlong = document.getElementById('btnProlong'); if(bProlong) bProlong.style.display = p.status === 'active' ? 'block' : 'none';
-    const bTerminate = document.getElementById('btnTerminate'); if(bTerminate) bTerminate.style.display = (p.status === 'active' || p.status === 'prolongation') ? 'block' : 'none';
+    const bComplete = document.getElementById('btnCompleteProject'); if(bComplete) bComplete.style.display = p.status === 'active' ? 'inline-flex' : 'none';
     const bLogs = document.getElementById('btnLogs'); if(bLogs) bLogs.style.display = currentUser.role === 'Директор' ? 'block' : 'none';
     
     applyChatVisibility();
@@ -338,6 +442,9 @@ function openProject(id) {
     calcMargin();
     if (typeof renderProjectSmartTools === 'function') renderProjectSmartTools();
     if (typeof renderProjectOpsSummary === 'function') renderProjectOpsSummary();
+    renderProjectSummaryCard();
+    setProjectEditMode(false);
+    switchProjectWorkspaceTab('overview', false);
 }
 
 function calcMargin() {
@@ -440,6 +547,8 @@ async function saveProjectInfo() {
         await syncCurrentProjectContractMaster(false);
     }
     if (typeof renderProjectSmartTools === 'function') renderProjectSmartTools();
+    renderProjectSummaryCard();
+    setProjectEditMode(false);
     showToast("Система", "Данные проекта успешно сохранены");
 }
 
@@ -473,6 +582,35 @@ async function restoreProject() {
         await syncProject(p); navigateTo('dashboard'); 
     } 
 }
+
+async function completeProject() {
+    const p = projectsDB.find(item => Number(item.id) === Number(currentProjectId));
+    if (!p) return;
+    const incompleteStage = [0, 1, 2, 3].find(index => !String(p.checkedState?.[`workflow_stage_${index}`] || '').startsWith('DONE'));
+    if (incompleteStage !== undefined) {
+        showToast('Завершение проекта', `Сначала завершите этап №${incompleteStage + 1}`, 'error');
+        if (typeof switchProjectWorkspaceTab === 'function') switchProjectWorkspaceTab('execution');
+        return;
+    }
+    if (!(await customConfirm('Перевести проект в завершённые? Его можно будет вернуть в работу.'))) return;
+    p.status = 'archive';
+    p.progress = 100;
+    if (!p.archive_details) p.archive_details = {};
+    p.archive_details.completed_at = new Date().toLocaleDateString('ru-RU');
+    p.archive_details.completed_by = currentUser?.name || '';
+    appendLog('Завершил проект');
+    const response = await syncProject(p);
+    if (!response || response.error) {
+        showToast('Проект', response?.message || 'Не удалось завершить проект', 'error');
+        return;
+    }
+    await loadProjects();
+    navigateTo('dashboard');
+    switchTab('archive');
+    showToast('Проект', 'Проект перенесён в завершённые');
+}
+
+window.completeProject = completeProject;
 async function syncProject(p) {
     const normalizedProject = normalizeProjectPayload(p);
     return await apiCall(`/projects/${normalizedProject.id}`, 'PUT', normalizedProject);
@@ -623,59 +761,43 @@ async function sendChatMessage() {
 function renderFiles() {
     const p = projectsDB.find(x => x.id === currentProjectId);
     const c = document.getElementById('projectFilesList'); if(!c) return;
-    c.innerHTML = '';
-    
-    if(!p.files || p.files.length === 0) { c.innerHTML = '<div class="project-empty-hint" style="width: 100%;">Нет прикрепленных документов</div>'; return; }
-    
+    if(!p.files || p.files.length === 0) {
+        c.innerHTML = '<div class="project-files-empty"><strong>Документов пока нет</strong><span>Загрузите первый файл — он появится здесь и будет доступен всей команде проекта.</span></div>';
+        return;
+    }
     const grouped = {};
     p.files.forEach(f => {
         const bName = f.base_name || f.name;
         if (!grouped[bName]) grouped[bName] = [];
         grouped[bName].push(f);
     });
-    
-    Object.keys(grouped).forEach(bName => {
+
+    c.innerHTML = Object.keys(grouped).map(bName => {
         const versions = grouped[bName].sort((a,b) => (a.version||1) - (b.version||1));
         const latest = versions[versions.length - 1];
-        
         const safeName = latest.name.replace(/'/g, "\\'");
         const safeBase = bName.replace(/'/g, "\\'");
-        const isLocked = !!latest.lockedBy; 
-        const lockedByMe = latest.lockedBy === currentUser.name;
-        const canEdit = !isLocked || lockedByMe || currentUser.role === 'Директор';
-
-        let lockHtml = ''; 
-        if (isLocked) {
-            lockHtml = `<span style="font-size: 10px; background: rgba(239, 68, 68, 0.1); color: var(--danger); padding: 2px 6px; border-radius: 999px; margin-left: 8px; font-weight: 700; display:inline-flex; align-items:center; gap:4px;">Занят: ${latest.lockedBy}</span>`;
-        }
-        
-        let lockBtn = ''; 
-        if (!isLocked) { 
-            lockBtn = `<button class="btn-secondary" style="padding: 4px 8px; font-size: 10px; background: var(--card-bg); min-height:unset;" onclick="toggleLock('${safeBase}')">Захватить</button>`; 
-        } else if (lockedByMe || currentUser.role === 'Директор') { 
-            lockBtn = `<button class="btn-success" style="padding: 4px 8px; font-size: 10px; min-height:unset;" onclick="toggleLock('${safeBase}')">Освободить</button>`; 
-        }
-        
-        let deleteBtn = canEdit ? `<button class="file-delete-btn" onclick="deleteFile('${safeName}')" title="Удалить последнюю версию"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>` : '';
-        
-        let historyBtn = versions.length > 1 ? `<button class="btn-secondary" style="padding: 4px 8px; font-size: 10px; min-height:unset;" onclick="openFileHistory('${safeBase}')">История (${versions.length})</button>` : '';
-
-        const lockedStyle = (isLocked && !lockedByMe) ? 'opacity: 0.6; background: rgba(15, 23, 42, 0.03);' : '';
-
-        c.innerHTML += `
-        <div class="file-item" style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; ${lockedStyle}">
-            <a href="${latest.url}" target="_blank" style="display: flex; align-items: center; gap: 8px; text-decoration: none; color: inherit; flex: 1; overflow: hidden;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${isLocked ? 'var(--danger)' : 'var(--primary)'}" stroke-width="1.5" flex-shrink="0"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg> 
-                <span style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${latest.name}</span>
-                <span style="background: var(--primary); color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 5px;">вер. ${latest.version || 1}</span>
-                ${lockHtml}
-            </a>
-            <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
-                <span style="font-size: 11px; color: var(--secondary);">${latest.time} | ${latest.user}</span>
-                ${historyBtn}${lockBtn}${deleteBtn}
-            </div>
-        </div>`;
-    });
+        const canDelete = !latest.lockedBy || latest.lockedBy === currentUser.name || currentUser.role === 'Директор';
+        const historyButton = versions.length > 1
+            ? `<button class="btn-secondary" type="button" onclick="openFileHistory('${safeBase}')">Версии (${versions.length})</button>`
+            : '';
+        const deleteButton = canDelete
+            ? `<button class="btn-secondary project-file-delete" type="button" onclick="deleteFile('${safeName}')">Удалить</button>`
+            : '';
+        return `
+            <article class="project-file-card">
+                <div class="project-file-card__icon">▤</div>
+                <div class="project-file-card__info">
+                    <strong>${latest.name}</strong>
+                    <span>Версия ${latest.version || 1} · ${latest.time || 'дата не указана'} · ${latest.user || 'автор не указан'}</span>
+                </div>
+                <div class="project-file-card__actions">
+                    <a class="btn-primary" href="${latest.url}" target="_blank" rel="noopener">Открыть</a>
+                    ${historyButton}
+                    ${deleteButton}
+                </div>
+            </article>`;
+    }).join('');
 }
 
 function openFileHistory(baseName) {
@@ -1037,6 +1159,55 @@ renderFiles = function() {
                 </div>
                 ${historyPanel}
             `;
+        })
+        .join('');
+};
+
+// Compact daily file view. Version locking remains available in the data
+// model, but is intentionally kept out of the normal project workflow.
+renderFiles = function() {
+    const project = projectsDB.find(item => Number(item.id) === Number(currentProjectId));
+    const container = document.getElementById('projectFilesList');
+    if (!container) return;
+    container.className = 'project-files-list';
+
+    if (!project || !Array.isArray(project.files) || !project.files.length) {
+        container.innerHTML = `
+            <div class="project-files-empty">
+                <strong>Документов пока нет</strong>
+                <span>Загрузите первый файл — он появится здесь и будет доступен участникам проекта.</span>
+            </div>`;
+        return;
+    }
+
+    const grouped = {};
+    project.files.forEach(file => {
+        const baseName = file.base_name || file.name;
+        if (!grouped[baseName]) grouped[baseName] = [];
+        grouped[baseName].push(file);
+    });
+
+    container.innerHTML = Object.keys(grouped)
+        .sort((left, right) => left.localeCompare(right, 'ru'))
+        .map(baseName => {
+            const versions = grouped[baseName].sort((a, b) => Number(a.version || 1) - Number(b.version || 1));
+            const latest = versions[versions.length - 1];
+            const safeBase = projectUiJsString(baseName);
+            const safeName = projectUiJsString(latest.name || '');
+            const mayDelete = !latest.lockedBy || latest.lockedBy === currentUser?.name || currentUser?.role === 'Директор';
+            return `
+                <article class="project-file-card">
+                    <div class="project-file-card__icon">Ф</div>
+                    <div class="project-file-card__info">
+                        <strong>${projectUiEscape(baseName)}</strong>
+                        <span>Версия ${projectUiEscape(projectUiVersionLabel(latest.version))} · ${projectUiEscape(latest.time || 'дата не указана')} · ${projectUiEscape(latest.user || 'автор не указан')}</span>
+                    </div>
+                    <div class="project-file-card__actions">
+                        <a class="btn-primary" href="${projectUiEscape(latest.url || '#')}" target="_blank" rel="noopener noreferrer">Открыть</a>
+                        <button class="btn-secondary" type="button" onclick="openFileHistory('${safeBase}')">Версии${versions.length > 1 ? ` (${versions.length})` : ''}</button>
+                        ${mayDelete ? `<button class="btn-secondary project-file-delete" type="button" onclick="deleteFile('${safeName}')">Удалить</button>` : ''}
+                    </div>
+                </article>`;
         })
         .join('');
 };

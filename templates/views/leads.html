@@ -2,56 +2,40 @@
     <div class="surface-card surface-card--padded crm-workspace-shell">
         <div class="view-header">
             <div class="view-heading">
-                <span class="view-eyebrow">CRM</span>
+                <span class="view-eyebrow">Продажи</span>
                 <h1 class="view-title">Лиды</h1>
-                <p class="view-subtitle">Входящий поток запросов, квалификация, следующее действие и конвертация в сделки без лишних переходов.</p>
+                <p class="view-subtitle">Потенциальные клиенты, которые уже проявили интерес. Свяжитесь, уточните потребность и переведите готового клиента в сделку.</p>
             </div>
             <div class="view-actions">
-                <button class="btn-primary" onclick="openLeadEditor()">+ Новый лид</button>
+                <button class="btn-primary" onclick="openLeadEditor()">+ Создать лид</button>
             </div>
+        </div>
+
+        <div class="lead-workflow-guide" aria-label="Как работать с лидами">
+            <div><span>1</span><strong>Откройте лид</strong><small>Проверьте клиента, контакты и текущий этап.</small></div>
+            <div><span>2</span><strong>Уточните потребность</strong><small>Заполните запрос, сумму и следующий шаг.</small></div>
+            <div><span>3</span><strong>Зафиксируйте контакт</strong><small>Запишите итог звонка, письма или встречи.</small></div>
+            <div><span>4</span><strong>Примите решение</strong><small>Переведите в сделку или закройте с причиной.</small></div>
         </div>
 
         <div id="leadSummaryStrip" class="crm-summary-strip"></div>
-        <div id="leadRoutingPanel" class="crm-intelligence-panel"></div>
-
-        <div class="crm-toolbar">
-            <div class="crm-toolbar__group crm-toolbar__group--wide">
-                <input id="leadSearchInput" class="auth-input" type="search" placeholder="Поиск по лидам, клиентам, источникам" oninput="applyLeadSearch(this.value)">
+        <div class="lead-simple-toolbar">
+            <div class="lead-simple-toolbar__search">
+                <input id="leadSearchInput" class="auth-input" type="search" placeholder="Компания, контакт или название лида" aria-label="Поиск по лидам" oninput="applyLeadSearch(this.value)">
             </div>
-            <div class="crm-toolbar__group">
+            <div class="lead-simple-toolbar__stage">
                 <select id="leadStageFilter" class="auth-input" onchange="setLeadStageFilter(this.value)">
-                    <option value="">Все стадии</option>
+                    <option value="">Все этапы</option>
                     <option value="new">Новый</option>
-                    <option value="qualified">Квалифицирован</option>
-                    <option value="proposal">КП / предложение</option>
-                    <option value="won">Конвертирован</option>
-                    <option value="lost">Потерян</option>
-                </select>
-                <select id="leadResponsibleFilter" class="auth-input" onchange="setLeadResponsibleFilter(this.value)">
-                    <option value="">Все ответственные</option>
-                </select>
-                <select id="leadSortSelect" class="auth-input" onchange="setLeadSort(this.value)">
-                    <option value="due_asc">Сначала ближайшие действия</option>
-                    <option value="due_desc">Сначала дальние действия</option>
-                    <option value="budget_desc">Потенциал по убыванию</option>
-                    <option value="title_asc">По названию</option>
-                    <option value="probability_desc">По вероятности</option>
+                    <option value="qualified">Потребность подтверждена</option>
+                    <option value="proposal">Готовится предложение</option>
+                    <option value="won">Передан в сделку</option>
+                    <option value="lost">Закрыт без сделки</option>
                 </select>
             </div>
-            <div class="crm-toolbar__group">
-                <select id="leadPresetSelect" class="auth-input" onchange="applyLeadPreset(this.value)">
-                    <option value="">Пресет фильтра</option>
-                </select>
-                <button class="btn-secondary" onclick="saveLeadPreset()">Сохранить фильтр</button>
-                <button class="btn-secondary" onclick="resetLeadFilters()">Сбросить</button>
-            </div>
-            <div class="crm-mode-switch">
-                <button id="leadModeRegistry" class="btn-secondary" onclick="setLeadViewMode('registry')">Реестр</button>
-                <button id="leadModeKanban" class="btn-secondary" onclick="setLeadViewMode('kanban')">Канбан</button>
-            </div>
+            <button class="btn-secondary" type="button" onclick="resetLeadFilters()">Сбросить</button>
         </div>
 
-        <div id="leadEditorPanel" class="crm-editor-panel" style="display:none;"></div>
         <div id="leadsContentMount"></div>
     </div>
 </div>

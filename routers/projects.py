@@ -1,4 +1,5 @@
-import os, re, secrets, shutil, json, time, csv, io, hashlib
+import os, re, secrets, shutil, json, time, csv, io, hashlib, zipfile
+from xml.etree import ElementTree as ET
 import httpx
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Body
@@ -16,6 +17,7 @@ from database import (
     get_domain_events,
     record_domain_event,
     create_notification,
+    create_targeted_notifications,
     notify_entity_watchers,
     create_erp_process_run,
     update_erp_process_run,
@@ -35,7 +37,7 @@ from database import (
     list_recovery_workflow_runs,
     get_backups,
 )
-from permissions import require_approved_user, require_director, can_access_project, can_edit_project, has_permission, can_access_scope, filter_rows_by_scope, has_field_permission, get_allowed_statuses
+from permissions import DIRECTOR_ROLE, MANAGER_ROLE, require_approved_user, require_director, can_access_project, can_edit_project, has_permission, can_access_scope, filter_rows_by_scope, has_field_permission, get_allowed_statuses
 from settings import DADATA_SECRET, DADATA_TOKEN
 from schemas import ClientData, ProjectData, ProjectUpdate, NomenclatureData, ContactData, StockMovement, TenderParseData, ContractScanData, FinancePaymentData, FinanceMasterRecordData, PurchaseOrderData, SalesDocumentData, ProductionOrderData, ProductionOperationData, ProductionBOMItemData, ProductionRouteTemplateData, StockReservationData, SalesQuoteData, CustomerReturnData, SalesPlanData, PriceListData, ClientSalesTermData, SupplierRegistryData, PurchasePlanData, SupplierDeliveryScheduleData, SupplierReturnData, SupplierDiscrepancyActData, ExpenseApprovalData, InternalRequestData, ResourceAllocationData, ServiceCaseData, BudgetLineData, StockMovementDetailedData, SpecificationVersionData, ERPFlowStartData, ERPFlowAdvanceData, ClientMergeData, NomenclatureMergeData, StockReservationFulfillData, BusinessObjectData, ContractMasterData, TreasuryLimitData, FinancePeriodCloseData, ReconciliationActData, EDOSignatureData, FinanceInboundSyncData, NSIMasterRecordData, MDMGovernanceActionData, NSIHierarchyData, NSIExternalClassifierData, NSIExternalClassifierImportData, NSIDuplicateRuleData, NSIBulkChangeRequestData, InventoryDocumentData, InventoryActData, InventoryRegradingData, WarehouseQualityReportData, WarehousePolicyData, IntegrationSyncBatchData, BankAccountData, BankStatementImportData, BankStatementReconcileData, TelephonyAccountData, TelephonyCallData, SavedReportData, EntityLockData, SystemRecoveryActionData
 from routers.accounting import _load_epl_waybill_rows
@@ -122,7 +124,7 @@ from services.inventory_costing_service import (
 )
 
 # === ПОДКЛЮЧАЕМ МЕНЕДЖЕР WEBSOCKETS ===
-from utils import manager 
+from utils import manager, normalize_email
 
 router = APIRouter()
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -277,11 +279,20 @@ class CRMLeadData(BaseModel):
     linked_deal_id: int = 0
 
 
+class CRMLeadTransferData(BaseModel):
+    manager_email: str = ""
+
+
 class CRMDealData(BaseModel):
     lead_id: int = 0
     title: str = ""
     client_id: int = 0
     client_name: str = ""
+    contact_name: str = ""
+    contact_position: str = ""
+    contact_phone: str = ""
+    contact_email: str = ""
+    source: str = ""
     contract_number: str = ""
     stage: str = "qualification"
     amount: float = 0
@@ -297,6 +308,10 @@ class CRMDealData(BaseModel):
     tags: list[str] = []
     comment: str = ""
     project_id: int = 0
+    products: list[dict] = []
+    co_executors: str = ""
+    actual_close_date: str = ""
+    loss_reason: str = ""
 
 
 class CRMActivityData(BaseModel):
@@ -448,6 +463,49 @@ def _outreach_allowed(actor: dict, action: str = "read") -> bool:
     if action == "create":
         return has_permission(actor, "clients", "create") or has_permission(actor, "projects", "create")
     return has_permission(actor, "clients", "update") or has_permission(actor, "projects", "update")
+
+
+def _outreach_is_supervisor(actor: dict) -> bool:
+    return bool(actor) and (actor.get("role") == DIRECTOR_ROLE or bool(_safe_int(actor.get("is_head"))))
+
+
+def _outreach_is_manager(actor: dict) -> bool:
+    return bool(actor) and actor.get("role") == MANAGER_ROLE
+
+
+def _outreach_row_owned_by_actor(row: dict, actor: dict) -> bool:
+    if _outreach_is_supervisor(actor):
+        return True
+    actor_email = _normalize_match(actor.get("email", ""))
+    row_email = _normalize_match((row or {}).get("manager_email", ""))
+    return bool(actor_email and row_email and actor_email == row_email)
+
+
+def _crm_lead_owned_by_actor(row: dict, actor: dict) -> bool:
+    if _outreach_is_supervisor(actor):
+        return True
+    return bool(
+        _normalize_match((row or {}).get("responsible", ""))
+        and _normalize_match((row or {}).get("responsible", "")) == _normalize_match(actor.get("name", ""))
+    )
+
+
+def _crm_deal_owned_by_actor(row: dict, actor: dict) -> bool:
+    """Only the assigned employee and directors may mutate a deal."""
+    if not actor:
+        return False
+    if actor.get("role") == DIRECTOR_ROLE:
+        return True
+    responsible = _normalize_match((row or {}).get("responsible", ""))
+    actor_name = _normalize_match(actor.get("name", ""))
+    return bool(responsible and actor_name and responsible == actor_name)
+
+
+def _crm_deal_forbidden_response() -> dict:
+    return {
+        "error": "forbidden",
+        "message": "Сделка доступна только для просмотра. Изменять её может ответственный сотрудник или директор.",
+    }
 
 
 def _normalize_outreach_status(value: str) -> str:
@@ -1170,9 +1228,70 @@ def _default_scenario_for_request_type(request_type: str) -> list[str]:
     return mapping.get(request_type, ["request", "approval", "purchase", "shipment", "payment"])
 
 
+def _xlsx_cell_value(cell, shared_strings: list[str]) -> str:
+    cell_type = cell.attrib.get("t", "")
+    value_node = cell.find("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}v")
+    inline_node = cell.find("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}is/{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t")
+    if cell_type == "inlineStr":
+        return _normalize_spaces(inline_node.text if inline_node is not None else "")
+    raw_value = value_node.text if value_node is not None else ""
+    if cell_type == "s":
+        try:
+            return _normalize_spaces(shared_strings[int(raw_value)])
+        except Exception:
+            return ""
+    return _normalize_spaces(raw_value)
+
+
+def _xlsx_column_index(cell_ref: str) -> int:
+    letters = re.sub(r"[^A-Z]", "", (cell_ref or "").upper())
+    index = 0
+    for letter in letters:
+        index = index * 26 + (ord(letter) - ord("A") + 1)
+    return max(index - 1, 0)
+
+
+def _load_xlsx_rows(raw: bytes) -> list[dict]:
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            shared_strings: list[str] = []
+            if "xl/sharedStrings.xml" in archive.namelist():
+                shared_root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
+                for item in shared_root.findall("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}si"):
+                    pieces = [
+                        text_node.text or ""
+                        for text_node in item.findall(".//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t")
+                    ]
+                    shared_strings.append(_normalize_spaces("".join(pieces)))
+            sheet_name = next((name for name in archive.namelist() if name.startswith("xl/worksheets/sheet") and name.endswith(".xml")), "")
+            if not sheet_name:
+                return []
+            sheet_root = ET.fromstring(archive.read(sheet_name))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"xlsx_read_failed: {exc}")
+
+    rows: list[list[str]] = []
+    for row_node in sheet_root.findall(".//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}row"):
+        cells: dict[int, str] = {}
+        for cell in row_node.findall("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}c"):
+            cells[_xlsx_column_index(cell.attrib.get("r", ""))] = _xlsx_cell_value(cell, shared_strings)
+        if cells:
+            rows.append([cells.get(i, "") for i in range(max(cells) + 1)])
+    if not rows:
+        return []
+    headers = [_normalize_spaces(value) for value in rows[0]]
+    return [
+        {headers[index]: value for index, value in enumerate(row) if index < len(headers) and headers[index]}
+        for row in rows[1:]
+        if any(_normalize_spaces(value) for value in row)
+    ]
+
+
 def _load_import_rows(upload: UploadFile):
     filename = (upload.filename or "").lower()
     raw = upload.file.read()
+    if filename.endswith(".xlsx") or filename.endswith(".xlsm"):
+        return _load_xlsx_rows(raw)
     text = raw.decode("utf-8-sig", errors="ignore")
     if filename.endswith(".json"):
         data = json.loads(text or "[]")
@@ -1184,6 +1303,26 @@ def _load_import_rows(upload: UploadFile):
 
 
 def _normalize_client_row(row: dict):
+    def pick(*keys: str) -> str:
+        normalized = {
+            _normalize_spaces(str(key)).lower(): value
+            for key, value in (row or {}).items()
+            if key is not None
+        }
+        for key in keys:
+            value = normalized.get(_normalize_spaces(key).lower())
+            if value not in (None, ""):
+                return _normalize_spaces(str(value))
+        return ""
+
+    return {
+        "name": pick("name", "client", "company", "title", "название", "контрагент", "компания", "наименование", "название (ооо/ип)"),
+        "inn": pick("inn", "инн"),
+        "kpp": pick("kpp", "кпп"),
+        "ogrn": pick("ogrn", "огрн"),
+        "legal_address": pick("legal_address", "address", "юридический адрес", "адрес", "юр адрес"),
+        "contact": pick("contact", "contacts", "email", "phone", "контакты", "контакт", "почта", "телефон", "телефон или почта"),
+    }
     return {
         "name": _normalize_spaces(row.get("name") or row.get("client") or row.get("Название") or row.get("Контрагент") or ""),
         "inn": _normalize_spaces(str(row.get("inn") or row.get("ИНН") or "")),
@@ -4125,7 +4264,7 @@ def _load_production_rows():
             pr.*,
             COALESCE(p.name, '') AS project_name,
             COALESCE(p.contract, '') AS project_contract,
-            COALESCE(cl.name, '') AS client_name,
+            COALESCE(NULLIF(TRIM(pr.client_display_name), ''), cl.name, '') AS client_name,
             COALESCE(le.short_name, le.name, '') AS legal_entity_name,
             COALESCE(bu.name, '') AS business_unit_name,
             COALESCE(po.operations_count, 0) AS operations_count,
@@ -4443,9 +4582,12 @@ def _load_stock_reservations():
         """
         SELECT
             sr.*,
+            COALESCE(p.name, '') AS project_name,
+            COALESCE(p.contract, '') AS project_contract,
             COALESCE(le.short_name, le.name, '') AS legal_entity_name,
             COALESCE(bu.name, '') AS business_unit_name
         FROM stock_reservations sr
+        LEFT JOIN projects p ON p.id = sr.project_id
         LEFT JOIN legal_entities le ON le.id = sr.legal_entity_id
         LEFT JOIN business_units bu ON bu.id = sr.business_unit_id
         ORDER BY sr.created_at DESC, sr.id DESC
@@ -6390,6 +6532,7 @@ def get_outreach_prospects(
     status: str = "",
     manager: str = "",
     processed: str = "",
+    scope: str = "",
     only_overdue: int = 0,
     only_due_today: int = 0,
 ):
@@ -6403,10 +6546,25 @@ def get_outreach_prospects(
     conn.close()
     search_key = _normalize_match(search)
     manager_key = _normalize_match(manager)
+    scope_key = _normalize_match(scope)
+    actor_email = _normalize_match(actor.get("email", ""))
+    supervisor = _outreach_is_supervisor(actor)
     status_key = _normalize_outreach_status(status) if status else ""
     processed_key = _normalize_match(processed)
     visible = []
     for row in _decorate_outreach_rows(rows):
+        row_manager_email = _normalize_match(row.get("manager_email", ""))
+        row_manager_name = _normalize_match(row.get("manager_name", ""))
+        is_unassigned = not row_manager_email and not row_manager_name
+        is_owned = bool(actor_email and row_manager_email == actor_email)
+        if scope_key == "free":
+            if not is_unassigned or row.get("status") in {"converted", "do_not_contact", "archived"}:
+                continue
+        elif scope_key == "mine":
+            if not is_owned:
+                continue
+        elif _outreach_is_manager(actor) and not supervisor and not (is_unassigned or is_owned):
+            continue
         if status_key and row.get("status") != status_key:
             continue
         if manager_key:
@@ -6436,6 +6594,48 @@ def get_outreach_prospects(
                 continue
         visible.append(row)
     return visible
+
+
+@router.post("/api/outreach/prospects/{prospect_id}/claim")
+def claim_outreach_prospect(prospect_id: int, request: Request):
+    actor = require_approved_user(request)
+    if not (_outreach_is_manager(actor) or _outreach_is_supervisor(actor)) or not _outreach_allowed(actor, "update"):
+        return {"error": "forbidden"}
+    now = int(time.time())
+    conn = get_connection(row_factory=True)
+    row = conn.execute(
+        """
+        UPDATE outreach_prospects
+        SET manager_name=?, manager_email=?, status='assigned',
+            planned_contact_date=CASE WHEN COALESCE(TRIM(planned_contact_date), '')='' THEN ? ELSE planned_contact_date END,
+            updated_at=?
+        WHERE id=?
+          AND COALESCE(TRIM(manager_email), '')=''
+          AND COALESCE(TRIM(manager_name), '')=''
+          AND status NOT IN ('converted', 'do_not_contact', 'archived')
+        RETURNING id, company_name
+        """,
+        (actor.get("name", ""), actor.get("email", ""), _today_display(), now, _safe_int(prospect_id)),
+    ).fetchone()
+    if not row:
+        conn.rollback()
+        conn.close()
+        return {
+            "status": "conflict",
+            "error": "already_claimed",
+        }
+    claimed = dict(row)
+    conn.commit()
+    conn.close()
+    audit_log(
+        "outreach_prospect_claimed",
+        actor_email=actor.get("email", ""),
+        actor_name=actor.get("name", ""),
+        entity_type="outreach_prospect",
+        entity_id=str(prospect_id),
+        details={"company_name": claimed.get("company_name", "")},
+    )
+    return {"status": "success", "id": _safe_int(claimed.get("id")), "company_name": claimed.get("company_name", "")}
 
 
 @router.post("/api/outreach/prospects")
@@ -6671,9 +6871,14 @@ def update_outreach_prospect(prospect_id: int, data: OutreachProspectData, reque
         conn.close()
         return {"error": "not_found", "message": "Карточка базы не найдена."}
     current = dict(row)
+    if not _outreach_row_owned_by_actor(current, actor):
+        conn.close()
+        return {"error": "forbidden"}
     now = int(time.time())
     status_value = _normalize_outreach_status(data.status or current.get("status") or "new")
     is_processed = 1 if status_value not in {"new", "assigned"} or _safe_int(current.get("is_processed")) else 0
+    manager_name = (_normalize_spaces(data.manager_name) or current.get("manager_name") or "") if _outreach_is_supervisor(actor) else (current.get("manager_name") or actor.get("name", ""))
+    manager_email = (_normalize_spaces(data.manager_email) or current.get("manager_email") or "") if _outreach_is_supervisor(actor) else (current.get("manager_email") or actor.get("email", ""))
     c.execute(
         """
         UPDATE outreach_prospects
@@ -6696,8 +6901,8 @@ def update_outreach_prospect(prospect_id: int, data: OutreachProspectData, reque
             _normalize_spaces(data.source_file) or current.get("source_file") or "",
             status_value,
             _normalize_outreach_priority(data.priority or current.get("priority") or "normal"),
-            _normalize_spaces(data.manager_name) or current.get("manager_name") or "",
-            _normalize_spaces(data.manager_email) or current.get("manager_email") or "",
+            manager_name,
+            manager_email,
             _normalize_spaces(data.planned_contact_date) or current.get("planned_contact_date") or "",
             _normalize_spaces(data.next_action) or current.get("next_action") or "",
             _normalize_spaces(data.next_action_date) or current.get("next_action_date") or "",
@@ -6731,6 +6936,11 @@ def bulk_update_outreach_prospects(data: OutreachBulkActionData, request: Reques
     placeholders = ",".join("?" for _ in ids)
     c.execute(f"SELECT * FROM outreach_prospects WHERE id IN ({placeholders})", tuple(ids))
     rows = [dict(row) for row in c.fetchall()]
+    if not _outreach_is_supervisor(actor):
+        rows = [row for row in rows if _outreach_row_owned_by_actor(row, actor)]
+    if not rows:
+        conn.close()
+        return {"error": "forbidden"}
     updated = 0
     for row in rows:
         next_status = status_value or row.get("status") or "new"
@@ -6750,8 +6960,8 @@ def bulk_update_outreach_prospects(data: OutreachBulkActionData, request: Reques
             WHERE id=?
             """,
             (
-                _normalize_spaces(data.manager_name) or row.get("manager_name") or "",
-                _normalize_spaces(data.manager_email) or row.get("manager_email") or "",
+                (_normalize_spaces(data.manager_name) or row.get("manager_name") or "") if _outreach_is_supervisor(actor) else (row.get("manager_name") or actor.get("name", "")),
+                (_normalize_spaces(data.manager_email) or row.get("manager_email") or "") if _outreach_is_supervisor(actor) else (row.get("manager_email") or actor.get("email", "")),
                 _normalize_spaces(data.planned_contact_date) or row.get("planned_contact_date") or "",
                 next_status,
                 next_processed,
@@ -6797,6 +7007,9 @@ def create_outreach_activity(data: OutreachActivityData, request: Request):
         conn.close()
         return {"error": "not_found", "message": "Карточка базы не найдена."}
     prospect = dict(row)
+    if not _outreach_row_owned_by_actor(prospect, actor):
+        conn.close()
+        return {"error": "forbidden"}
     now = int(time.time())
     channel = _normalize_spaces(data.channel) or _normalize_spaces(data.activity_type) or "call"
     result_status = _normalize_spaces(data.result_status)
@@ -7025,6 +7238,9 @@ def convert_outreach_prospect(prospect_id: int, request: Request):
         conn.close()
         return {"error": "not_found", "message": "Карточка базы не найдена."}
     prospect = dict(row)
+    if not _outreach_row_owned_by_actor(prospect, actor):
+        conn.close()
+        return {"error": "forbidden"}
     existing_lead_id = _safe_int(prospect.get("converted_lead_id"))
     if existing_lead_id:
         conn.close()
@@ -7609,10 +7825,21 @@ def _decorate_crm_rows(rows: list[dict], entity_type: str) -> list[dict]:
         by_entity.setdefault(_safe_int(row.get("entity_id")), []).append(row)
     for row in rows:
         row["tags"] = _json_load(row.get("tags_json"), [])
+        if entity_type == "deal":
+            row["products"] = _json_load(row.get("products_json"), [])
         activities = by_entity.get(_safe_int(row.get("id")), [])
         row["activities"] = activities[:8]
         row["activity_open_count"] = len([item for item in activities if _normalize_match(item.get("status", "")) != "done"])
         row["activity_done_count"] = len([item for item in activities if _normalize_match(item.get("status", "")) == "done"])
+    if entity_type == "deal" and rows:
+        conn = get_connection(row_factory=True)
+        document_rows = [dict(item) for item in conn.execute("SELECT * FROM documents WHERE COALESCE(deal_id, 0) > 0 ORDER BY id DESC").fetchall()]
+        conn.close()
+        documents_by_deal: dict[int, list[dict]] = {}
+        for document in document_rows:
+            documents_by_deal.setdefault(_safe_int(document.get("deal_id")), []).append(document)
+        for row in rows:
+            row["documents"] = documents_by_deal.get(_safe_int(row.get("id")), [])
     return rows
 
 
@@ -7759,6 +7986,8 @@ def get_crm_leads(request: Request, search: str = "", stage: str = "", responsib
     visible = []
     search_normalized = _normalize_match(search)
     for row in rows:
+        if not _crm_lead_owned_by_actor(row, actor):
+            continue
         if stage and _normalize_match(row.get("stage", "")) != _normalize_match(stage):
             continue
         if responsible and _normalize_match(row.get("responsible", "")) != _normalize_match(responsible):
@@ -7797,7 +8026,7 @@ def create_crm_lead(data: CRMLeadData, request: Request):
             _safe_float(data.probability),
             _safe_float(data.budget),
             _normalize_spaces(data.currency) or "RUB",
-            _normalize_spaces(data.responsible) or actor.get("name", ""),
+            (_normalize_spaces(data.responsible) if _outreach_is_supervisor(actor) else "") or actor.get("name", ""),
             _normalize_spaces(data.next_action),
             _normalize_spaces(data.next_action_date),
             _normalize_spaces(data.priority) or "normal",
@@ -7824,8 +8053,18 @@ def update_crm_lead(lead_id: int, data: CRMLeadData, request: Request):
     if not actor or not has_permission(actor, "clients", "update"):
         return {"error": "forbidden"}
     now = int(time.time())
-    conn = get_connection()
+    conn = get_connection(row_factory=True)
     c = conn.cursor()
+    c.execute("SELECT * FROM crm_leads WHERE id=?", (_safe_int(lead_id),))
+    current_row = c.fetchone()
+    if not current_row:
+        conn.close()
+        return {"error": "not_found"}
+    current = dict(current_row)
+    if not _crm_lead_owned_by_actor(current, actor):
+        conn.close()
+        return {"error": "forbidden"}
+    responsible = _normalize_spaces(data.responsible) if _outreach_is_supervisor(actor) else _normalize_spaces(current.get("responsible", ""))
     c.execute(
         """
         UPDATE crm_leads
@@ -7844,7 +8083,7 @@ def update_crm_lead(lead_id: int, data: CRMLeadData, request: Request):
             _safe_float(data.probability),
             _safe_float(data.budget),
             _normalize_spaces(data.currency) or "RUB",
-            _normalize_spaces(data.responsible),
+            responsible,
             _normalize_spaces(data.next_action),
             _normalize_spaces(data.next_action_date),
             _normalize_spaces(data.priority) or "normal",
@@ -7863,6 +8102,65 @@ def update_crm_lead(lead_id: int, data: CRMLeadData, request: Request):
     return {"status": "success"}
 
 
+@router.post("/api/crm/leads/{lead_id}/transfer")
+def transfer_crm_lead(lead_id: int, data: CRMLeadTransferData, request: Request):
+    actor = require_approved_user(request)
+    if not actor or not has_permission(actor, "clients", "update"):
+        return {"error": "forbidden"}
+    target_email = _normalize_spaces(data.manager_email).lower()
+    if not target_email:
+        return {"error": "manager_required", "message": "Выберите менеджера."}
+    conn = get_connection(row_factory=True)
+    c = conn.cursor()
+    c.execute("SELECT * FROM crm_leads WHERE id=?", (_safe_int(lead_id),))
+    lead_row = c.fetchone()
+    if not lead_row:
+        conn.close()
+        return {"error": "not_found", "message": "Лид не найден."}
+    lead = dict(lead_row)
+    if not _crm_lead_owned_by_actor(lead, actor):
+        conn.close()
+        return {"error": "forbidden"}
+    c.execute(
+        "SELECT email, name, role, status, is_head FROM users WHERE LOWER(TRIM(email))=LOWER(TRIM(?))",
+        (target_email,),
+    )
+    target_row = c.fetchone()
+    target = dict(target_row) if target_row else {}
+    if not target or target.get("status") != "approved" or not has_permission(target, "clients", "update"):
+        conn.close()
+        return {"error": "invalid_assignee", "message": "Этому сотруднику нельзя передать лид."}
+    if _normalize_match(target.get("email", "")) == _normalize_match(actor.get("email", "")):
+        conn.close()
+        return {"error": "same_assignee", "message": "Лид уже закреплён за вами."}
+    now = int(time.time())
+    transfer_line = f"[Передача {datetime.now().strftime('%d.%m.%Y %H:%M')}] {actor.get('name', '')} -> {target.get('name', '')}."
+    comment = "\n".join(part for part in [_normalize_spaces(lead.get("comment", "")), transfer_line] if part)
+    c.execute(
+        "UPDATE crm_leads SET responsible=?, comment=?, updated_at=? WHERE id=?",
+        (_normalize_spaces(target.get("name", "")), comment, now, _safe_int(lead_id)),
+    )
+    conn.commit()
+    conn.close()
+    audit_log(
+        "crm_lead_transferred",
+        actor_email=actor.get("email", ""),
+        actor_name=actor.get("name", ""),
+        entity_type="crm_lead",
+        entity_id=str(lead_id),
+        details={"title": lead.get("title", ""), "manager_email": target.get("email", ""), "manager_name": target.get("name", "")},
+    )
+    create_notification(
+        "Вам передан лид",
+        _normalize_spaces(lead.get("title", "")) or f"Лид #{lead_id}",
+        user_email=target.get("email", ""),
+        category="crm",
+        entity_type="crm_lead",
+        entity_id=str(lead_id),
+    )
+    return {"status": "success", "manager_name": target.get("name", ""), "manager_email": target.get("email", "")}
+
+
 @router.post("/api/crm/leads/{lead_id}/convert")
 def convert_lead_to_deal(lead_id: int, request: Request):
     actor = require_approved_user(request)
@@ -7876,6 +8174,9 @@ def convert_lead_to_deal(lead_id: int, request: Request):
         conn.close()
         return {"error": "not_found"}
     lead = dict(row)
+    if not _crm_lead_owned_by_actor(lead, actor):
+        conn.close()
+        return {"error": "forbidden"}
     if _safe_int(lead.get("linked_deal_id")):
         conn.close()
         return {"status": "success", "deal_id": _safe_int(lead.get("linked_deal_id"))}
@@ -7884,8 +8185,9 @@ def convert_lead_to_deal(lead_id: int, request: Request):
         """
         INSERT INTO crm_deals (
             lead_id, title, client_id, client_name, contract_number, stage, amount, currency, margin_percent, probability,
-            responsible, next_action, next_action_date, expected_close_date, priority, status_color, tags_json, comment, project_id, created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            responsible, next_action, next_action_date, expected_close_date, priority, status_color, tags_json, comment, project_id, created_by, created_at, updated_at,
+            contact_name, contact_position, contact_phone, contact_email, source, products_json, co_executors, actual_close_date, loss_reason
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             _safe_int(lead_id),
@@ -7910,6 +8212,15 @@ def convert_lead_to_deal(lead_id: int, request: Request):
             actor.get("email", ""),
             now,
             now,
+            _normalize_spaces(lead.get("contact_name", "")),
+            "",
+            _normalize_spaces(lead.get("contact_phone", "")),
+            _normalize_spaces(lead.get("contact_email", "")),
+            _normalize_spaces(lead.get("source", "")),
+            "[]",
+            "",
+            "",
+            "",
         ),
     )
     deal_id = c.lastrowid
@@ -7942,7 +8253,11 @@ def get_crm_deals(request: Request, search: str = "", stage: str = "", responsib
             if search_normalized not in _normalize_match(haystack):
                 continue
         visible.append(row)
-    return _decorate_crm_rows(visible, "deal")
+    decorated = _decorate_crm_rows(visible, "deal")
+    for row in decorated:
+        row["can_manage"] = _crm_deal_owned_by_actor(row, actor)
+        row["access_mode"] = "manage" if row["can_manage"] else "read"
+    return decorated
 
 
 @router.post("/api/crm/deals")
@@ -7950,6 +8265,17 @@ def create_crm_deal(data: CRMDealData, request: Request):
     actor = require_approved_user(request)
     if not actor or not has_permission(actor, "projects", "create"):
         return {"error": "forbidden"}
+    normalized_stage = _normalize_spaces(data.stage) or "qualification"
+    close_reason = _normalize_spaces(data.loss_reason)
+    if normalized_stage in {"won", "lost"} and not close_reason:
+        return {"error": "close_reason_required", "message": "Укажите причину завершения или отказа клиента."}
+    actual_close_date = _normalize_spaces(data.actual_close_date)
+    if normalized_stage in {"won", "lost"} and not actual_close_date:
+        actual_close_date = datetime.now().strftime("%d.%m.%Y")
+    responsible = _normalize_spaces(data.responsible)
+    if actor.get("role") != DIRECTOR_ROLE:
+        responsible = _normalize_spaces(actor.get("name", ""))
+    responsible = responsible or _normalize_spaces(actor.get("name", ""))
     now = int(time.time())
     conn = get_connection()
     c = conn.cursor()
@@ -7957,8 +8283,9 @@ def create_crm_deal(data: CRMDealData, request: Request):
         """
         INSERT INTO crm_deals (
             lead_id, title, client_id, client_name, contract_number, stage, amount, currency, margin_percent, probability,
-            responsible, next_action, next_action_date, expected_close_date, priority, status_color, tags_json, comment, project_id, created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            responsible, next_action, next_action_date, expected_close_date, priority, status_color, tags_json, comment, project_id, created_by, created_at, updated_at,
+            contact_name, contact_position, contact_phone, contact_email, source, products_json, co_executors, actual_close_date, loss_reason
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             _safe_int(data.lead_id),
@@ -7966,12 +8293,12 @@ def create_crm_deal(data: CRMDealData, request: Request):
             _safe_int(data.client_id),
             _normalize_spaces(data.client_name),
             _normalize_spaces(data.contract_number),
-            _normalize_spaces(data.stage) or "qualification",
+            normalized_stage,
             _safe_float(data.amount),
             _normalize_spaces(data.currency) or "RUB",
             _safe_float(data.margin_percent),
             _safe_float(data.probability),
-            _normalize_spaces(data.responsible) or actor.get("name", ""),
+            responsible,
             _normalize_spaces(data.next_action),
             _normalize_spaces(data.next_action_date),
             _normalize_spaces(data.expected_close_date),
@@ -7983,6 +8310,15 @@ def create_crm_deal(data: CRMDealData, request: Request):
             actor.get("email", ""),
             now,
             now,
+            _normalize_spaces(data.contact_name),
+            _normalize_spaces(data.contact_position),
+            _normalize_spaces(data.contact_phone),
+            _normalize_spaces(data.contact_email),
+            _normalize_spaces(data.source),
+            json.dumps(data.products or [], ensure_ascii=False),
+            _normalize_spaces(data.co_executors),
+            actual_close_date,
+            close_reason,
         ),
     )
     deal_id = c.lastrowid
@@ -7997,14 +8333,32 @@ def update_crm_deal(deal_id: int, data: CRMDealData, request: Request):
     actor = require_approved_user(request)
     if not actor or not has_permission(actor, "projects", "update"):
         return {"error": "forbidden"}
+    conn = get_connection(row_factory=True)
+    existing_row = conn.execute("SELECT * FROM crm_deals WHERE id=?", (_safe_int(deal_id),)).fetchone()
+    if not existing_row:
+        conn.close()
+        return {"error": "not_found"}
+    existing = dict(existing_row)
+    if not _crm_deal_owned_by_actor(existing, actor):
+        conn.close()
+        return _crm_deal_forbidden_response()
+    normalized_stage = _normalize_spaces(data.stage) or "qualification"
+    close_reason = _normalize_spaces(data.loss_reason)
+    if normalized_stage in {"won", "lost"} and not close_reason:
+        conn.close()
+        return {"error": "close_reason_required", "message": "Укажите причину завершения или отказа клиента."}
+    actual_close_date = _normalize_spaces(data.actual_close_date)
+    if normalized_stage in {"won", "lost"} and not actual_close_date:
+        actual_close_date = datetime.now().strftime("%d.%m.%Y")
     now = int(time.time())
-    conn = get_connection()
     c = conn.cursor()
+    responsible = _normalize_spaces(data.responsible) if actor.get("role") == DIRECTOR_ROLE else _normalize_spaces(existing.get("responsible", ""))
     c.execute(
         """
         UPDATE crm_deals
         SET lead_id=?, title=?, client_id=?, client_name=?, contract_number=?, stage=?, amount=?, currency=?, margin_percent=?, probability=?,
-            responsible=?, next_action=?, next_action_date=?, expected_close_date=?, priority=?, status_color=?, tags_json=?, comment=?, project_id=?, updated_at=?
+            responsible=?, next_action=?, next_action_date=?, expected_close_date=?, priority=?, status_color=?, tags_json=?, comment=?, project_id=?, updated_at=?,
+            contact_name=?, contact_position=?, contact_phone=?, contact_email=?, source=?, products_json=?, co_executors=?, actual_close_date=?, loss_reason=?
         WHERE id=?
         """,
         (
@@ -8013,12 +8367,12 @@ def update_crm_deal(deal_id: int, data: CRMDealData, request: Request):
             _safe_int(data.client_id),
             _normalize_spaces(data.client_name),
             _normalize_spaces(data.contract_number),
-            _normalize_spaces(data.stage) or "qualification",
+            normalized_stage,
             _safe_float(data.amount),
             _normalize_spaces(data.currency) or "RUB",
             _safe_float(data.margin_percent),
             _safe_float(data.probability),
-            _normalize_spaces(data.responsible),
+            responsible,
             _normalize_spaces(data.next_action),
             _normalize_spaces(data.next_action_date),
             _normalize_spaces(data.expected_close_date),
@@ -8028,6 +8382,15 @@ def update_crm_deal(deal_id: int, data: CRMDealData, request: Request):
             _normalize_spaces(data.comment),
             _safe_int(data.project_id),
             now,
+            _normalize_spaces(data.contact_name),
+            _normalize_spaces(data.contact_position),
+            _normalize_spaces(data.contact_phone),
+            _normalize_spaces(data.contact_email),
+            _normalize_spaces(data.source),
+            json.dumps(data.products or [], ensure_ascii=False),
+            _normalize_spaces(data.co_executors),
+            actual_close_date,
+            close_reason,
             _safe_int(deal_id),
         ),
     )
@@ -8037,11 +8400,107 @@ def update_crm_deal(deal_id: int, data: CRMDealData, request: Request):
     return {"status": "success"}
 
 
+@router.post("/api/crm/deals/{deal_id}/archive")
+def archive_crm_deal(deal_id: int, request: Request):
+    actor = require_approved_user(request)
+    if not actor or not has_permission(actor, "projects", "update"):
+        return {"error": "forbidden"}
+    conn = get_connection(row_factory=True)
+    row = conn.execute("SELECT id, title, stage, responsible, is_archived FROM crm_deals WHERE id=?", (_safe_int(deal_id),)).fetchone()
+    if not row:
+        conn.close()
+        return {"error": "not_found"}
+    deal = dict(row)
+    if not _crm_deal_owned_by_actor(deal, actor):
+        conn.close()
+        return _crm_deal_forbidden_response()
+    if _normalize_spaces(deal.get("stage")) not in {"won", "lost"}:
+        conn.close()
+        return {"error": "deal_not_closed", "message": "Сначала завершите сделку или зафиксируйте отказ клиента."}
+    now = int(time.time())
+    conn.execute("UPDATE crm_deals SET is_archived=1, archived_at=?, updated_at=? WHERE id=?", (now, now, _safe_int(deal_id)))
+    conn.commit()
+    conn.close()
+    audit_log("crm_deal_archived", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="crm_deal", entity_id=str(deal_id), details={"title": deal.get("title", ""), "stage": deal.get("stage", "")})
+    return {"status": "success", "id": _safe_int(deal_id), "is_archived": 1, "archived_at": now}
+
+
+@router.post("/api/crm/deals/{deal_id}/restore")
+def restore_crm_deal(deal_id: int, request: Request):
+    actor = require_approved_user(request)
+    if not actor or not has_permission(actor, "projects", "update"):
+        return {"error": "forbidden"}
+    conn = get_connection(row_factory=True)
+    row = conn.execute("SELECT id, title, stage, responsible FROM crm_deals WHERE id=?", (_safe_int(deal_id),)).fetchone()
+    if not row:
+        conn.close()
+        return {"error": "not_found"}
+    deal = dict(row)
+    if not _crm_deal_owned_by_actor(deal, actor):
+        conn.close()
+        return _crm_deal_forbidden_response()
+    now = int(time.time())
+    conn.execute("UPDATE crm_deals SET is_archived=0, archived_at=0, updated_at=? WHERE id=?", (now, _safe_int(deal_id)))
+    conn.commit()
+    conn.close()
+    audit_log("crm_deal_restored", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="crm_deal", entity_id=str(deal_id), details={"title": deal.get("title", ""), "stage": deal.get("stage", "")})
+    return {"status": "success", "id": _safe_int(deal_id), "is_archived": 0}
+
+
+@router.post("/api/crm/deals/{deal_id}/documents/{document_id}")
+def attach_document_to_crm_deal(deal_id: int, document_id: int, request: Request):
+    actor = require_approved_user(request)
+    if not actor or not (has_permission(actor, "projects", "update") and has_permission(actor, "documents", "read")):
+        return {"error": "forbidden"}
+    conn = get_connection(row_factory=True)
+    deal = conn.execute("SELECT id, title, responsible FROM crm_deals WHERE id=?", (_safe_int(deal_id),)).fetchone()
+    document = conn.execute("SELECT id, subject FROM documents WHERE id=?", (_safe_int(document_id),)).fetchone()
+    if not deal or not document:
+        conn.close()
+        return {"error": "not_found"}
+    if not _crm_deal_owned_by_actor(dict(deal), actor):
+        conn.close()
+        return _crm_deal_forbidden_response()
+    conn.execute("UPDATE documents SET deal_id=? WHERE id=?", (_safe_int(deal_id), _safe_int(document_id)))
+    conn.commit()
+    conn.close()
+    audit_log("crm_deal_document_attached", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="crm_deal", entity_id=str(deal_id), details={"document_id": document_id})
+    return {"status": "success", "deal_id": _safe_int(deal_id), "document_id": _safe_int(document_id)}
+
+
+@router.delete("/api/crm/deals/{deal_id}/documents/{document_id}")
+def detach_document_from_crm_deal(deal_id: int, document_id: int, request: Request):
+    actor = require_approved_user(request)
+    if not actor or not (has_permission(actor, "projects", "update") and has_permission(actor, "documents", "read")):
+        return {"error": "forbidden"}
+    conn = get_connection(row_factory=True)
+    deal = conn.execute("SELECT id, responsible FROM crm_deals WHERE id=?", (_safe_int(deal_id),)).fetchone()
+    if not deal:
+        conn.close()
+        return {"error": "not_found"}
+    if not _crm_deal_owned_by_actor(dict(deal), actor):
+        conn.close()
+        return _crm_deal_forbidden_response()
+    conn.execute("UPDATE documents SET deal_id=0 WHERE id=? AND deal_id=?", (_safe_int(document_id), _safe_int(deal_id)))
+    conn.commit()
+    conn.close()
+    audit_log("crm_deal_document_detached", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="crm_deal", entity_id=str(deal_id), details={"document_id": document_id})
+    return {"status": "success"}
+
+
 @router.get("/api/crm/activities")
 def get_crm_activities(request: Request, entity_type: str = "", entity_id: int = 0):
     actor = require_approved_user(request)
     if not actor or not (has_permission(actor, "clients", "read") or has_permission(actor, "projects", "read")):
         return {"error": "forbidden"}
+    if _normalize_match(entity_type) == "lead" and _safe_int(entity_id):
+        conn = get_connection(row_factory=True)
+        row = conn.execute("SELECT * FROM crm_leads WHERE id=?", (_safe_int(entity_id),)).fetchone()
+        conn.close()
+        if not row:
+            return {"error": "not_found"}
+        if not _crm_lead_owned_by_actor(dict(row), actor):
+            return {"error": "forbidden"}
     return _load_crm_activities(entity_type, entity_id)
 
 
@@ -8051,8 +8510,26 @@ def create_crm_activity(data: CRMActivityData, request: Request):
     if not actor or not (has_permission(actor, "clients", "update") or has_permission(actor, "projects", "update")):
         return {"error": "forbidden"}
     now = int(time.time())
-    conn = get_connection()
+    conn = get_connection(row_factory=True)
     c = conn.cursor()
+    if _normalize_match(data.entity_type) == "lead":
+        c.execute("SELECT * FROM crm_leads WHERE id=?", (_safe_int(data.entity_id),))
+        lead_row = c.fetchone()
+        if not lead_row:
+            conn.close()
+            return {"error": "not_found"}
+        if not _crm_lead_owned_by_actor(dict(lead_row), actor):
+            conn.close()
+            return {"error": "forbidden"}
+    if _normalize_match(data.entity_type) == "deal":
+        c.execute("SELECT * FROM crm_deals WHERE id=?", (_safe_int(data.entity_id),))
+        deal_row = c.fetchone()
+        if not deal_row:
+            conn.close()
+            return {"error": "not_found"}
+        if not _crm_deal_owned_by_actor(dict(deal_row), actor):
+            conn.close()
+            return _crm_deal_forbidden_response()
     c.execute(
         """
         INSERT INTO crm_activities (
@@ -8086,8 +8563,26 @@ def update_crm_activity(activity_id: int, data: CRMActivityData, request: Reques
     if not actor or not (has_permission(actor, "clients", "update") or has_permission(actor, "projects", "update")):
         return {"error": "forbidden"}
     now = int(time.time())
-    conn = get_connection()
+    conn = get_connection(row_factory=True)
     c = conn.cursor()
+    c.execute("SELECT * FROM crm_activities WHERE id=?", (_safe_int(activity_id),))
+    activity_row = c.fetchone()
+    if not activity_row:
+        conn.close()
+        return {"error": "not_found"}
+    activity = dict(activity_row)
+    if _normalize_match(activity.get("entity_type", "")) == "lead":
+        c.execute("SELECT * FROM crm_leads WHERE id=?", (_safe_int(activity.get("entity_id")),))
+        lead_row = c.fetchone()
+        if not lead_row or not _crm_lead_owned_by_actor(dict(lead_row), actor):
+            conn.close()
+            return {"error": "forbidden"}
+    if _normalize_match(activity.get("entity_type", "")) == "deal":
+        c.execute("SELECT * FROM crm_deals WHERE id=?", (_safe_int(activity.get("entity_id")),))
+        deal_row = c.fetchone()
+        if not deal_row or not _crm_deal_owned_by_actor(dict(deal_row), actor):
+            conn.close()
+            return _crm_deal_forbidden_response()
     c.execute(
         """
         UPDATE crm_activities
@@ -9106,6 +9601,15 @@ def create_finance_payment(data: FinancePaymentData, request: Request):
     conn.commit()
     conn.close()
     audit_log("finance_payment_created", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="finance_payment", entity_id=str(payment_id), details={"title": data.title, "amount": data.amount, "kind": data.kind, "status": data.status, "legal_entity_id": dims["legal_entity_id"], "business_unit_id": dims["business_unit_id"], "treasury_article_id": dims["treasury_article_id"]})
+    create_targeted_notifications(
+        "Новый платёж",
+        f"{actor.get('name', 'Система')} создал(а) платёж «{data.title}» на {int(_safe_float(data.amount)):,} ₽".replace(",", " "),
+        role="Бухгалтерия",
+        category="finance",
+        entity_type="finance_payment",
+        entity_id=str(payment_id),
+        exclude_email=actor.get("email", ""),
+    )
     payload = {"status": "success", "id": payment_id}
     if accounting_warning:
         payload["warning"] = accounting_warning
@@ -9196,6 +9700,16 @@ def update_finance_payment(payment_id: int, data: FinancePaymentData, request: R
     audit_log("finance_payment_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="finance_payment", entity_id=str(payment_id), details={"title": data.title, "amount": data.amount, "kind": data.kind, "status": data.status, "legal_entity_id": dims["legal_entity_id"], "business_unit_id": dims["business_unit_id"], "treasury_article_id": dims["treasury_article_id"]})
     old_status = (existing_payment or {}).get("status", "")
     if old_status != data.status:
+        create_targeted_notifications(
+            "Статус платежа изменён",
+            f"{data.title or f'Платёж #{payment_id}'}: {old_status or '—'} → {data.status or '—'}.",
+            user_email=(existing_payment or {}).get("created_by", ""),
+            category="finance",
+            entity_type="finance_payment",
+            entity_id=str(payment_id),
+            exclude_email=actor.get("email", ""),
+            fallback_to_director=False,
+        )
         notify_entity_watchers(
             "finance_payment",
             str(payment_id),
@@ -9362,6 +9876,15 @@ def create_purchase(data: PurchaseOrderData, request: Request):
     conn.commit()
     conn.close()
     audit_log("purchase_created", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="purchase", entity_id=str(purchase_id), details={"item": data.item_name, "supplier": data.supplier, "status": data.status, "linked_payment_id": linked_payment_id, "legal_entity_id": scope["legal_entity_id"], "business_unit_id": scope["business_unit_id"]})
+    create_targeted_notifications(
+        "Новая закупка",
+        f"{actor.get('name', 'Система')} создал(а) закупку «{data.item_name or f'Закупка #{purchase_id}'}». Поставка: {data.expected_date or 'срок не указан'}.",
+        role="Склад",
+        category="supply",
+        entity_type="purchase_order",
+        entity_id=str(purchase_id),
+        exclude_email=actor.get("email", ""),
+    )
     return {"status": "success", "id": purchase_id, "linked_payment_id": linked_payment_id}
 
 
@@ -9422,6 +9945,16 @@ def update_purchase(purchase_id: int, data: PurchaseOrderData, request: Request)
     audit_log("purchase_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="purchase", entity_id=str(purchase_id), details={"item": data.item_name, "status": data.status, "linked_payment_id": linked_payment_id, "legal_entity_id": scope["legal_entity_id"], "business_unit_id": scope["business_unit_id"]})
     old_status = existing_payload.get("status", "")
     if old_status != data.status:
+        create_targeted_notifications(
+            "Статус закупки изменён",
+            f"{data.item_name or f'Закупка #{purchase_id}'}: {old_status or '—'} → {data.status or '—'}.",
+            user_email=existing_payload.get("created_by", ""),
+            role="Склад",
+            category="supply",
+            entity_type="purchase_order",
+            entity_id=str(purchase_id),
+            exclude_email=actor.get("email", ""),
+        )
         notify_entity_watchers(
             "purchase_order",
             str(purchase_id),
@@ -9492,7 +10025,7 @@ def get_stock_reservations(request: Request, project_id: int = 0):
 @router.post("/api/stock/reservations")
 def create_stock_reservation(data: StockReservationData, request: Request):
     actor = require_approved_user(request)
-    if not actor or not has_permission(actor, "supply", "create"):
+    if not actor or not (has_permission(actor, "supply", "reserve") or has_permission(actor, "supply", "create")):
         return {"error": "forbidden"}
     permission_error = _enforce_field_permissions(
         actor,
@@ -9546,20 +10079,43 @@ def create_stock_reservation(data: StockReservationData, request: Request):
     c.execute(
         """
         INSERT INTO stock_reservations (
-            project_id, legal_entity_id, business_unit_id, nomenclature_article, nomenclature_name, qty, status, comment, created_by, created_at,
+            project_id, legal_entity_id, business_unit_id, nomenclature_article, nomenclature_name, qty, unit, status, comment, created_by, created_at,
             warehouse, bin_code, batch_code, serial_no, fulfilled_qty, released_at, released_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            data.project_id, scope["legal_entity_id"], scope["business_unit_id"], article, data.nomenclature_name, data.qty, status, data.comment, actor.get("email", ""), now,
+            data.project_id, scope["legal_entity_id"], scope["business_unit_id"], article, data.nomenclature_name, data.qty, data.unit or "шт", status, data.comment, actor.get("email", ""), now,
             warehouse, bin_code, batch_code, serial_no, 0, 0, "",
         ),
     )
     reservation_id = c.lastrowid
     _upsert_entity_sync_job(conn, "stock_reservation", reservation_id, actor.get("email", ""))
+    c.execute(
+        "SELECT email, name FROM users WHERE role=? AND status='approved' ORDER BY is_head DESC, name ASC",
+        ("Склад",),
+    )
+    supply_recipients = [dict(row) for row in c.fetchall()]
+    if not supply_recipients:
+        c.execute(
+            "SELECT email, name FROM users WHERE role=? AND status='approved' ORDER BY is_head DESC, name ASC",
+            ("Директор",),
+        )
+        supply_recipients = [dict(row) for row in c.fetchall()]
     conn.commit()
     conn.close()
+    request_author = actor.get("name") or actor.get("email") or "Сотрудник"
+    project_label = f" по проекту #{data.project_id}" if int(data.project_id or 0) > 0 else ""
+    for recipient in supply_recipients:
+        create_notification(
+            "Новый запрос материала",
+            f"{request_author} запросил(а) «{data.nomenclature_name}» — {data.qty} шт.{project_label}. Откройте раздел «Склад и закупки».",
+            user_email=recipient.get("email", ""),
+            user_name=recipient.get("name", ""),
+            category="supply",
+            entity_type="stock_reservation",
+            entity_id=str(reservation_id),
+        )
     audit_log(
         "stock_reserved",
         actor_email=actor.get("email", ""),
@@ -9580,6 +10136,57 @@ def create_stock_reservation(data: StockReservationData, request: Request):
         },
     )
     return {"status": "success", "id": reservation_id, "reservation_status": status, "warehouse": warehouse, "bin_code": bin_code, "batch_code": batch_code, "serial_no": serial_no, "available_free_qty": available_free_qty}
+
+
+@router.put("/api/stock/reservations/{reservation_id}")
+def update_stock_reservation(reservation_id: int, data: StockReservationData, request: Request):
+    actor = require_approved_user(request)
+    if not actor or not (has_permission(actor, "supply", "update") or has_permission(actor, "supply", "reserve")):
+        return {"error": "forbidden"}
+    conn = get_connection()
+    conn.row_factory = ROW_FACTORY_DICT
+    c = conn.cursor()
+    c.execute("SELECT * FROM stock_reservations WHERE id=?", (reservation_id,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return {"error": "not_found"}
+    existing = dict(row)
+    permission_error = _enforce_field_permissions(
+        actor,
+        "supply",
+        "stock_reservation",
+        data.model_dump() if hasattr(data, "model_dump") else data.dict(),
+        existing,
+    )
+    if permission_error:
+        conn.close()
+        return permission_error
+    scope = _resolve_ops_scope_dimensions(conn, data.legal_entity_id, data.business_unit_id)
+    if not _assert_finance_scope(actor, scope["legal_entity_id"], scope["business_unit_id"]):
+        conn.close()
+        return {"error": "forbidden_scope"}
+    status = existing.get("status") or data.status or "reserved"
+    if status not in {"fulfilled", "cancelled", "partial"}:
+        status = data.status or status
+    c.execute(
+        """
+        UPDATE stock_reservations
+        SET project_id=?, legal_entity_id=?, business_unit_id=?, nomenclature_article=?, nomenclature_name=?,
+            qty=?, unit=?, status=?, comment=?, warehouse=?, bin_code=?, batch_code=?, serial_no=?
+        WHERE id=?
+        """,
+        (
+            data.project_id, scope["legal_entity_id"], scope["business_unit_id"], _normalize_spaces(data.nomenclature_article),
+            data.nomenclature_name, data.qty, data.unit or "шт", status, data.comment, _normalize_spaces(data.warehouse),
+            _normalize_spaces(data.bin_code), _normalize_spaces(data.batch_code), _normalize_spaces(data.serial_no), reservation_id,
+        ),
+    )
+    _upsert_entity_sync_job(conn, "stock_reservation", reservation_id, actor.get("email", ""))
+    conn.commit()
+    conn.close()
+    audit_log("stock_reservation_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="stock_reservation", entity_id=str(reservation_id), details={"item": data.nomenclature_name, "qty": data.qty, "status": status})
+    return {"status": "success", "id": reservation_id}
 
 
 @router.get("/api/sales/summary")
@@ -10008,21 +10615,26 @@ def fulfill_stock_reservation(reservation_id: int, data: StockReservationFulfill
             bin_code = source["bin_code"]
             batch_code = source["batch_code"]
             serial_no = source["serial_no"]
-    if not warehouse:
+    manual_issue = not bool(_normalize_spaces(article))
+    if not warehouse and not manual_issue:
         conn.close()
         return {"error": "source_required"}
     item_name = reservation.get("nomenclature_name", article)
-    c.execute("SELECT stock FROM nomenclature WHERE article=?", (article,))
-    stock_row = c.fetchone()
-    current_stock = _safe_float(stock_row[0]) if stock_row else 0
-    allocations, missing = _consume_inventory_lots(c, article, fulfill_qty, warehouse, bin_code, batch_code, serial_no)
-    if missing > 0:
-        conn.close()
-        return {"error": "insufficient_stock"}
-    src_wh, src_bin = _normalize_stock_location(warehouse, bin_code)
-    _upsert_inventory_balance(c, article, src_wh, src_bin, -fulfill_qty)
-    _cleanup_inventory_tables(c)
-    c.execute("UPDATE nomenclature SET stock=? WHERE article=?", (round(current_stock - fulfill_qty, 3), article))
+    if manual_issue:
+        src_wh = warehouse or "Ручная выдача"
+        src_bin = bin_code
+    else:
+        c.execute("SELECT stock FROM nomenclature WHERE article=?", (article,))
+        stock_row = c.fetchone()
+        current_stock = _safe_float(stock_row[0]) if stock_row else 0
+        allocations, missing = _consume_inventory_lots(c, article, fulfill_qty, warehouse, bin_code, batch_code, serial_no)
+        if missing > 0:
+            conn.close()
+            return {"error": "insufficient_stock"}
+        src_wh, src_bin = _normalize_stock_location(warehouse, bin_code)
+        _upsert_inventory_balance(c, article, src_wh, src_bin, -fulfill_qty)
+        _cleanup_inventory_tables(c)
+        c.execute("UPDATE nomenclature SET stock=? WHERE article=?", (round(current_stock - fulfill_qty, 3), article))
     fulfilled_total = round(_safe_float(reservation.get("fulfilled_qty")) + fulfill_qty, 3)
     new_status = "fulfilled" if fulfilled_total >= _safe_float(reservation.get("qty")) else "partial"
     c.execute(
@@ -10048,7 +10660,8 @@ def fulfill_stock_reservation(reservation_id: int, data: StockReservationFulfill
         ),
     )
     _upsert_entity_sync_job(conn, "stock_reservation", reservation_id, actor.get("email", ""))
-    _upsert_entity_sync_job(conn, "nomenclature", article, actor.get("email", ""))
+    if article:
+        _upsert_entity_sync_job(conn, "nomenclature", article, actor.get("email", ""))
     conn.commit()
     conn.close()
     audit_log(
@@ -10066,6 +10679,7 @@ def fulfill_stock_reservation(reservation_id: int, data: StockReservationFulfill
             "bin_code": src_bin,
             "batch_code": batch_code,
             "serial_no": serial_no,
+            "manual_issue": manual_issue,
         },
     )
     return {"status": "success", "id": reservation_id, "fulfilled_qty": fulfilled_total, "reservation_status": new_status}
@@ -10162,6 +10776,193 @@ def get_production_orders(request: Request, project_id: int = 0, client_id: int 
     return rows
 
 
+@router.get("/api/client-picker/suggestions")
+@router.get("/api/production/client_suggestions")
+def get_production_client_suggestions(request: Request, query: str = "", limit: int = 12):
+    """Return CRM clients and imported Bitrix24 contacts for any client picker."""
+    actor = require_approved_user(request)
+    if not actor or not has_permission(actor, "clients", "read"):
+        return {"error": "forbidden"}
+    needle = _normalize_spaces(query)
+    row_limit = max(1, min(int(limit or 12), 20))
+    source_limit = max(6, row_limit)
+    like = f"%{needle.lower()}%"
+    conn = get_connection(row_factory=True)
+    try:
+        if needle:
+            clients = [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    SELECT id, name, inn, contact
+                    FROM clients
+                    WHERE LOWER(name) LIKE ? OR LOWER(inn) LIKE ? OR LOWER(contact) LIKE ?
+                    ORDER BY name
+                    LIMIT ?
+                    """,
+                    (like, like, like, source_limit),
+                ).fetchall()
+            ]
+            bitrix_rows = [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    SELECT id, company_name, company_inn, contact_name, phone, email, converted_client_id
+                    FROM outreach_prospects
+                    WHERE source_name='Bitrix24 API'
+                      AND (LOWER(company_name) LIKE ? OR LOWER(contact_name) LIKE ? OR LOWER(phone) LIKE ? OR LOWER(email) LIKE ?)
+                    ORDER BY updated_at DESC, id DESC
+                    LIMIT ?
+                    """,
+                    (like, like, like, like, source_limit),
+                ).fetchall()
+            ]
+        else:
+            clients = [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    SELECT id, name, inn, contact
+                    FROM clients
+                    ORDER BY id DESC
+                    LIMIT ?
+                    """,
+                    (source_limit,),
+                ).fetchall()
+            ]
+            bitrix_rows = [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    SELECT id, company_name, company_inn, contact_name, phone, email, converted_client_id
+                    FROM outreach_prospects
+                    WHERE source_name='Bitrix24 API'
+                    ORDER BY updated_at DESC, id DESC
+                    LIMIT ?
+                    """,
+                    (source_limit,),
+                ).fetchall()
+            ]
+    finally:
+        conn.close()
+    items = [
+        {
+            "kind": "crm",
+            "id": _safe_int(row.get("id")),
+            "name": _normalize_spaces(row.get("name")) or "Без названия",
+            "meta": " · ".join(part for part in [_normalize_spaces(row.get("inn")), _normalize_spaces(row.get("contact"))] if part),
+            "source": "CRM",
+        }
+        for row in clients
+    ]
+    for row in bitrix_rows:
+        linked_client_id = _safe_int(row.get("converted_client_id"))
+        items.append(
+            {
+                "kind": "crm" if linked_client_id else "bitrix",
+                "id": linked_client_id or _safe_int(row.get("id")),
+                "name": _normalize_spaces(row.get("company_name")) or _normalize_spaces(row.get("contact_name")) or "Клиент из Bitrix24",
+                "meta": " · ".join(part for part in [_normalize_spaces(row.get("contact_name")), _normalize_spaces(row.get("phone")), _normalize_spaces(row.get("email"))] if part),
+                "source": "Bitrix24",
+            }
+        )
+    unique = []
+    seen = set()
+    for item in items:
+        key = (item["kind"], _safe_int(item["id"]))
+        if not key[1] or key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
+    return unique[: row_limit * 2]
+
+
+@router.post("/api/client-picker/bitrix/{prospect_id}/select")
+@router.post("/api/production/client_suggestions/{prospect_id}/select")
+def select_bitrix_production_client(prospect_id: int, request: Request):
+    """Make a cached Bitrix24 contact available as a CRM client in any form."""
+    actor = require_approved_user(request)
+    if not actor or not has_permission(actor, "clients", "read"):
+        return {"error": "forbidden"}
+    conn = get_connection(row_factory=True)
+    try:
+        row = conn.execute(
+            """
+            SELECT id, company_name, company_inn, contact_name, phone, email, converted_client_id
+            FROM outreach_prospects WHERE id=? AND source_name='Bitrix24 API'
+            """,
+            (_safe_int(prospect_id),),
+        ).fetchone()
+        if not row:
+            return {"error": "not_found", "message": "Клиент Bitrix24 не найден в выгруженной базе."}
+        prospect = dict(row)
+        client_id = _safe_int(prospect.get("converted_client_id"))
+        if client_id:
+            existing = conn.execute("SELECT id, name FROM clients WHERE id=?", (client_id,)).fetchone()
+            if existing:
+                client = dict(existing)
+                return {"status": "success", "id": client_id, "name": client.get("name") or "Клиент"}
+        client_name = _normalize_spaces(prospect.get("company_name")) or _normalize_spaces(prospect.get("contact_name"))
+        if not client_name:
+            return {"error": "validation_error", "message": "В карточке Bitrix24 не указано название клиента."}
+        inn = _normalize_spaces(prospect.get("company_inn"))
+        existing = None
+        if inn:
+            existing = conn.execute("SELECT id, name FROM clients WHERE inn=? LIMIT 1", (inn,)).fetchone()
+        if not existing:
+            existing = conn.execute("SELECT id, name FROM clients WHERE LOWER(name)=LOWER(?) LIMIT 1", (client_name,)).fetchone()
+        if existing:
+            client_id = _safe_int(existing["id"] if isinstance(existing, dict) else existing[0])
+            client_name = _normalize_spaces(existing["name"] if isinstance(existing, dict) else existing[1]) or client_name
+        else:
+            contact = " / ".join(part for part in [_normalize_spaces(prospect.get("contact_name")), _normalize_spaces(prospect.get("phone")), _normalize_spaces(prospect.get("email"))] if part)
+            cursor = conn.execute(
+                "INSERT INTO clients (name, inn, kpp, ogrn, legal_address, contact) VALUES (?, ?, '', '', '', ?)",
+                (client_name, inn, contact),
+            )
+            client_id = cursor.lastrowid
+        conn.execute("UPDATE outreach_prospects SET converted_client_id=?, updated_at=? WHERE id=?", (client_id, int(time.time()), _safe_int(prospect_id)))
+        conn.commit()
+        audit_log("bitrix_client_selected_for_production", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="outreach_prospect", entity_id=str(prospect_id), details={"client_id": client_id})
+        return {"status": "success", "id": client_id, "name": client_name}
+    finally:
+        conn.close()
+
+
+@router.post("/api/client-picker/manual")
+def select_manual_client(data: ClientData, request: Request):
+    """Create or reuse a minimal CRM client entered directly in a working form."""
+    actor = require_approved_user(request)
+    if not actor or not has_permission(actor, "clients", "read"):
+        return {"error": "forbidden"}
+    client_name = _normalize_spaces(data.name)
+    if len(client_name) < 2:
+        return {"error": "validation_error", "message": "Укажите название клиента минимум из двух символов."}
+    conn = get_connection(row_factory=True)
+    try:
+        existing = conn.execute("SELECT id, name FROM clients WHERE LOWER(name)=LOWER(?) LIMIT 1", (client_name,)).fetchone()
+        if existing:
+            row = dict(existing)
+            return {"status": "success", "id": _safe_int(row.get("id")), "name": row.get("name") or client_name, "created": 0}
+        cursor = conn.execute(
+            "INSERT INTO clients (name, inn, kpp, ogrn, legal_address, contact) VALUES (?, '', '', '', '', ?)",
+            (client_name, _normalize_spaces(data.contact)),
+        )
+        client_id = cursor.lastrowid
+        conn.commit()
+        audit_log(
+            "client_created_from_picker",
+            actor_email=actor.get("email", ""),
+            actor_name=actor.get("name", ""),
+            entity_type="client",
+            entity_id=str(client_id),
+            details={"name": client_name},
+        )
+        return {"status": "success", "id": client_id, "name": client_name, "created": 1}
+    finally:
+        conn.close()
+
+
 @router.get("/api/production/operations")
 def get_production_operations(request: Request, order_id: int = 0):
     actor = require_approved_user(request)
@@ -10223,13 +11024,13 @@ def create_production_order(data: ProductionOrderData, request: Request):
     c.execute(
         """
         INSERT INTO production_orders (
-            project_id, client_id, contract_id, object_id, legal_entity_id, business_unit_id, order_name, stage, priority, planned_start, planned_finish,
+            project_id, client_id, client_display_name, contract_id, object_id, legal_entity_id, business_unit_id, order_name, stage, priority, planned_start, planned_finish,
             actual_finish, progress, responsible, route_name, planned_qty, produced_qty, scrap_qty,
             planned_cost, actual_cost, labor_hours_plan, labor_hours_fact, comment, created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            context["project_id"], context["client_id"], context["contract_id"], context["object_id"], scope["legal_entity_id"], scope["business_unit_id"], data.order_name, data.stage, data.priority, data.planned_start,
+            context["project_id"], context["client_id"], _normalize_spaces(data.client_name), context["contract_id"], context["object_id"], scope["legal_entity_id"], scope["business_unit_id"], data.order_name, data.stage, data.priority, data.planned_start,
             data.planned_finish, data.actual_finish, data.progress, data.responsible, data.route_name, data.planned_qty, data.produced_qty,
             data.scrap_qty, data.planned_cost, data.actual_cost, data.labor_hours_plan, data.labor_hours_fact, data.comment,
             actor.get("email", ""), now, now,
@@ -10240,6 +11041,16 @@ def create_production_order(data: ProductionOrderData, request: Request):
     conn.commit()
     conn.close()
     audit_log("production_order_created", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="production_order", entity_id=str(order_id), details={"order_name": data.order_name, "stage": data.stage, "progress": data.progress, "planned_qty": data.planned_qty, "planned_cost": data.planned_cost, "legal_entity_id": scope["legal_entity_id"], "business_unit_id": scope["business_unit_id"]})
+    create_targeted_notifications(
+        "Новый производственный заказ",
+        f"{actor.get('name', 'Система')} создал(а) заказ «{data.order_name or f'Заказ #{order_id}'}». Срок: {data.planned_finish or 'не указан'}.",
+        user_name=data.responsible,
+        role="Производство и ОТК",
+        category="production",
+        entity_type="production_order",
+        entity_id=str(order_id),
+        exclude_email=actor.get("email", ""),
+    )
     return {"status": "success", "id": order_id}
 
 
@@ -10283,13 +11094,13 @@ def update_production_order(order_id: int, data: ProductionOrderData, request: R
     c.execute(
         """
         UPDATE production_orders
-        SET project_id=?, client_id=?, contract_id=?, object_id=?, legal_entity_id=?, business_unit_id=?, order_name=?, stage=?, priority=?, planned_start=?, planned_finish=?,
+        SET project_id=?, client_id=?, client_display_name=?, contract_id=?, object_id=?, legal_entity_id=?, business_unit_id=?, order_name=?, stage=?, priority=?, planned_start=?, planned_finish=?,
             actual_finish=?, progress=?, responsible=?, route_name=?, planned_qty=?, produced_qty=?, scrap_qty=?,
             planned_cost=?, actual_cost=?, labor_hours_plan=?, labor_hours_fact=?, comment=?, updated_at=?
         WHERE id=?
         """,
         (
-            context["project_id"], context["client_id"], context["contract_id"], context["object_id"], scope["legal_entity_id"], scope["business_unit_id"], data.order_name, data.stage, data.priority, data.planned_start,
+            context["project_id"], context["client_id"], _normalize_spaces(data.client_name), context["contract_id"], context["object_id"], scope["legal_entity_id"], scope["business_unit_id"], data.order_name, data.stage, data.priority, data.planned_start,
             data.planned_finish, data.actual_finish, data.progress, data.responsible, data.route_name, data.planned_qty, data.produced_qty,
             data.scrap_qty, data.planned_cost, data.actual_cost, data.labor_hours_plan, data.labor_hours_fact, data.comment, now, order_id,
         ),
@@ -10300,6 +11111,26 @@ def update_production_order(order_id: int, data: ProductionOrderData, request: R
     audit_log("production_order_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="production_order", entity_id=str(order_id), details={"order_name": data.order_name, "stage": data.stage, "progress": data.progress, "planned_qty": data.planned_qty, "planned_cost": data.planned_cost, "legal_entity_id": scope["legal_entity_id"], "business_unit_id": scope["business_unit_id"]})
     old_stage = existing_payload.get("stage", "")
     if old_stage != data.stage:
+        create_targeted_notifications(
+            "Этап производственного заказа изменён",
+            f"{data.order_name or f'Заказ #{order_id}'}: {old_stage or '—'} → {data.stage or '—'}.",
+            user_name=data.responsible or existing_payload.get("responsible", ""),
+            role="Производство и ОТК",
+            category="production",
+            entity_type="production_order",
+            entity_id=str(order_id),
+            exclude_email=actor.get("email", ""),
+        )
+        create_targeted_notifications(
+            "Производственный заказ обновлён",
+            f"{data.order_name or f'Заказ #{order_id}'} перешёл на этап «{data.stage or '—'}».",
+            user_email=existing_payload.get("created_by", ""),
+            category="production",
+            entity_type="production_order",
+            entity_id=str(order_id),
+            exclude_email=actor.get("email", ""),
+            fallback_to_director=False,
+        )
         notify_entity_watchers(
             "production_order",
             str(order_id),
@@ -10795,9 +11626,17 @@ def create_expense_request(data: ExpenseApprovalData, request: Request):
     conn.commit()
     conn.close()
     audit_log("expense_request_created", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="expense_request", entity_id=str(request_id), details={"title": data.title, "amount": data.amount, "status": status, "linked_payment_id": linked_payment_id})
-    approver_name = data.approver_name or data.approver_role
-    if status == "pending" and approver_name:
-        create_notification("Новый запрос на оплату", f"{actor.get('name', 'Система')} отправил(а) запрос «{data.title}» на {int(_safe_float(data.amount)):,} ₽".replace(",", " "), user_name=approver_name, category="expense", entity_type="expense_request", entity_id=str(request_id))
+    if status == "pending":
+        create_targeted_notifications(
+            "Новый запрос на оплату",
+            f"{actor.get('name', 'Система')} отправил(а) запрос «{data.title}» на {int(_safe_float(data.amount)):,} ₽".replace(",", " "),
+            user_name=data.approver_name,
+            role=data.approver_role or "Директор",
+            category="expense",
+            entity_type="expense_request",
+            entity_id=str(request_id),
+            exclude_email=actor.get("email", ""),
+        )
     return {"status": "success", "id": request_id, "linked_payment_id": linked_payment_id}
 
 
@@ -10808,8 +11647,10 @@ def update_expense_request(request_id: int, data: ExpenseApprovalData, request: 
         return {"error": "forbidden"}
     now = int(time.time())
     approved_by = actor.get("email", "") if data.status in {"approved", "paid", "rejected"} else ""
-    conn = get_connection()
+    conn = get_connection(row_factory=True)
     c = conn.cursor()
+    c.execute("SELECT * FROM expense_requests WHERE id=?", (request_id,))
+    expense_before = dict(c.fetchone() or {})
     context = _resolve_master_context(conn, data.project_id, data.client_id, data.contract_id, data.object_id)
     c.execute(
         """
@@ -10828,27 +11669,43 @@ def update_expense_request(request_id: int, data: ExpenseApprovalData, request: 
     conn.commit()
     conn.close()
     audit_log("expense_request_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="expense_request", entity_id=str(request_id), details={"title": data.title, "status": data.status, "amount": data.amount, "linked_payment_id": linked_payment_id})
+    if data.status != expense_before.get("status"):
+        create_targeted_notifications(
+            "Статус запроса на оплату изменён",
+            f"Запрос «{data.title}»: {expense_before.get('status') or '—'} → {data.status or '—'}.",
+            user_email=expense_before.get("created_by", ""),
+            category="expense",
+            entity_type="expense_request",
+            entity_id=str(request_id),
+            exclude_email=actor.get("email", ""),
+            fallback_to_director=False,
+        )
     return {"status": "success", "linked_payment_id": linked_payment_id}
 
 
 @router.delete("/api/expenses/requests/{request_id}")
 def delete_expense_request(request_id: int, request: Request):
     actor = require_approved_user(request)
-    if not actor or not has_permission(actor, "expenses", "delete"):
+    if not actor:
         return {"error": "forbidden"}
-    conn = get_connection()
+    conn = get_connection(row_factory=True)
     c = conn.cursor()
-    c.execute("SELECT title FROM expense_requests WHERE id=?", (request_id,))
+    c.execute("SELECT title, created_by FROM expense_requests WHERE id=?", (request_id,))
     row = c.fetchone()
     if not row:
         conn.close()
         return {"error": "not_found"}
+    is_director = (actor.get("role") or "").strip() == "Директор"
+    is_author = normalize_email(row["created_by"] or "") == normalize_email(actor.get("email", ""))
+    if not (is_director or is_author):
+        conn.close()
+        return {"error": "forbidden", "message": "Удалить запрос может только его автор или директор."}
     linked_payment_id = _delete_source_finance_payment(conn, "expense_request", request_id)
     _delete_entity_runtime_links(conn, "expense_request", request_id)
     c.execute("DELETE FROM expense_requests WHERE id=?", (request_id,))
     conn.commit()
     conn.close()
-    audit_log("expense_request_deleted", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="expense_request", entity_id=str(request_id), details={"title": row[0] or "", "linked_payment_id": linked_payment_id})
+    audit_log("expense_request_deleted", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="expense_request", entity_id=str(request_id), details={"title": row["title"] or "", "linked_payment_id": linked_payment_id})
     return {"status": "success", "linked_payment_id": linked_payment_id}
 
 
@@ -10857,7 +11714,7 @@ def get_internal_requests_summary(request: Request):
     actor = require_approved_user(request)
     if not actor or not has_permission(actor, "requests", "read"):
         return {"error": "forbidden"}
-    rows = _load_internal_request_rows()
+    rows = _filter_internal_request_rows_for_actor(_load_internal_request_rows(), actor)
     return {
         "metrics": {
             "new": len([row for row in rows if row.get("status") == "new"]),
@@ -10874,10 +11731,76 @@ def get_internal_requests(request: Request, project_id: int = 0):
     actor = require_approved_user(request)
     if not actor or not has_permission(actor, "requests", "read"):
         return {"error": "forbidden"}
-    rows = _load_internal_request_rows()
+    rows = _filter_internal_request_rows_for_actor(_load_internal_request_rows(), actor)
     if project_id:
         rows = [row for row in rows if int(row.get("project_id") or 0) == project_id]
     return rows
+
+
+def _filter_internal_request_rows_for_actor(rows: list[dict], actor: dict) -> list[dict]:
+    """Directors see the company queue; other roles see only incoming or authored requests."""
+    if (actor.get("role") or "").strip() == "Директор":
+        return rows
+    actor_role = (actor.get("role") or "").strip()
+    actor_name = (actor.get("name") or "").strip()
+    actor_email = normalize_email(actor.get("email", ""))
+    return [
+        row for row in rows
+        if (row.get("target_role") or "").strip() == actor_role
+        or (actor_name and (row.get("assignee_name") or "").strip() == actor_name)
+        or (actor_email and normalize_email(row.get("created_by", "")) == actor_email)
+    ]
+
+
+def _notify_internal_request_recipients(
+    title: str,
+    message: str,
+    target_role: str = "",
+    assignee_name: str = "",
+    entity_id: str = "",
+    exclude_email: str = "",
+):
+    """Deliver a request to a named assignee or, by default, to the selected department."""
+    conn = get_connection(row_factory=True)
+    c = conn.cursor()
+    recipients = []
+    if assignee_name:
+        c.execute(
+            "SELECT email, name FROM users WHERE name=? AND status='approved' ORDER BY name ASC",
+            (assignee_name,),
+        )
+        recipients = [dict(row) for row in c.fetchall()]
+    if not recipients and target_role:
+        c.execute(
+            "SELECT email, name FROM users WHERE role=? AND status='approved' ORDER BY is_head DESC, name ASC",
+            (target_role,),
+        )
+        recipients = [dict(row) for row in c.fetchall()]
+    if not recipients:
+        c.execute(
+            "SELECT email, name FROM users WHERE role='Директор' AND status='approved' ORDER BY is_head DESC, name ASC"
+        )
+        recipients = [dict(row) for row in c.fetchall()]
+    conn.close()
+
+    excluded = normalize_email(exclude_email)
+    sent = set()
+    for recipient in recipients:
+        email = normalize_email(recipient.get("email", ""))
+        name = recipient.get("name", "") or ""
+        recipient_key = email or name
+        if not recipient_key or recipient_key in sent or (excluded and email == excluded):
+            continue
+        sent.add(recipient_key)
+        create_notification(
+            title,
+            message,
+            user_email=email,
+            user_name=name,
+            category="request",
+            entity_type="internal_request",
+            entity_id=entity_id,
+        )
 
 
 @router.post("/api/internal_requests")
@@ -10905,8 +11828,14 @@ def create_internal_request(data: InternalRequestData, request: Request):
     conn.commit()
     conn.close()
     audit_log("internal_request_created", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="internal_request", entity_id=str(internal_id), details={"title": data.title, "type": data.request_type, "status": data.status})
-    if data.assignee_name:
-        create_notification("Новая внутренняя заявка", f"{actor.get('name', 'Система')} создал(а) заявку «{data.title}»", user_name=data.assignee_name, category="request", entity_type="internal_request", entity_id=str(internal_id))
+    _notify_internal_request_recipients(
+        "Новая внутренняя заявка",
+        f"{actor.get('name', 'Система')} отправил(а) заявку «{data.title}». Срок: {data.deadline or 'не указан'}.",
+        target_role=data.target_role,
+        assignee_name=data.assignee_name,
+        entity_id=str(internal_id),
+        exclude_email=actor.get("email", ""),
+    )
     return {"status": "success", "id": internal_id}
 
 
@@ -10916,8 +11845,14 @@ def update_internal_request(request_id: int, data: InternalRequestData, request:
     if not actor or not has_permission(actor, "requests", "update"):
         return {"error": "forbidden"}
     now = int(time.time())
-    conn = get_connection()
+    conn = get_connection(row_factory=True)
     c = conn.cursor()
+    c.execute("SELECT * FROM internal_requests WHERE id=?", (request_id,))
+    existing_row = c.fetchone()
+    if not existing_row:
+        conn.close()
+        return {"error": "not_found"}
+    existing = dict(existing_row)
     context = _resolve_master_context(conn, data.project_id, 0, data.contract_id, data.object_id)
     c.execute(
         """
@@ -10933,26 +11868,58 @@ def update_internal_request(request_id: int, data: InternalRequestData, request:
     conn.commit()
     conn.close()
     audit_log("internal_request_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="internal_request", entity_id=str(request_id), details={"title": data.title, "status": data.status})
+    if data.status != existing.get("status"):
+        status_text = {
+            "new": "возвращена в новые",
+            "in_work": "взята в работу",
+            "done": "выполнена",
+            "cancelled": "отменена",
+        }.get(data.status, "обновлена")
+        author_email = normalize_email(existing.get("created_by", ""))
+        if author_email and author_email != normalize_email(actor.get("email", "")):
+            create_notification(
+                "Статус внутренней заявки изменён",
+                f"Заявка «{data.title}» {status_text}.",
+                user_email=author_email,
+                category="request",
+                entity_type="internal_request",
+                entity_id=str(request_id),
+            )
+    if data.target_role != existing.get("target_role") or data.assignee_name != existing.get("assignee_name"):
+        _notify_internal_request_recipients(
+            "Внутренняя заявка передана вам",
+            f"{actor.get('name', 'Система')} передал(а) заявку «{data.title}». Срок: {data.deadline or 'не указан'}.",
+            target_role=data.target_role,
+            assignee_name=data.assignee_name,
+            entity_id=str(request_id),
+            exclude_email=actor.get("email", ""),
+        )
     return {"status": "success"}
 
 
 @router.delete("/api/internal_requests/{request_id}")
 def delete_internal_request(request_id: int, request: Request):
     actor = require_approved_user(request)
-    if not actor or not has_permission(actor, "requests", "delete"):
+    if not actor:
         return {"error": "forbidden"}
-    conn = get_connection()
+    conn = get_connection(row_factory=True)
     c = conn.cursor()
-    c.execute("SELECT title FROM internal_requests WHERE id=?", (request_id,))
+    c.execute("SELECT title, created_by FROM internal_requests WHERE id=?", (request_id,))
     row = c.fetchone()
     if not row:
         conn.close()
         return {"error": "not_found"}
+    row = dict(row)
+    is_director = (actor.get("role") or "").strip() == "Директор"
+    is_author = normalize_email(row.get("created_by", "")) == normalize_email(actor.get("email", ""))
+    if not is_director and not is_author:
+        conn.close()
+        return {"error": "forbidden", "message": "Удалить заявку может только её автор или директор."}
     _delete_entity_runtime_links(conn, "internal_request", request_id)
     c.execute("DELETE FROM internal_requests WHERE id=?", (request_id,))
     conn.commit()
     conn.close()
-    audit_log("internal_request_deleted", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="internal_request", entity_id=str(request_id), details={"title": row[0] or ""})
+    audit_log("internal_request_deleted", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="internal_request", entity_id=str(request_id), details={"title": row.get("title", "") or ""})
     return {"status": "success"}
 
 
@@ -11165,6 +12132,16 @@ def create_resource_allocation(data: ResourceAllocationData, request: Request):
     conn.commit()
     conn.close()
     audit_log("resource_allocation_created", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="resource_allocation", entity_id=str(allocation_id), details={"resource": data.resource_name, "department": data.department, "load_percent": data.load_percent})
+    create_targeted_notifications(
+        "Вас добавили в календарь ресурсов",
+        f"{actor.get('name', 'Система')} назначил(а) вам работу: {data.date_from or 'без даты'} — {data.date_to or 'без даты'}. {data.comment or ''}".strip(),
+        user_name=data.resource_name,
+        role=data.department,
+        category="resource",
+        entity_type="resource_allocation",
+        entity_id=str(allocation_id),
+        exclude_email=actor.get("email", ""),
+    )
     return {"status": "success", "id": allocation_id}
 
 
@@ -11191,6 +12168,16 @@ def update_resource_allocation(allocation_id: int, data: ResourceAllocationData,
     conn.commit()
     conn.close()
     audit_log("resource_allocation_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="resource_allocation", entity_id=str(allocation_id), details={"resource": data.resource_name, "load_percent": data.load_percent, "status": data.status})
+    create_targeted_notifications(
+        "Назначение в календаре изменено",
+        f"Период: {data.date_from or 'без даты'} — {data.date_to or 'без даты'}, загрузка {int(data.load_percent or 0)}%, статус «{data.status or '—'}».",
+        user_name=data.resource_name,
+        role=data.department,
+        category="resource",
+        entity_type="resource_allocation",
+        entity_id=str(allocation_id),
+        exclude_email=actor.get("email", ""),
+    )
     return {"status": "success"}
 
 
@@ -11270,8 +12257,15 @@ def create_service_case(data: ServiceCaseData, request: Request):
     conn.commit()
     conn.close()
     audit_log("service_case_created", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="service_case", entity_id=str(case_id), details={"title": data.title, "status": data.status, "case_type": data.case_type})
-    if data.responsible:
-        create_notification("Новый сервисный кейс", f"{actor.get('name', 'Система')} создал(а) кейс «{data.title}»", user_name=data.responsible, category="service", entity_type="service_case", entity_id=str(case_id))
+    create_targeted_notifications(
+        "Новый сервисный кейс",
+        f"{actor.get('name', 'Система')} создал(а) кейс «{data.title}». Срок SLA: {data.sla_deadline or 'не указан'}.",
+        user_name=data.responsible,
+        category="service",
+        entity_type="service_case",
+        entity_id=str(case_id),
+        exclude_email=actor.get("email", ""),
+    )
     return {"status": "success", "id": case_id}
 
 
@@ -11281,8 +12275,10 @@ def update_service_case(case_id: int, data: ServiceCaseData, request: Request):
     if not actor or not has_permission(actor, "service", "update"):
         return {"error": "forbidden"}
     now = int(time.time())
-    conn = get_connection()
+    conn = get_connection(row_factory=True)
     c = conn.cursor()
+    c.execute("SELECT * FROM service_cases WHERE id=?", (case_id,))
+    service_before = dict(c.fetchone() or {})
     context = _resolve_master_context(conn, data.project_id, data.client_id, data.contract_id, data.object_id)
     c.execute(
         """
@@ -11300,6 +12296,27 @@ def update_service_case(case_id: int, data: ServiceCaseData, request: Request):
     conn.commit()
     conn.close()
     audit_log("service_case_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="service_case", entity_id=str(case_id), details={"title": data.title, "status": data.status})
+    if data.responsible != service_before.get("responsible") or data.status != service_before.get("status"):
+        create_targeted_notifications(
+            "Сервисное обращение обновлено",
+            f"Кейс «{data.title}»: статус «{data.status or '—'}», срок {data.sla_deadline or 'не указан'}.",
+            user_name=data.responsible,
+            category="service",
+            entity_type="service_case",
+            entity_id=str(case_id),
+            exclude_email=actor.get("email", ""),
+        )
+    if data.status in {"closed", "done", "completed"} and data.status != service_before.get("status"):
+        create_targeted_notifications(
+            "Сервисное обращение закрыто",
+            f"Кейс «{data.title}» завершён. {data.resolution or ''}".strip(),
+            user_email=service_before.get("created_by", ""),
+            category="service",
+            entity_type="service_case",
+            entity_id=str(case_id),
+            exclude_email=actor.get("email", ""),
+            fallback_to_director=False,
+        )
     return {"status": "success"}
 
 
@@ -12808,6 +13825,72 @@ async def create_nomenclature(data: NomenclatureData, request: Request):
     return {"status": "success", "id": nomenclature_id}
 
 
+@router.put("/api/nomenclature/by_id/{item_id}")
+def update_nomenclature_by_id(item_id: int, data: NomenclatureData, request: Request):
+    actor = require_approved_user(request)
+    if not actor or not has_permission(actor, "nsi", "update"):
+        return {"error": "forbidden"}
+    conn = get_connection(row_factory=True)
+    c = conn.cursor()
+    c.execute("SELECT * FROM nomenclature WHERE id=?", (item_id,))
+    current = c.fetchone()
+    if not current:
+        conn.close()
+        return {"error": "not_found"}
+    candidate = {
+        "name": data.name,
+        "article": data.article,
+        "unit": data.unit,
+        "price": data.price,
+        "stock": dict(current).get("stock", 0),
+        "currency": data.currency,
+        "group_name": data.group_name or "",
+        "default_warehouse": data.default_warehouse or "",
+    }
+    gate = _nsi_mdm_validate_row(conn, "nomenclature", candidate, item_id)
+    if gate.get("duplicates"):
+        conn.close()
+        return {"error": "duplicate_candidate", "duplicates": gate.get("duplicates", [])}
+    old_article = (dict(current).get("article") or "").strip()
+    c.execute(
+        "UPDATE nomenclature SET name=?, article=?, unit=?, price=?, currency=?, group_name=?, default_warehouse=?, exchange_state='queued' WHERE id=?",
+        (data.name, data.article, data.unit, data.price, data.currency, data.group_name or "", data.default_warehouse or "", item_id),
+    )
+    new_article = (data.article or "").strip()
+    if old_article and new_article and old_article != new_article:
+        _rewrite_project_nomenclature_articles(conn, {old_article: {"article": new_article, "name": data.name}})
+        c.execute("UPDATE stock_movements SET article=?, name=? WHERE article=?", (new_article, data.name, old_article))
+        c.execute("UPDATE inventory_balances SET article=? WHERE article=?", (new_article, old_article))
+        c.execute("UPDATE inventory_lots SET article=? WHERE article=?", (new_article, old_article))
+    if new_article:
+        _upsert_entity_sync_job(conn, "nomenclature", new_article, actor.get("email", ""))
+    _record_nsi_mdm_version(conn, "nomenclature", item_id, actor, "updated")
+    conn.commit()
+    conn.close()
+    audit_log("nomenclature_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="nomenclature", entity_id=str(item_id), details={"article": new_article})
+    return {"status": "success", "id": item_id}
+
+
+@router.delete("/api/nomenclature/by_id/{item_id}")
+def delete_nomenclature_by_id(item_id: int, request: Request):
+    actor = require_approved_user(request)
+    if not actor or not has_permission(actor, "nsi", "delete"):
+        return {"error": "forbidden"}
+    conn = get_connection(row_factory=True)
+    c = conn.cursor()
+    c.execute("SELECT article FROM nomenclature WHERE id=?", (item_id,))
+    current = c.fetchone()
+    if not current:
+        conn.close()
+        return {"error": "not_found"}
+    _delete_sync_entity_cascade(conn, "nomenclature", item_id)
+    c.execute("DELETE FROM nomenclature WHERE id=?", (item_id,))
+    conn.commit()
+    conn.close()
+    audit_log("nomenclature_deleted", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="nomenclature", entity_id=str(item_id), details={"article": dict(current).get("article", "")})
+    return {"status": "success"}
+
+
 @router.post("/api/nomenclature/import")
 async def import_nomenclature(request: Request, upload: UploadFile = File(...)):
     actor = require_approved_user(request)
@@ -12965,7 +14048,39 @@ def create_contact(data: ContactData, request: Request):
     actor = require_approved_user(request)
     if not actor or not has_permission(actor, "clients", "create"):
         return {"error": "forbidden"}
-    conn = get_connection(); c = conn.cursor(); c.execute("INSERT INTO contacts (client_id, name, phone, email, position) VALUES (?, ?, ?, ?, ?)", (data.client_id, data.name, data.phone, data.email, data.position)); conn.commit(); conn.close(); return {"status": "success"}
+    conn = get_connection(); c = conn.cursor(); c.execute("INSERT INTO contacts (client_id, name, phone, email, position) VALUES (?, ?, ?, ?, ?)", (data.client_id, data.name, data.phone, data.email, data.position)); contact_id = c.lastrowid; conn.commit(); conn.close(); return {"status": "success", "id": contact_id}
+
+
+@router.put("/api/contacts/{contact_id}")
+def update_contact(contact_id: int, data: ContactData, request: Request):
+    actor = require_approved_user(request)
+    if not actor or not has_permission(actor, "clients", "update"):
+        return {"error": "forbidden"}
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT id FROM contacts WHERE id=?", (contact_id,))
+    if not c.fetchone():
+        conn.close()
+        return {"error": "not_found"}
+    c.execute("UPDATE contacts SET client_id=?, name=?, phone=?, email=?, position=? WHERE id=?", (data.client_id, data.name, data.phone, data.email, data.position, contact_id))
+    conn.commit()
+    conn.close()
+    audit_log("contact_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="contact", entity_id=str(contact_id), details={"name": data.name})
+    return {"status": "success", "id": contact_id}
+
+
+@router.delete("/api/contacts/{contact_id}")
+def delete_contact(contact_id: int, request: Request):
+    actor = require_approved_user(request)
+    if not actor or not has_permission(actor, "clients", "delete"):
+        return {"error": "forbidden"}
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM contacts WHERE id=?", (contact_id,))
+    conn.commit()
+    conn.close()
+    audit_log("contact_deleted", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="contact", entity_id=str(contact_id), details={})
+    return {"status": "success"}
 # =========================
 
 @router.get("/api/projects")

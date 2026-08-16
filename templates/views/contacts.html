@@ -1,89 +1,55 @@
-<div id="contactsView" class="view-page crm-page-shell" style="display: none;">
-    <div class="view-header">
-        <div class="view-heading">
-            <span class="view-eyebrow">НСИ</span>
-            <h1 class="view-title">Справочник контактов</h1>
-            <p class="view-subtitle">Единая база физических лиц, связанных с контрагентами, сделками и рабочими коммуникациями.</p>
-        </div>
-    </div>
-    <div class="workbench-strip">
-        <div class="workbench-card">
-            <div class="workbench-card-title">Основной сценарий</div>
-            <div class="workbench-card-text">Сначала создайте контакт и привяжите его к контрагенту, затем используйте запись в продажах, договорах и переписке.</div>
-        </div>
-        <div class="workbench-card">
-            <div class="workbench-card-title">Контроль качества</div>
-            <div class="workbench-card-text">Храните в одном месте телефон, email и должность, чтобы менеджеры и юристы работали с единым профилем контакта.</div>
-        </div>
-        <div class="workbench-card">
-            <div class="workbench-card-title">Быстро</div>
-            <div class="workbench-card-actions">
-                <button class="btn-primary" onclick="document.getElementById('addContactName').focus()">Новый контакт</button>
+<div id="contactsView" class="view-page" style="display:none;">
+    <div class="surface-card surface-card--padded nsi-simple-shell">
+        <header class="view-header">
+            <div class="view-heading">
+                <span class="view-eyebrow">НСИ</span>
+                <h1 class="view-title">Контакты</h1>
+                <p class="view-subtitle">Контактные лица клиентов и партнёров: кто принимает решение и как с ним связаться.</p>
             </div>
+            <div class="view-actions nsi-contact-source-actions">
+                <div id="contactsBitrixState" class="nsi-contact-sync-state" hidden></div>
+                <button id="contactsBitrixSyncButton" class="btn-secondary" type="button" onclick="syncSimpleContactsWithBitrix()" hidden>Обновить из Bitrix24</button>
+                <button class="btn-primary" type="button" onclick="openSimpleContactEditor()">+ Добавить контакт</button>
+            </div>
+        </header>
+
+        <div class="nsi-simple-guide nsi-simple-guide--three">
+            <div><span>1</span><strong>Выберите компанию</strong><small>Привяжите человека к клиенту или партнёру.</small></div>
+            <div><span>2</span><strong>Запишите контакты</strong><small>ФИО, должность, телефон и почта.</small></div>
+            <div><span>3</span><strong>Используйте в CRM</strong><small>Контакт будет доступен в клиентах, сделках и документах.</small></div>
         </div>
-    </div>
-    <div class="row g-4 align-items-stretch crm-bootstrap-grid">
-        <section class="col-12 col-xl-4">
-            <div class="surface-card surface-card--padded tw-flex tw-h-full tw-flex-col tw-gap-4">
-                <div class="section-header">
-                    <div>
-                        <h3 class="section-title">Новая карточка контакта</h3>
-                        <p class="section-subtitle">Добавьте физлицо и сразу зафиксируйте его связь с клиентом или партнёром.</p>
-                    </div>
-                </div>
-                <div class="crm-form-shell">
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <label class="field-label">ФИО контакта *</label>
-                            <input type="text" id="addContactName" class="auth-input">
-                        </div>
-                        <div class="col-12">
-                            <label class="field-label">Привязка к контрагенту *</label>
-                            <select id="addContactClient" class="auth-input" style="margin:0; appearance: auto;"></select>
-                        </div>
-                        <div class="col-sm-6">
-                            <label class="field-label">Телефон</label>
-                            <input type="text" id="addContactPhone" class="auth-input">
-                        </div>
-                        <div class="col-sm-6">
-                            <label class="field-label">Эл. почта</label>
-                            <input type="text" id="addContactEmail" class="auth-input">
-                        </div>
-                        <div class="col-12">
-                            <label class="field-label">Должность</label>
-                            <input type="text" id="addContactPosition" list="posList" class="auth-input" placeholder="Выбрать / ввести">
-                            <datalist id="posList">
-                                <option value="Генеральный директор"></option>
-                                <option value="Коммерческий директор"></option>
-                                <option value="Менеджер по закупкам"></option>
-                                <option value="Главный инженер"></option>
-                                <option value="Бухгалтер"></option>
-                                <option value="Юрист"></option>
-                                <option value="Руководитель проекта"></option>
-                            </datalist>
-                        </div>
-                        <div class="col-12">
-                            <button class="btn-primary" style="width:100%; justify-content:center;" onclick="addContact()">+ Добавить контакт</button>
-                        </div>
-                    </div>
-                </div>
+
+        <div id="contactsSimpleMetrics" class="nsi-simple-metrics"></div>
+        <div class="nsi-simple-toolbar nsi-simple-toolbar--contacts">
+            <input id="contactsSimpleSearch" class="auth-input" type="search" placeholder="Найти по ФИО, компании, телефону или почте" oninput="setSimpleContactSearch(this.value)">
+            <button class="btn-secondary" type="button" onclick="resetSimpleContactSearch()">Сбросить</button>
+        </div>
+        <div id="contactsSimpleList" class="nsi-simple-list"></div>
+        <div id="contactsSimpleDetail" class="nsi-simple-detail"></div>
+
+        <section id="contactSimpleEditor" class="nsi-simple-editor" hidden>
+            <div class="nsi-simple-editor__head">
+                <div><span class="view-eyebrow">Карточка контакта</span><h2 id="contactSimpleEditorTitle">Новый контакт</h2><p>Укажите компанию и рабочие способы связи.</p></div>
+                <button class="btn-secondary" type="button" onclick="closeSimpleContactEditor()">Закрыть</button>
             </div>
-        </section>
-        <section class="col-12 col-xl-8">
-            <div class="surface-card surface-card--padded tw-flex tw-h-full tw-flex-col tw-gap-4">
-                <div class="section-header">
-                    <div>
-                        <h3 class="section-title">Реестр контактов</h3>
-                        <p class="section-subtitle">Актуальная клиентская книга для продаж, документооборота и коммуникаций.</p>
+            <div class="nsi-simple-editor__steps">
+                <section>
+                    <div class="nsi-simple-step-head"><span>1</span><div><h3>Компания и человек</h3><p>К кому относится контакт и какую должность занимает.</p></div></div>
+                    <div class="nsi-simple-form-grid">
+                        <label class="is-wide"><span>Клиент / контрагент *</span><select id="simpleContactClientId" class="auth-input" data-client-picker="1"><option value="">Выберите компанию</option></select><small class="nsi-simple-field-hint">Поиск идёт одновременно по контрагентам CRM и загруженным клиентам Bitrix24. Источник указан возле каждого результата.</small></label>
+                        <label><span>ФИО *</span><input id="simpleContactName" class="auth-input" placeholder="Иванов Сергей Петрович"></label>
+                        <label><span>Должность</span><input id="simpleContactPosition" class="auth-input" list="simpleContactPositionList" placeholder="Например, главный инженер"><datalist id="simpleContactPositionList"><option value="Генеральный директор"><option value="Коммерческий директор"><option value="Менеджер по закупкам"><option value="Главный инженер"><option value="Бухгалтер"><option value="Юрист"><option value="Руководитель проекта"></datalist></label>
                     </div>
-                </div>
-                <div class="table-shell">
-                    <table class="admin-table">
-                        <thead><tr><th>ФИО</th><th>Контрагент</th><th>Должность</th><th>Телефон</th><th>Эл. почта</th></tr></thead>
-                        <tbody id="contactsListTable"></tbody>
-                    </table>
-                </div>
+                </section>
+                <section>
+                    <div class="nsi-simple-step-head"><span>2</span><div><h3>Как связаться</h3><p>Достаточно заполнить телефон или рабочую почту.</p></div></div>
+                    <div class="nsi-simple-form-grid">
+                        <label><span>Телефон</span><input id="simpleContactPhone" class="auth-input" type="tel" placeholder="+7 921 555-10-20"></label>
+                        <label><span>Электронная почта</span><input id="simpleContactEmail" class="auth-input" type="email" placeholder="name@company.ru"></label>
+                    </div>
+                </section>
             </div>
+            <div class="nsi-simple-editor__actions"><button class="btn-secondary" type="button" onclick="closeSimpleContactEditor()">Отмена</button><button class="btn-primary" type="button" onclick="saveSimpleContact()">Сохранить контакт</button></div>
         </section>
     </div>
 </div>

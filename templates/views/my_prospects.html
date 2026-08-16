@@ -1,0 +1,66 @@
+<div id="myProspectingView" class="view-page" style="display:none;">
+    <div class="surface-card surface-card--padded crm-workspace-shell my-outreach-page">
+        <div class="view-header">
+            <div class="view-heading">
+                <span class="view-eyebrow">Рабочая база менеджера</span>
+                <h1 class="view-title">Мои клиенты</h1>
+                <p class="view-subtitle">Только клиенты, которых вы забрали себе. Откройте карточку, зафиксируйте контакт, следующий шаг или переведите клиента в лид.</p>
+            </div>
+            <div class="view-actions">
+                <button class="btn-primary" type="button" onclick="navigateTo('prospecting')">+ Забрать клиентов</button>
+            </div>
+        </div>
+
+        <section class="my-clients-guide" aria-labelledby="myClientsGuideTitle">
+            <div class="my-clients-guide__intro">
+                <span class="view-eyebrow">Порядок работы</span>
+                <h2 id="myClientsGuideTitle">Что делать с клиентом</h2>
+            </div>
+            <ol class="my-clients-guide__steps">
+                <li>
+                    <span class="my-clients-guide__number">1</span>
+                    <div><strong>Откройте и позвоните</strong><small>Номер сразу виден в карточке клиента.</small></div>
+                </li>
+                <li>
+                    <span class="my-clients-guide__number">2</span>
+                    <div><strong>Заполните результат</strong><small>Уточните данные и зафиксируйте итог разговора.</small></div>
+                </li>
+                <li>
+                    <span class="my-clients-guide__number">3</span>
+                    <div><strong>Работайте по карточке</strong><small>Посмотрите историю и выберите дальнейшее действие.</small></div>
+                </li>
+            </ol>
+        </section>
+
+        <div id="outreachSummaryStrip" class="crm-summary-strip"></div>
+
+        <div class="crm-toolbar prospecting-filter-panel" aria-label="Фильтры моих клиентов">
+            <div class="prospecting-filter-panel__main">
+                <div class="prospecting-filter-panel__search">
+                    <input id="outreachSearchInput" class="auth-input" type="search" placeholder="Компания, контакт или реквизиты" aria-label="Поиск по моим клиентам" oninput="applyOutreachSearch(this.value)">
+                </div>
+                <select id="outreachStatusFilter" class="auth-input" onchange="setOutreachStatusFilter(this.value)">
+                    <option value="">Все статусы</option>
+                    <option value="assigned">Назначен</option>
+                    <option value="in_progress">В работе</option>
+                    <option value="no_answer">Не дозвонились</option>
+                    <option value="follow_up">Повторный контакт</option>
+                    <option value="warm">Тёплый</option>
+                    <option value="meeting">Назначена встреча</option>
+                    <option value="converted">Переведён в лид</option>
+                    <option value="do_not_contact">Не беспокоить</option>
+                    <option value="archived">Архив</option>
+                </select>
+            </div>
+
+            <div class="prospecting-filter-panel__quick" aria-label="Быстрые фильтры">
+                <button id="outreachTodayBtn" class="btn-secondary" type="button" aria-pressed="false" onclick="toggleOutreachTodayFilter()">Сегодня</button>
+                <button id="outreachOverdueBtn" class="btn-secondary" type="button" aria-pressed="false" onclick="toggleOutreachOverdueFilter()">Просрочено</button>
+                <button class="btn-ghost prospecting-filter-reset" type="button" onclick="resetOutreachFilters()">Сбросить</button>
+            </div>
+        </div>
+
+        <div id="outreachEditorPanel" class="crm-editor-panel" style="display:none;"></div>
+        <div id="prospectingContentMount"></div>
+    </div>
+</div>

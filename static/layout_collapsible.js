@@ -1,19 +1,15 @@
 (function () {
     const TARGET_VIEWS = [
-        'financeView',
         'productionView',
         'executiveView',
         'operationsView',
-        'accountingView',
         'profileView',
-        'documentsView',
         'emailsView',
         'salesView',
         'supplyView',
         'requestsView',
         'resourcesView',
         'nomenclatureView',
-        'client360View',
         'contract360View',
     ];
 
@@ -170,8 +166,7 @@
         }
 
         if (view.id === 'productionView') {
-            markSequence(view, '.client360-grid.secondary-zone > section.surface-card', { primaryCount: 1, topLevelOnly: true });
-            markSequence(view, '.finance-layout > section.surface-card', { primaryCount: 1, topLevelOnly: true });
+            markSequence(view, ':scope > .finance-layout[data-production-workspace]', { primaryCount: 1, topLevelOnly: true });
         }
 
         if (view.id === 'executiveView') {
@@ -203,7 +198,7 @@
             markAllFlow(view, '#docflowPlusMount section.surface-card');
         }
 
-        applyGenericDenseRules(view);
+        if (view.id !== 'productionView') applyGenericDenseRules(view);
     }
 
     function getViewFlowSections(view) {
@@ -223,10 +218,12 @@
     function getSectionLabel(section) {
         const titleNode = section.querySelector(':scope > .section-header .section-title, :scope > .section-title');
         const subtitleNode = section.querySelector(':scope > .section-header .section-subtitle, :scope > .section-subtitle');
+        const explicitTitle = String(section.dataset.workspaceTitle || '').trim();
+        const explicitSubtitle = String(section.dataset.workspaceSubtitle || '').trim();
 
         return {
-            title: titleNode ? (titleNode.textContent || '').replace(/\s+/g, ' ').trim() : 'Раздел',
-            subtitle: subtitleNode ? (subtitleNode.textContent || '').replace(/\s+/g, ' ').trim() : '',
+            title: explicitTitle || (titleNode ? (titleNode.textContent || '').replace(/\s+/g, ' ').trim() : 'Раздел'),
+            subtitle: explicitSubtitle || (subtitleNode ? (subtitleNode.textContent || '').replace(/\s+/g, ' ').trim() : ''),
         };
     }
 
@@ -399,6 +396,7 @@
               }).filter(Boolean);
 
         views.forEach(function (view) {
+            if (view.id === 'financeView' || view.id === 'accountingView') return;
             applyDenseRules(view);
             normalizeParentStacks(view);
         });

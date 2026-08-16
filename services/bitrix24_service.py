@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import httpx
 
 from database import audit_log, get_connection
+from utils import decrypt_secret, encrypt_secret
 from routers.projects import (
     _json_load,
     _normalize_outreach_priority,
@@ -45,7 +46,7 @@ def _load_saved_webhook_url() -> str:
         conn.close()
     except Exception:
         return ""
-    return _normalize_spaces(dict(row).get("secret_value") if row else "")
+    return _normalize_spaces(decrypt_secret(dict(row).get("secret_value") if row else ""))
 
 
 def save_bitrix24_webhook_url(webhook_url: str, actor: dict) -> dict:
@@ -80,7 +81,7 @@ def save_bitrix24_webhook_url(webhook_url: str, actor: dict) -> dict:
             connector_id, credential_kind, username, secret_value, secret_ref, is_active, created_by, created_at, updated_at
         ) VALUES (?, 'webhook', ?, ?, '', 1, ?, ?, ?)
         """,
-        (connector_id, actor.get("email", ""), clean_url, actor.get("email", ""), now, now),
+        (connector_id, actor.get("email", ""), encrypt_secret(clean_url), actor.get("email", ""), now, now),
     )
     conn.commit()
     conn.close()
@@ -208,6 +209,8 @@ def _bitrix_curl_call(url: str, method: str, payload: dict, timeout_seconds: int
                 ],
                 input=json.dumps(payload, ensure_ascii=False),
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 capture_output=True,
                 check=False,
             )

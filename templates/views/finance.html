@@ -6,6 +6,19 @@
             <p class="view-subtitle">Платёжный календарь, дебиторка, расходы по проектам и быстрый контроль кассовых разрывов.</p>
         </div>
     </div>
+    <section class="finance-command-bar" aria-label="Ежедневная работа с финансами">
+        <div class="finance-command-bar__copy">
+            <span>Рабочий журнал бухгалтера</span>
+            <h2>Оплаты и ожидания</h2>
+            <p>Добавьте счёт или расход, а после движения денег отметьте результат в списке.</p>
+        </div>
+        <div class="finance-command-bar__actions">
+            <button class="btn-primary finance-create-trigger" type="button" onclick="startFinanceOperation()">+ Добавить операцию</button>
+            <button class="btn-secondary" type="button" onclick="setFinanceFilter('planned')">Ожидают оплаты</button>
+            <button class="btn-secondary" type="button" onclick="setFinanceFilter('overdue')">Просрочено</button>
+        </div>
+    </section>
+
     <div class="ops-overview-card ops-overview-card--compact">
         <div>
             <div class="ops-overview-title">Финансовый пульт</div>
@@ -36,48 +49,48 @@
     <div id="financeCockpitMount" class="erp-cockpit-grid" style="margin-bottom:20px;"></div>
 
     <div class="finance-layout secondary-zone">
-        <section id="financeClosePeriodSection" class="surface-card surface-card--padded ops-form-card">
+        <section id="financeClosePeriodSection" class="surface-card surface-card--padded ops-form-card finance-editor-panel">
             <div class="section-header">
                 <div>
-                    <h3 class="section-title">Новая финансовая операция</h3>
-                    <p class="section-subtitle">Фиксируй авансы, оплаты, счета, расходы и плановые движения денег.</p>
+                    <h3 class="section-title">Добавить операцию</h3>
+                    <p class="section-subtitle">Укажите, от кого или кому платёж, сумму и дату. Остальное можно заполнить позже.</p>
                 </div>
         <span class="ops-section-chip">Рабочее место финансов</span>
             </div>
             <div id="financePolicyBanner" class="form-policy-banner" style="display:none;"></div>
             <div id="financePaymentForm" class="finance-form-grid form-grid-standard">
                 <label class="form-field form-field--full">
-                    <span class="form-label">Название операции <span class="form-required">*</span></span>
-                    <input id="financeTitle" data-field="financeTitle" class="auth-input" placeholder="Например, аванс по договору">
+                    <span class="form-label">Название или номер счёта <span class="form-required">*</span></span>
+                    <input id="financeTitle" data-field="financeTitle" class="auth-input" placeholder="Например, Счёт №125 от ПКФ ПРОМТЕХСНАБ">
                     <span class="form-error" data-error-for="financeTitle"></span>
                 </label>
                 <label class="form-field">
-                    <span class="form-label">Проект</span>
+                    <span class="form-label">Проект (необязательно)</span>
                     <select id="financeProjectId" data-field="financeProjectId" class="auth-input">
                         <option value="0">Без проекта</option>
                     </select>
                     <span class="form-error" data-error-for="financeProjectId"></span>
                 </label>
                 <label class="form-field">
-                    <span class="form-label">Контрагент</span>
+                    <span class="form-label">Клиент или поставщик</span>
                     <select id="financeClientId" data-field="financeClientId" class="auth-input">
                         <option value="0">Без контрагента</option>
                     </select>
                     <span class="form-error" data-error-for="financeClientId"></span>
                 </label>
                 <label class="form-field">
-                    <span class="form-label">Направление потока</span>
+                    <span class="form-label">Тип движения</span>
                     <select id="financeKind" data-field="financeKind" class="auth-input">
-                        <option value="incoming">Входящий поток</option>
-                        <option value="outgoing">Исходящий поток</option>
+                        <option value="incoming">Поступление денег</option>
+                        <option value="outgoing">Выплата денег</option>
                     </select>
                     <span class="form-error" data-error-for="financeKind"></span>
                 </label>
                 <label class="form-field">
-                    <span class="form-label">Категория</span>
+                    <span class="form-label">Что фиксируем</span>
                     <select id="financeCategory" data-field="financeCategory" class="auth-input">
                         <option value="payment">Оплата</option>
-                        <option value="invoice">Счёт</option>
+                        <option value="invoice">Счёт на оплату</option>
                         <option value="advance">Аванс</option>
                         <option value="expense">Расход</option>
                         <option value="act">Акт / закрытие</option>
@@ -128,7 +141,7 @@
                     <span class="form-error" data-error-for="financeVatRateId"></span>
                 </label>
                 <label class="form-field">
-                    <span class="form-label">Плановая дата</span>
+                    <span class="form-label">Оплатить до</span>
                     <input id="financeDueDate" data-field="financeDueDate" class="auth-input" placeholder="дд.мм.гггг">
                     <span class="form-error" data-error-for="financeDueDate"></span>
                 </label>
@@ -166,27 +179,38 @@
                     <span class="form-error" data-error-for="financeStatus"></span>
                 </label>
                 <label class="form-field form-field--full">
-                    <span class="form-label">Комментарий</span>
-                    <textarea id="financeComment" data-field="financeComment" class="auth-input" style="min-height:110px;" placeholder="Коротко: этап оплаты, договор, примечание"></textarea>
+                    <span class="form-label">Комментарий (необязательно)</span>
+                    <textarea id="financeComment" data-field="financeComment" class="auth-input" style="min-height:110px;" placeholder="Например: оплата по договору №12"></textarea>
                     <span class="form-error" data-error-for="financeComment"></span>
                 </label>
             </div>
             <div class="finance-actions-row form-actions">
-                <button class="btn-secondary" onclick="resetFinanceForm()">Отмена</button>
-                <button class="btn-primary" onclick="saveFinancePayment()">Сохранить</button>
+                <button class="btn-secondary" type="button" onclick="toggleFinanceExtraFields(this)">Дополнительные реквизиты</button>
+                <button class="btn-secondary" onclick="cancelFinanceOperation()">Отмена</button>
+                <button class="btn-primary" onclick="saveFinancePayment()">Сохранить операцию</button>
             </div>
         </section>
 
-        <section class="surface-card surface-card--padded ops-list-card">
+        <section class="surface-card surface-card--padded ops-list-card finance-registry-panel">
             <div class="section-header">
                 <div>
-                    <h3 class="section-title">Платёжный календарь</h3>
-                    <p class="section-subtitle">Свежие операции, просрочки и план-факт по проектам и контрагентам.</p>
+                    <h3 class="section-title">Операции</h3>
+                    <p class="section-subtitle">Здесь видно, что ожидается, что просрочено и что уже оплачено.</p>
                 </div>
                 <div class="view-actions">
-                    <button class="btn-secondary" onclick="exportFinanceToExcel()">Экспорт</button>
-                    <div id="financeSavedFiltersMount" class="view-actions"></div>
+                    <button class="btn-primary finance-create-trigger" type="button" onclick="startFinanceOperation()">+ Добавить операцию</button>
                 </div>
+            </div>
+            <div class="finance-filter-tabs" aria-label="Фильтр операций">
+                <button id="financeFilterAllBtn" type="button" onclick="setFinanceFilter('all')">Все</button>
+                <button id="financeFilterPlannedBtn" type="button" onclick="setFinanceFilter('planned')">Ожидают оплаты</button>
+                <button id="financeFilterOverdueBtn" type="button" onclick="setFinanceFilter('overdue')">Просрочено</button>
+                <button id="financeFilterPaidBtn" type="button" onclick="setFinanceFilter('paid')">Оплачено</button>
+            </div>
+            <div class="finance-registry-search">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
+                <input id="financeRegistrySearch" class="auth-input" type="search" placeholder="Найти по счёту, клиенту, проекту или сумме" aria-label="Поиск финансовых операций" autocomplete="off" oninput="renderFinancePayments()">
+                <button class="btn-secondary" type="button" onclick="clearFinanceRegistrySearch()">Сбросить</button>
             </div>
             <div class="surface-card toolbar-strip" style="margin-bottom: 16px; padding: 14px 16px; display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
                 <div id="financeBulkSummary" style="font-size:13px; color:var(--secondary);">Выделение: 0 операций</div>
@@ -203,12 +227,10 @@
                 <table class="admin-table">
                     <thead>
                         <tr>
-                            <th style="width:44px;"><input id="financeSelectAllCheckbox" type="checkbox" onchange="toggleAllFinanceOnPage(this.checked)"></th>
                             <th>Операция</th>
-                            <th>Проект / Контрагент</th>
-                            <th>Тип</th>
+                            <th>Клиент / проект</th>
                             <th>Сумма</th>
-                            <th>Срок</th>
+                            <th>Дата</th>
                             <th>Статус</th>
                             <th>Действия</th>
                         </tr>
@@ -219,6 +241,9 @@
         </section>
     </div>
 
+    <details class="finance-advanced-tools">
+        <summary><span>Дополнительные инструменты</span><small>Справочники, сверки, ЭДО, проводки, периоды и аналитика</small></summary>
+        <div class="finance-advanced-tools__body">
     <div id="financeErpMetricsGrid" class="metrics-grid metrics-grid--info-rail"></div>
 
     <div class="finance-layout secondary-zone">
@@ -532,4 +557,6 @@
 
     <div id="financeDeepMount"></div>
     <div id="accountingDeepMount"></div>
+        </div>
+    </details>
 </div>

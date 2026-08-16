@@ -930,10 +930,11 @@ window.updateProjectNomList = function() {
 window.createNewProject = function() { 
     const sel = document.getElementById('newProjClient');
     if(sel) {
-        sel.innerHTML = '<option value="">Свободный ввод или выберите из базы</option>' + clientsDB.map(c => `<option value="${c.name}">${c.name} (ИНН: ${c.inn})</option>`).join('');
+        sel.innerHTML = '<option value="">Свободный ввод или выберите из базы</option>' + clientsDB.map(c => `<option value="${c.id}">${c.name} (ИНН: ${c.inn || 'не указан'})</option>`).join('');
         
         sel.onchange = (e) => {
-            const clientObj = clientsDB.find(x => x.name === e.target.value);
+            const selectedValue = String(e.target.value || '');
+            const clientObj = clientsDB.find(x => String(x.id || '') === selectedValue || x.name === selectedValue);
             const cSel = document.getElementById('newProjContact');
             const cWrap = document.getElementById('newProjContactWrap');
             if (clientObj) {
@@ -984,7 +985,10 @@ window.createNewProject = function() {
     if(dl) dl.innerHTML = nomenclatureDB.map(n => `<option value="${n.name}">Арт. ${n.article} | Склад: ${n.stock || 0} ${n.unit} | ${n.price} ₽</option>`).join('');
 
     if (window.ProjectRolesManager) window.ProjectRolesManager.renderSelector('newProjRoles');
-    document.getElementById('createProjectModal').style.display = 'flex';
+    const projectModal = document.getElementById('createProjectModal');
+    projectModal.style.display = 'flex';
+    const projectModalCard = projectModal.querySelector('.project-create-modal');
+    if (projectModalCard) projectModalCard.scrollTop = 0;
     if (typeof focusFieldById === 'function') focusFieldById('newProjName');
 };
 
@@ -1001,7 +1005,11 @@ window.submitNewProject = async function(event) {
     }
 
     const contract = document.getElementById('newProjContract').value.trim();
-    const client = document.getElementById('newProjClient').value;
+    const clientSelect = document.getElementById('newProjClient');
+    const clientValue = String(clientSelect?.value || '');
+    const clientRecord = clientsDB.find(item => String(item.id || '') === clientValue || item.name === clientValue);
+    const clientSearchValue = String(clientSelect?.closest('.ui-client-picker')?.querySelector('.ui-client-picker__search')?.value || '').trim();
+    const client = String(clientRecord?.name || clientSearchValue || clientValue).trim();
     const manager = document.getElementById('newProjManager').value.trim();
     const budget = parseFloat(document.getElementById('newProjBudget').value) || 0;
 

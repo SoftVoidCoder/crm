@@ -252,7 +252,7 @@ def _ensure_postgres_id_defaults(conn):
 def _insert_uses_implicit_numeric_id(sql_text: str) -> bool:
     table_match = re.search(r"INSERT\s+INTO\s+([^\s(]+)", sql_text, flags=re.IGNORECASE)
     table_name = (table_match.group(1).strip().strip('"').lower() if table_match else "")
-    if table_name in {"users", "user_sessions"}:
+    if table_name in {"users", "user_sessions", "notification_dismissals"}:
         return False
     match = re.search(r"INSERT\s+INTO\s+[^\s(]+\s*\(([^)]+)\)", sql_text, flags=re.IGNORECASE)
     if not match:
@@ -828,6 +828,78 @@ def create_notification(
     return 0
 
 
+def create_targeted_notifications(
+    title: str,
+    message: str,
+    *,
+    user_email: str = "",
+    user_name: str = "",
+    role: str = "",
+    category: str = "system",
+    entity_type: str = "",
+    entity_id: str = "",
+    exclude_email: str = "",
+    fallback_to_director: bool = True,
+):
+    """Create personal notifications with name/role lookup and a safe director fallback."""
+    normalized_email = (user_email or "").strip().lower()
+    normalized_name = (user_name or "").strip()
+    normalized_role = (role or "").strip()
+    excluded = (exclude_email or "").strip().lower()
+    conn = get_connection(row_factory=True)
+    try:
+        c = conn.cursor()
+        recipients = []
+        if normalized_email:
+            c.execute(
+                "SELECT email, name, role FROM users WHERE LOWER(TRIM(email))=? AND status='approved'",
+                (normalized_email,),
+            )
+            recipients = [dict(row) for row in c.fetchall()]
+        if not recipients and normalized_name:
+            base_name = normalized_name.split(" (И.О.")[0].strip()
+            c.execute(
+                "SELECT email, name, role FROM users WHERE name=? AND status='approved' ORDER BY is_head DESC, name ASC",
+                (base_name,),
+            )
+            recipients = [dict(row) for row in c.fetchall()]
+        if not recipients and normalized_role:
+            c.execute(
+                "SELECT email, name, role FROM users WHERE role=? AND status='approved' ORDER BY is_head DESC, name ASC",
+                (normalized_role,),
+            )
+            recipients = [dict(row) for row in c.fetchall()]
+        if not recipients and fallback_to_director:
+            c.execute(
+                "SELECT email, name, role FROM users WHERE role='Директор' AND status='approved' ORDER BY is_head DESC, name ASC"
+            )
+            recipients = [dict(row) for row in c.fetchall()]
+    finally:
+        conn.close()
+
+    notification_ids = []
+    seen = set()
+    for recipient in recipients:
+        email = (recipient.get("email") or "").strip().lower()
+        name = (recipient.get("name") or "").strip()
+        key = email or name
+        if not key or key in seen or (excluded and email == excluded):
+            continue
+        seen.add(key)
+        notification_id = create_notification(
+            title,
+            message,
+            user_email=email,
+            user_name=name,
+            category=category,
+            entity_type=entity_type,
+            entity_id=str(entity_id or ""),
+        )
+        if notification_id:
+            notification_ids.append(notification_id)
+    return notification_ids
+
+
 def get_notifications_for_user(user_email: str = "", user_name: str = "", limit: int = 100):
     conn = get_connection(row_factory=True)
     c = conn.cursor()
@@ -885,6 +957,59 @@ def mark_all_notifications_read(user_email: str = "", user_name: str = ""):
     )
     conn.commit()
     conn.close()
+
+
+def _ensure_notification_dismissals_table(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS notification_dismissals (
+            user_email TEXT NOT NULL,
+            notification_key TEXT NOT NULL,
+            dismissed_at INTEGER DEFAULT 0,
+            PRIMARY KEY(user_email, notification_key)
+        )
+        """
+    )
+    conn.commit()
+
+
+def get_dismissed_notification_keys(user_email: str = "") -> set[str]:
+    if not user_email:
+        return set()
+    conn = get_connection()
+    _ensure_notification_dismissals_table(conn)
+    c = conn.cursor()
+    c.execute(
+        "SELECT notification_key FROM notification_dismissals WHERE user_email=?",
+        (user_email,),
+    )
+    keys = {str(row[0]) for row in c.fetchall()}
+    conn.close()
+    return keys
+
+
+def dismiss_notifications_for_user(user_email: str, notification_keys: list[str]) -> int:
+    email = str(user_email or "").strip().lower()
+    keys = sorted({str(key or "").strip() for key in notification_keys if str(key or "").strip()})
+    if not email or not keys:
+        return 0
+    conn = get_connection()
+    _ensure_notification_dismissals_table(conn)
+    c = conn.cursor()
+    now = int(time.time())
+    for key in keys:
+        c.execute(
+            """
+            INSERT INTO notification_dismissals (user_email, notification_key, dismissed_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT (user_email, notification_key)
+            DO UPDATE SET dismissed_at=EXCLUDED.dismissed_at
+            """,
+            (email, key, now),
+        )
+    conn.commit()
+    conn.close()
+    return len(keys)
 
 
 def upsert_entity_watch(
@@ -1824,6 +1949,28 @@ def _init_db_once():
     c.execute('''CREATE TABLE IF NOT EXISTS calendar_events (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT DEFAULT '', event_date TEXT DEFAULT '', start_time TEXT DEFAULT '', end_time TEXT DEFAULT '', scope TEXT DEFAULT 'personal', owner_email TEXT DEFAULT '', owner_name TEXT DEFAULT '', department TEXT DEFAULT '', project_id INTEGER DEFAULT 0, meeting_id INTEGER DEFAULT 0, status TEXT DEFAULT 'planned', location TEXT DEFAULT '', description TEXT DEFAULT '', created_by TEXT DEFAULT '', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0)''')
     c.execute('''CREATE TABLE IF NOT EXISTS crm_leads (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT DEFAULT '', client_name TEXT DEFAULT '', contact_name TEXT DEFAULT '', contact_email TEXT DEFAULT '', contact_phone TEXT DEFAULT '', source TEXT DEFAULT '', stage TEXT DEFAULT 'new', probability REAL DEFAULT 0, budget REAL DEFAULT 0, currency TEXT DEFAULT 'RUB', responsible TEXT DEFAULT '', next_action TEXT DEFAULT '', next_action_date TEXT DEFAULT '', priority TEXT DEFAULT 'normal', tags_json TEXT DEFAULT '[]', comment TEXT DEFAULT '', linked_client_id INTEGER DEFAULT 0, linked_project_id INTEGER DEFAULT 0, linked_deal_id INTEGER DEFAULT 0, created_by TEXT DEFAULT '', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0)''')
     c.execute('''CREATE TABLE IF NOT EXISTS crm_deals (id INTEGER PRIMARY KEY AUTOINCREMENT, lead_id INTEGER DEFAULT 0, title TEXT DEFAULT '', client_id INTEGER DEFAULT 0, client_name TEXT DEFAULT '', contract_number TEXT DEFAULT '', stage TEXT DEFAULT 'qualification', amount REAL DEFAULT 0, currency TEXT DEFAULT 'RUB', margin_percent REAL DEFAULT 0, probability REAL DEFAULT 0, responsible TEXT DEFAULT '', next_action TEXT DEFAULT '', next_action_date TEXT DEFAULT '', expected_close_date TEXT DEFAULT '', priority TEXT DEFAULT 'normal', status_color TEXT DEFAULT '', tags_json TEXT DEFAULT '[]', comment TEXT DEFAULT '', project_id INTEGER DEFAULT 0, created_by TEXT DEFAULT '', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0)''')
+    try: c.execute("ALTER TABLE crm_deals ADD COLUMN contact_name TEXT DEFAULT ''")
+    except Exception: pass
+    try: c.execute("ALTER TABLE crm_deals ADD COLUMN contact_position TEXT DEFAULT ''")
+    except Exception: pass
+    try: c.execute("ALTER TABLE crm_deals ADD COLUMN contact_phone TEXT DEFAULT ''")
+    except Exception: pass
+    try: c.execute("ALTER TABLE crm_deals ADD COLUMN contact_email TEXT DEFAULT ''")
+    except Exception: pass
+    try: c.execute("ALTER TABLE crm_deals ADD COLUMN source TEXT DEFAULT ''")
+    except Exception: pass
+    try: c.execute("ALTER TABLE crm_deals ADD COLUMN products_json TEXT DEFAULT '[]'")
+    except Exception: pass
+    try: c.execute("ALTER TABLE crm_deals ADD COLUMN co_executors TEXT DEFAULT ''")
+    except Exception: pass
+    try: c.execute("ALTER TABLE crm_deals ADD COLUMN actual_close_date TEXT DEFAULT ''")
+    except Exception: pass
+    try: c.execute("ALTER TABLE crm_deals ADD COLUMN loss_reason TEXT DEFAULT ''")
+    except Exception: pass
+    try: c.execute("ALTER TABLE crm_deals ADD COLUMN is_archived INTEGER DEFAULT 0")
+    except Exception: pass
+    try: c.execute("ALTER TABLE crm_deals ADD COLUMN archived_at INTEGER DEFAULT 0")
+    except Exception: pass
     c.execute('''CREATE TABLE IF NOT EXISTS crm_activities (id INTEGER PRIMARY KEY AUTOINCREMENT, entity_type TEXT DEFAULT 'lead', entity_id INTEGER DEFAULT 0, activity_type TEXT DEFAULT 'note', subject TEXT DEFAULT '', summary TEXT DEFAULT '', due_date TEXT DEFAULT '', status TEXT DEFAULT 'open', owner_name TEXT DEFAULT '', created_by TEXT DEFAULT '', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0)''')
     c.execute('''CREATE TABLE IF NOT EXISTS outreach_prospects (id INTEGER PRIMARY KEY AUTOINCREMENT, company_name TEXT DEFAULT '', company_inn TEXT DEFAULT '', contact_name TEXT DEFAULT '', position TEXT DEFAULT '', phone TEXT DEFAULT '', email TEXT DEFAULT '', website TEXT DEFAULT '', city TEXT DEFAULT '', contact_method TEXT DEFAULT '', source_name TEXT DEFAULT '', source_file TEXT DEFAULT '', status TEXT DEFAULT 'new', priority TEXT DEFAULT 'normal', manager_name TEXT DEFAULT '', manager_email TEXT DEFAULT '', planned_contact_date TEXT DEFAULT '', next_action TEXT DEFAULT '', next_action_date TEXT DEFAULT '', last_contact_at TEXT DEFAULT '', last_channel TEXT DEFAULT '', last_result TEXT DEFAULT '', attempts_count INTEGER DEFAULT 0, is_processed INTEGER DEFAULT 0, do_not_contact INTEGER DEFAULT 0, converted_client_id INTEGER DEFAULT 0, converted_lead_id INTEGER DEFAULT 0, tags_json TEXT DEFAULT '[]', notes TEXT DEFAULT '', extra_json TEXT DEFAULT '{}', created_by TEXT DEFAULT '', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0)''')
     c.execute('''CREATE TABLE IF NOT EXISTS outreach_activities (id INTEGER PRIMARY KEY AUTOINCREMENT, prospect_id INTEGER DEFAULT 0, activity_type TEXT DEFAULT 'call', result_status TEXT DEFAULT '', summary TEXT DEFAULT '', next_action TEXT DEFAULT '', next_action_date TEXT DEFAULT '', channel TEXT DEFAULT '', manager_name TEXT DEFAULT '', manager_email TEXT DEFAULT '', created_at INTEGER DEFAULT 0)''')
@@ -1847,6 +1994,7 @@ def _init_db_once():
     c.execute('''CREATE TABLE IF NOT EXISTS field_access_rules (id INTEGER PRIMARY KEY AUTOINCREMENT, role_name TEXT DEFAULT '', module_name TEXT DEFAULT '', entity_type TEXT DEFAULT '', field_name TEXT DEFAULT '', can_view INTEGER DEFAULT 1, can_edit INTEGER DEFAULT 1, allowed_statuses TEXT DEFAULT '[]', is_active INTEGER DEFAULT 1, created_by TEXT DEFAULT '', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0)''')
     c.execute('''CREATE TABLE IF NOT EXISTS entity_edit_locks (id INTEGER PRIMARY KEY AUTOINCREMENT, entity_type TEXT DEFAULT '', entity_id TEXT DEFAULT '', actor_email TEXT DEFAULT '', actor_name TEXT DEFAULT '', session_id TEXT DEFAULT '', locked_at INTEGER DEFAULT 0)''')
     c.execute('''CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, message TEXT, user_email TEXT DEFAULT '', user_name TEXT DEFAULT '', category TEXT DEFAULT 'system', entity_type TEXT DEFAULT '', entity_id TEXT DEFAULT '', is_read INTEGER DEFAULT 0, created_at INTEGER)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS notification_dismissals (user_email TEXT NOT NULL, notification_key TEXT NOT NULL, dismissed_at INTEGER DEFAULT 0, PRIMARY KEY(user_email, notification_key))''')
     c.execute('''CREATE TABLE IF NOT EXISTS entity_watchers (id INTEGER PRIMARY KEY AUTOINCREMENT, user_email TEXT DEFAULT '', user_name TEXT DEFAULT '', entity_type TEXT DEFAULT '', entity_id TEXT DEFAULT '', title TEXT DEFAULT '', meta TEXT DEFAULT '', view_name TEXT DEFAULT '', condition_key TEXT DEFAULT 'any_change', digest_mode TEXT DEFAULT 'instant', event_types_json TEXT DEFAULT '[]', is_active INTEGER DEFAULT 1, last_event_key TEXT DEFAULT '', last_event_value TEXT DEFAULT '', last_notified_at INTEGER DEFAULT 0, created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0, UNIQUE(user_email, entity_type, entity_id))''')
     c.execute('''CREATE TABLE IF NOT EXISTS error_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT, message TEXT, path TEXT, method TEXT, actor_email TEXT, severity TEXT DEFAULT 'error', traceback_text TEXT DEFAULT '', created_at INTEGER)''')
     c.execute('''CREATE TABLE IF NOT EXISTS system_backups (id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT, file_path TEXT, actor_email TEXT DEFAULT '', file_size INTEGER DEFAULT 0, created_at INTEGER)''')
@@ -1894,7 +2042,7 @@ def _init_db_once():
     c.execute('''CREATE TABLE IF NOT EXISTS signature_validation_protocols (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER DEFAULT 0, signature_id INTEGER DEFAULT 0, document_id INTEGER DEFAULT 0, file_revision_id INTEGER DEFAULT 0, revision_checksum TEXT DEFAULT '', protocol_status TEXT DEFAULT 'draft', protocol_number TEXT DEFAULT '', validation_result TEXT DEFAULT '', validation_message TEXT DEFAULT '', provider TEXT DEFAULT 'КриптоПро', checks_json TEXT DEFAULT '{}', raw_protocol_json TEXT DEFAULT '{}', attached_file_url TEXT DEFAULT '', attached_file_checksum TEXT DEFAULT '', created_by TEXT DEFAULT '', created_at INTEGER DEFAULT 0)''')
     c.execute('''CREATE TABLE IF NOT EXISTS purchase_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER DEFAULT 0, client_id INTEGER DEFAULT 0, legal_entity_id INTEGER DEFAULT 0, business_unit_id INTEGER DEFAULT 0, item_article TEXT DEFAULT '', item_name TEXT DEFAULT '', supplier TEXT DEFAULT '', qty REAL DEFAULT 0, unit TEXT DEFAULT 'шт', unit_price REAL DEFAULT 0, total_amount REAL DEFAULT 0, status TEXT DEFAULT 'planned', expected_date TEXT DEFAULT '', received_date TEXT DEFAULT '', comment TEXT DEFAULT '', created_by TEXT DEFAULT '', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0)''')
     c.execute('''CREATE TABLE IF NOT EXISTS sales_documents_extended (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER DEFAULT 0, client_id INTEGER DEFAULT 0, legal_entity_id INTEGER DEFAULT 0, business_unit_id INTEGER DEFAULT 0, doc_type TEXT DEFAULT 'invoice', doc_number TEXT DEFAULT '', doc_date TEXT DEFAULT '', amount REAL DEFAULT 0, currency TEXT DEFAULT 'RUB', status TEXT DEFAULT 'draft', payment_status TEXT DEFAULT 'planned', linked_payment_id INTEGER DEFAULT 0, comment TEXT DEFAULT '', created_by TEXT DEFAULT '', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS production_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER DEFAULT 0, client_id INTEGER DEFAULT 0, legal_entity_id INTEGER DEFAULT 0, business_unit_id INTEGER DEFAULT 0, order_name TEXT DEFAULT '', stage TEXT DEFAULT 'queue', priority TEXT DEFAULT 'normal', planned_start TEXT DEFAULT '', planned_finish TEXT DEFAULT '', actual_finish TEXT DEFAULT '', progress INTEGER DEFAULT 0, responsible TEXT DEFAULT '', comment TEXT DEFAULT '', created_by TEXT DEFAULT '', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS production_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER DEFAULT 0, client_id INTEGER DEFAULT 0, client_display_name TEXT DEFAULT '', legal_entity_id INTEGER DEFAULT 0, business_unit_id INTEGER DEFAULT 0, order_name TEXT DEFAULT '', stage TEXT DEFAULT 'queue', priority TEXT DEFAULT 'normal', planned_start TEXT DEFAULT '', planned_finish TEXT DEFAULT '', actual_finish TEXT DEFAULT '', progress INTEGER DEFAULT 0, responsible TEXT DEFAULT '', comment TEXT DEFAULT '', created_by TEXT DEFAULT '', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0)''')
     c.execute('''CREATE TABLE IF NOT EXISTS production_operations (id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER DEFAULT 0, sequence_no INTEGER DEFAULT 1, operation_name TEXT DEFAULT '', work_center TEXT DEFAULT '', status TEXT DEFAULT 'planned', planned_hours REAL DEFAULT 0, actual_hours REAL DEFAULT 0, planned_qty REAL DEFAULT 0, completed_qty REAL DEFAULT 0, scrap_qty REAL DEFAULT 0, labor_rate REAL DEFAULT 0, material_cost REAL DEFAULT 0, overhead_cost REAL DEFAULT 0, started_at TEXT DEFAULT '', finished_at TEXT DEFAULT '', note TEXT DEFAULT '', created_by TEXT DEFAULT '', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0)''')
     c.execute('''CREATE TABLE IF NOT EXISTS production_bom_items (id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER DEFAULT 0, article TEXT DEFAULT '', item_name TEXT DEFAULT '', unit TEXT DEFAULT 'шт', qty_per_unit REAL DEFAULT 0, planned_qty REAL DEFAULT 0, actual_qty REAL DEFAULT 0, unit_cost REAL DEFAULT 0, warehouse TEXT DEFAULT '', bin_code TEXT DEFAULT '', note TEXT DEFAULT '', created_by TEXT DEFAULT '', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0)''')
     c.execute('''CREATE TABLE IF NOT EXISTS production_route_templates (id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER DEFAULT 0, sequence_no INTEGER DEFAULT 1, operation_name TEXT DEFAULT '', work_center TEXT DEFAULT '', planned_hours REAL DEFAULT 0, planned_qty REAL DEFAULT 0, labor_rate REAL DEFAULT 0, note TEXT DEFAULT '', created_by TEXT DEFAULT '', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0)''')
@@ -2194,7 +2342,7 @@ def _init_db_once():
         try: c.execute(f"ALTER TABLE users ADD COLUMN {col} {default}")
         except: pass
 
-    for col, default in [('route_name', "TEXT DEFAULT ''"), ('planned_qty', 'REAL DEFAULT 0'), ('produced_qty', 'REAL DEFAULT 0'), ('scrap_qty', 'REAL DEFAULT 0'), ('planned_cost', 'REAL DEFAULT 0'), ('actual_cost', 'REAL DEFAULT 0'), ('labor_hours_plan', 'REAL DEFAULT 0'), ('labor_hours_fact', 'REAL DEFAULT 0')]:
+    for col, default in [('client_display_name', "TEXT DEFAULT ''"), ('route_name', "TEXT DEFAULT ''"), ('planned_qty', 'REAL DEFAULT 0'), ('produced_qty', 'REAL DEFAULT 0'), ('scrap_qty', 'REAL DEFAULT 0'), ('planned_cost', 'REAL DEFAULT 0'), ('actual_cost', 'REAL DEFAULT 0'), ('labor_hours_plan', 'REAL DEFAULT 0'), ('labor_hours_fact', 'REAL DEFAULT 0')]:
         try: c.execute(f"ALTER TABLE production_orders ADD COLUMN {col} {default}")
         except: pass
     for col, default in [('responsible', "TEXT DEFAULT ''")]:
@@ -2235,6 +2383,14 @@ def _init_db_once():
     try: c.execute("ALTER TABLE documents ADD COLUMN contract_id INTEGER DEFAULT 0")
     except: pass
     try: c.execute("ALTER TABLE documents ADD COLUMN object_id INTEGER DEFAULT 0")
+    except: pass
+    try: c.execute("ALTER TABLE documents ADD COLUMN deal_id INTEGER DEFAULT 0")
+    except: pass
+    try: c.execute("ALTER TABLE documents ADD COLUMN client_id INTEGER DEFAULT 0")
+    except: pass
+    try: c.execute("ALTER TABLE documents ADD COLUMN client_source TEXT DEFAULT ''")
+    except: pass
+    try: c.execute("ALTER TABLE documents ADD COLUMN client_source_id INTEGER DEFAULT 0")
     except: pass
 
     try: c.execute("ALTER TABLE documents ADD COLUMN parent_id INTEGER DEFAULT 0")
@@ -2436,6 +2592,7 @@ def _init_db_once():
         ("batch_code", "TEXT DEFAULT ''"),
         ("serial_no", "TEXT DEFAULT ''"),
         ("fulfilled_qty", "REAL DEFAULT 0"),
+        ("unit", "TEXT DEFAULT 'шт'"),
         ("released_at", "INTEGER DEFAULT 0"),
         ("released_by", "TEXT DEFAULT ''"),
     ]:
@@ -3048,6 +3205,9 @@ def _init_db_once():
     c.execute("CREATE INDEX IF NOT EXISTS idx_epl_waybills_contract_object ON epl_waybills(contract_id, object_id, created_at DESC)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_epl_signatures_waybill_stage ON epl_signatures(waybill_id, stage, created_at DESC)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_documents_contract_object ON documents(contract_id, object_id, d_date)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_documents_client_id ON documents(client_id, d_date)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_documents_client_source ON documents(client_source, client_source_id, d_date)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_crm_deals_archive_updated ON crm_deals(is_archived, updated_at DESC)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_erp_process_runs_status_stage ON erp_process_runs(status, current_stage, updated_at DESC)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_erp_process_runs_project_client ON erp_process_runs(project_id, client_id, updated_at DESC)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_erp_process_runs_contract_object ON erp_process_runs(contract_id, object_id, updated_at DESC)")

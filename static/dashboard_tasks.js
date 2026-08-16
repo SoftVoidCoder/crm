@@ -61,6 +61,58 @@ function taskCenterStorageKey(key) {
     return `korda_task_center_${currentUser?.email || 'guest'}_${key}`;
 }
 
+function isDesignOfficeTaskRole() {
+    const role = String(currentUser?.role || '').trim().toLowerCase();
+    return role === 'конструкторское бюро' || role.includes('конструктор');
+}
+
+function taskCenterPersonMatches(value, name) {
+    const actual = String(value || '').trim();
+    const expected = String(name || '').trim();
+    return Boolean(expected) && (actual === expected || actual.startsWith(`${expected} (И.О.`));
+}
+
+function taskCenterCanManage(task) {
+    return String(currentUser?.role || '').trim() === 'Директор'
+        || taskCenterPersonMatches(task?.author, currentUser?.name);
+}
+
+function taskCenterCanWork(task) {
+    return taskCenterCanManage(task)
+        || taskCenterPersonMatches(task?.executor, currentUser?.name);
+}
+
+function taskCenterIsExecutor(task) {
+    return taskCenterPersonMatches(task?.executor, currentUser?.name);
+}
+
+function updateTaskCenterForRole() {
+    const isKb = isDesignOfficeTaskRole();
+    const view = document.getElementById('tasksView');
+    if (view) view.classList.toggle('task-center-page--kb', isKb);
+    const eyebrow = document.querySelector('#tasksView .view-eyebrow');
+    const title = document.querySelector('#tasksView .view-title');
+    const subtitle = document.querySelector('#tasksView .view-subtitle');
+    const search = document.getElementById('taskCenterSearch');
+    if (eyebrow) eyebrow.textContent = isKb ? 'Конструкторское бюро' : 'Рабочие поручения';
+    if (title) title.textContent = isKb ? 'Мои поручения КБ' : 'Поручения';
+    if (subtitle) {
+        subtitle.textContent = isKb
+            ? 'Здесь только то, что нужно выполнить: открыть поручение, понять задачу, написать комментарий и закрыть после выполнения.'
+            : 'Простой список: что нужно сделать, кто отвечает, какой срок и что уже выполнено.';
+    }
+    if (search) {
+        search.placeholder = isKb
+            ? 'Найти поручение по названию, описанию или проекту'
+            : 'Поиск по задаче, описанию, проекту, исполнителю';
+    }
+    taskCenterState.mode = 'list';
+    taskCenterState.selectedIds = [];
+    if (isKb && !['active', 'completed', 'overdue', 'all'].includes(taskCenterState.filters.statusScope)) {
+        taskCenterState.filters.statusScope = 'active';
+    }
+}
+
 function parseTaskDate(value) {
     if (!value) return null;
     const [datePart, timePart = '00:00'] = String(value).trim().split(' ');
@@ -74,6 +126,18 @@ function parseTaskDate(value) {
 function formatTaskDate(date) {
     if (!(date instanceof Date) || Number.isNaN(date.getTime())) return 'Без даты';
     return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
+}
+
+function taskDateToInputValue(value) {
+    const raw = String(value || '').trim().split(' ')[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const match = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    return match ? `${match[3]}-${match[2]}-${match[1]}` : '';
+}
+
+function taskDateFromInputValue(value) {
+    const match = String(value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return match ? `${match[3]}.${match[2]}.${match[1]}` : String(value || '').trim();
 }
 
 function formatTaskDateTime(timestamp) {
@@ -137,6 +201,7 @@ function markTaskRead(taskId) {
 
 function getTaskStatusMeta(task) {
     if ((task.status || '') === 'completed') return { label: 'Выполнено', className: 'done' };
+    if (['assigned', 'new'].includes(task.status || '')) return { label: 'Назначено', className: 'pending' };
     if (isTaskOverdue(task)) return { label: 'Просрочено', className: 'overdue' };
     return { label: 'В работе', className: 'active' };
 }
@@ -152,6 +217,7 @@ function cloneFilters(filters) {
 }
 
 function syncTaskCenterControls() {
+    updateTaskCenterForRole();
     const search = document.getElementById('taskCenterSearch');
     const status = document.getElementById('taskCenterStatusFilter');
     const priority = document.getElementById('taskCenterPriorityFilter');
@@ -167,10 +233,18 @@ function syncTaskCenterControls() {
 function getTaskCenterRows() {
     const search = String(taskCenterState.search || '').trim().toLowerCase();
     let rows = Array.isArray(tasksDB) ? [...tasksDB] : [];
+    if (isDesignOfficeTaskRole()) {
+        const me = String(currentUser?.name || '').trim();
+        rows = rows.filter(task => {
+            const executor = String(task.executor || '').trim();
+            const author = String(task.author || '').trim();
+            return !me || executor === me || author === me;
+        });
+    }
 
     rows = rows.filter(task => {
         const statusScope = taskCenterState.filters.statusScope || 'active';
-        if (statusScope === 'active' && task.status !== 'active') return false;
+        if (statusScope === 'active' && !['assigned', 'new', 'active'].includes(task.status || '')) return false;
         if (statusScope === 'completed' && task.status !== 'completed') return false;
         if (statusScope === 'overdue' && !isTaskOverdue(task)) return false;
         if (statusScope === 'mine' && task.executor !== currentUser?.name) return false;
@@ -256,6 +330,8 @@ function taskCenterSort(key) {
 }
 
 function taskCenterToggleSelect(taskId, checked) {
+    const task = tasksDB.find(item => Number(item.id) === Number(taskId));
+    if (!taskCenterCanManage(task)) return;
     const id = Number(taskId);
     const set = new Set(taskCenterState.selectedIds.map(Number));
     if (checked) set.add(id);
@@ -265,7 +341,9 @@ function taskCenterToggleSelect(taskId, checked) {
 }
 
 function taskCenterToggleSelectAll(checked) {
-    taskCenterState.selectedIds = checked ? getTaskCenterRows().map(item => Number(item.id)) : [];
+    taskCenterState.selectedIds = checked
+        ? getTaskCenterRows().filter(taskCenterCanManage).map(item => Number(item.id))
+        : [];
     renderTasks();
 }
 
@@ -273,6 +351,21 @@ function taskCenterSelectTask(taskId) {
     taskCenterState.selectedTaskId = Number(taskId);
     markTaskRead(taskId);
     renderTasks();
+}
+
+function taskCenterOpenDetails(taskId) {
+    taskCenterState.selectedTaskId = Number(taskId);
+    markTaskRead(taskId);
+    renderTasks();
+    window.requestAnimationFrame(() => {
+        const panel = document.querySelector('#tasksView .task-center-side__card');
+        if (!panel) return;
+        panel.classList.remove('is-opened-from-list');
+        void panel.offsetWidth;
+        panel.classList.add('is-opened-from-list');
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        window.setTimeout(() => panel.classList.remove('is-opened-from-list'), 1200);
+    });
 }
 
 function taskCenterResetLayout() {
@@ -359,9 +452,12 @@ function taskCell(task, column) {
     const statusMeta = getTaskStatusMeta(task);
     const priorityMeta = getTaskPriorityMeta(task.priority || 'normal');
     if (column.key === 'select') {
-        return `<input type="checkbox" ${taskCenterState.selectedIds.includes(Number(task.id)) ? 'checked' : ''} onclick="event.stopPropagation()" onchange="taskCenterToggleSelect(${task.id}, this.checked)">`;
+        return taskCenterCanManage(task)
+            ? `<input type="checkbox" ${taskCenterState.selectedIds.includes(Number(task.id)) ? 'checked' : ''} onclick="event.stopPropagation()" onchange="taskCenterToggleSelect(${task.id}, this.checked)">`
+            : '';
     }
     if (column.key === 'status') {
+        if (!taskCenterCanWork(task)) return `<span class="task-status-pill task-status-pill--${statusMeta.className}">${statusMeta.label}</span>`;
         return `
             <div class="task-center-status-cell">
                 <span class="task-status-pill task-status-pill--${statusMeta.className}">${statusMeta.label}</span>
@@ -387,6 +483,7 @@ function taskCell(task, column) {
     if (column.key === 'project') return escapeHtml(taskProjectName(task));
     if (column.key === 'author') return escapeHtml(task.author || '—');
     if (column.key === 'executor') {
+        if (!taskCenterCanManage(task)) return escapeHtml(task.executor || '—');
         return `
             <select class="task-inline-select task-inline-select--wide" onclick="event.stopPropagation()" onchange="taskCenterQuickUpdate(${task.id}, 'executor', this.value)">
                 ${allUsersDB.filter(user => user.status === 'approved').map(user => `<option value="${escapeHtml(user.name)}" ${user.name === task.executor ? 'selected' : ''}>${escapeHtml(user.name)}</option>`).join('')}
@@ -394,6 +491,7 @@ function taskCell(task, column) {
         `;
     }
     if (column.key === 'priority') {
+        if (!taskCenterCanManage(task)) return escapeHtml(priorityMeta.label);
         return `
             <select class="task-inline-select" onclick="event.stopPropagation()" onchange="taskCenterQuickUpdate(${task.id}, 'priority', this.value)">
                 <option value="normal" ${task.priority !== 'high' ? 'selected' : ''}>Нормальный</option>
@@ -410,6 +508,7 @@ function taskCell(task, column) {
 
 function renderTaskTable(rows) {
     const columns = taskCenterVisibleColumns();
+    const manageableRows = rows.filter(taskCenterCanManage);
     let stickyLeft = 0;
     const stickyMap = {};
     columns.forEach(column => {
@@ -430,7 +529,7 @@ function renderTaskTable(rows) {
                                 style="width:${column.width || 160}px;min-width:${column.width || 160}px;max-width:${column.width || 160}px;${column.sticky ? `left:${stickyMap[column.key]}px;` : ''}"
                             >
                                 ${column.key === 'select'
-                                    ? `<input type="checkbox" ${rows.length && taskCenterState.selectedIds.length === rows.length ? 'checked' : ''} onchange="taskCenterToggleSelectAll(this.checked)">`
+                                    ? (manageableRows.length ? `<input type="checkbox" ${manageableRows.every(task => taskCenterState.selectedIds.includes(Number(task.id))) ? 'checked' : ''} onchange="taskCenterToggleSelectAll(this.checked)">` : '')
                                     : `<button class="task-th-btn" onclick="taskCenterSort('${column.key}')">${escapeHtml(column.label)}${taskCenterState.sortBy === column.key ? `<span>${taskCenterState.sortDir === 'asc' ? '↑' : '↓'}</span>` : ''}</button>`
                                 }
                             </th>
@@ -452,6 +551,49 @@ function renderTaskTable(rows) {
                     `).join('')}
                 </tbody>
             </table>
+        </div>
+    `;
+}
+
+function renderKbTaskList(rows) {
+    const visible = rows.length ? rows : [];
+    if (!visible.length) {
+        return '<div class="task-center-empty">Для КБ сейчас нет поручений по выбранным условиям.</div>';
+    }
+    return `
+        <div class="kb-task-list">
+            ${visible.map(task => {
+                const statusMeta = getTaskStatusMeta(task);
+                const priorityMeta = getTaskPriorityMeta(task.priority || 'normal');
+                const isSelected = taskCenterState.selectedTaskId === Number(task.id);
+                const canManage = taskCenterCanManage(task);
+                const canWork = taskCenterCanWork(task);
+                return `
+                    <article class="kb-task-card ${isSelected ? 'is-active' : ''}" onclick="taskCenterSelectTask(${Number(task.id)})" data-task-id="${Number(task.id)}">
+                        <div class="kb-task-card__main">
+                            <div class="kb-task-card__top">
+                                <span class="task-status-pill task-status-pill--${statusMeta.className}">${escapeHtml(statusMeta.label)}</span>
+                                <span class="kb-task-card__deadline">${escapeHtml(task.deadline || 'Без срока')}</span>
+                            </div>
+                            <h3>${escapeHtml(task.title || 'Без названия')}</h3>
+                            <p>${escapeHtml((task.description || '').slice(0, 180) || 'Описание не добавлено.')}</p>
+                            <div class="kb-task-card__meta">
+                                <span>Исполнитель: ${escapeHtml(task.executor || 'Не назначен')}</span>
+                                <span>Поручил: ${escapeHtml(task.author || 'Не указан')}</span>
+                                <span>Проект: ${escapeHtml(taskProjectName(task))}</span>
+                                <span>Приоритет: ${escapeHtml(priorityMeta.label)}</span>
+                            </div>
+                        </div>
+                        <div class="kb-task-card__actions" onclick="event.stopPropagation()">
+                            ${taskCenterIsExecutor(task) && ['assigned', 'new'].includes(task.status || '') ? `<button class="btn-primary" onclick="taskCenterQuickUpdate(${Number(task.id)}, 'status', 'active')">Взять в работу</button>` : ''}
+                            ${canWork && task.status === 'active' ? `<button class="btn-primary" onclick="taskCenterQuickUpdate(${Number(task.id)}, 'status', 'completed')">Закрыть как выполнено</button>` : ''}
+                            ${canWork && task.status === 'completed' ? `<button class="btn-secondary" onclick="taskCenterQuickUpdate(${Number(task.id)}, 'status', 'active')">Вернуть в работу</button>` : ''}
+                            ${canManage ? `<button class="btn-secondary" onclick="taskCenterAssignTask(${Number(task.id)})">Передать</button>` : ''}
+                            <button class="btn-secondary" onclick="taskCenterOpenDetails(${Number(task.id)})">Открыть детали</button>
+                        </div>
+                    </article>
+                `;
+            }).join('')}
         </div>
     `;
 }
@@ -500,8 +642,8 @@ function renderTaskDeadlineBoard(rows) {
 
 function renderTaskPlan(rows) {
     const groups = [
-        { key: 'mine', label: 'Мои сейчас', rows: rows.filter(task => task.executor === currentUser?.name && task.status === 'active') },
-        { key: 'delegated', label: 'Ожидаю от коллег', rows: rows.filter(task => task.author === currentUser?.name && task.executor !== currentUser?.name && task.status === 'active') },
+        { key: 'mine', label: 'Мои сейчас', rows: rows.filter(task => task.executor === currentUser?.name && ['assigned', 'new', 'active'].includes(task.status || '')) },
+        { key: 'delegated', label: 'Ожидаю от коллег', rows: rows.filter(task => task.author === currentUser?.name && task.executor !== currentUser?.name && ['assigned', 'new', 'active'].includes(task.status || '')) },
         { key: 'done', label: 'Закрыто', rows: rows.filter(task => task.status === 'completed').slice(0, 8) },
     ];
     return `<div class="task-plan-grid">
@@ -585,7 +727,7 @@ function renderTaskGantt(rows) {
 
 function renderTaskCenterCounters(rows) {
     const counters = [
-        { label: 'В работе', value: rows.filter(task => task.status === 'active').length, tone: 'primary' },
+        { label: 'Активные', value: rows.filter(task => ['assigned', 'new', 'active'].includes(task.status || '')).length, tone: 'primary' },
         { label: 'Просрочено', value: rows.filter(task => isTaskOverdue(task)).length, tone: 'danger' },
         { label: 'Комментарии', value: rows.reduce((acc, task) => acc + taskCommentCount(task), 0), tone: 'neutral' },
         { label: 'Непрочитано', value: rows.filter(task => isTaskUnread(task)).length, tone: 'warning' },
@@ -634,42 +776,58 @@ function renderTaskDetail() {
     title.innerText = task.title || 'Без названия';
     const history = Array.isArray(task.history) ? task.history : [];
     const chat = Array.isArray(task.chat) ? task.chat : [];
+    const canManage = taskCenterCanManage(task);
+    const canWork = taskCenterCanWork(task);
     body.innerHTML = `
         <div class="task-detail-grid">
-            <div class="task-detail-item"><span>Проект</span><b>${escapeHtml(taskProjectName(task))}</b></div>
             <div class="task-detail-item"><span>Статус</span><b>${escapeHtml(getTaskStatusMeta(task).label)}</b></div>
-            <div class="task-detail-item"><span>Исполнитель</span><b>${escapeHtml(task.executor || '—')}</b></div>
-            <div class="task-detail-item"><span>Дедлайн</span><b>${escapeHtml(task.deadline || '—')}</b></div>
+            <div class="task-detail-item"><span>Срок</span><b>${escapeHtml(task.deadline || 'Без срока')}</b></div>
+            <div class="task-detail-item"><span>Исполнитель</span><b>${escapeHtml(task.executor || 'Не назначен')}</b></div>
+            <div class="task-detail-item"><span>Поручил</span><b>${escapeHtml(task.author || 'Не указан')}</b></div>
+            <div class="task-detail-item"><span>Проект</span><b>${escapeHtml(taskProjectName(task))}</b></div>
+            <div class="task-detail-item"><span>Приоритет</span><b>${escapeHtml(getTaskPriorityMeta(task.priority || 'normal').label)}</b></div>
         </div>
         <div class="task-detail-section">
-            <div class="task-detail-section__title">Описание</div>
-            <div class="task-detail-note">${nl2brSafe(task.description || 'Описание пока не добавлено.')}</div>
+            <div class="task-detail-section__title">Что нужно сделать</div>
+            <div class="task-detail-note">${nl2brSafe(task.description || 'Описание пока не добавлено. Если непонятно — напишите комментарий и уточните задачу.')}</div>
         </div>
         <div class="task-detail-section">
-            <div class="task-detail-section__title">История</div>
-            <div class="task-detail-list">
-                ${history.length ? history.map(item => `<div class="task-detail-history">${escapeHtml(item)}</div>`).join('') : '<div class="task-center-empty task-center-empty--small">История пока пустая</div>'}
-            </div>
-        </div>
-        <div class="task-detail-section">
-            <div class="task-detail-section__title">Чат задачи</div>
+            <div class="task-detail-section__title">Комментарии</div>
             <div class="task-detail-chat">
-                ${chat.length ? chat.map(message => `
+                ${chat.length ? chat.slice(-6).map(message => `
                     <div class="task-detail-chat__item ${message.user === currentUser?.name ? 'is-mine' : ''}">
                         <div class="task-detail-chat__meta">${escapeHtml(message.user || '')} · ${escapeHtml(message.time || '')}</div>
                         <div class="task-detail-chat__bubble">${nl2brSafe(message.text || '')}</div>
                     </div>
                 `).join('') : '<div class="task-center-empty task-center-empty--small">Комментариев пока нет</div>'}
             </div>
-            <div class="task-detail-chat__composer">
-                <textarea id="taskDetailMessage" class="auth-input" rows="3" placeholder="Комментарий, уточнение, быстрый статус"></textarea>
-                <button class="btn-primary" onclick="taskCenterSendMessage(${task.id})">Отправить</button>
-            </div>
+            ${canWork ? `<div class="task-detail-chat__composer">
+                <textarea id="taskDetailMessage" class="auth-input" rows="3" placeholder="Комментарий по выполнению, вопрос или уточнение"></textarea>
+                <button class="btn-primary" onclick="taskCenterSendMessage(${Number(task.id)})">Отправить</button>
+            </div>` : '<div class="task-center-empty task-center-empty--small">Комментарии доступны исполнителю, автору поручения и директору.</div>'}
+        </div>
+        ${history.length ? `
+            <details class="task-detail-section task-detail-history-collapse">
+                <summary class="task-detail-section__title">История изменений (${history.length})</summary>
+                <div class="task-detail-list">
+                    ${history.slice(-8).map(item => `<div class="task-detail-history">${escapeHtml(item)}</div>`).join('')}
+                </div>
+            </details>
+        ` : ''}
+        <div class="kb-task-detail-actions">
+            ${taskCenterIsExecutor(task) && ['assigned', 'new'].includes(task.status || '') ? `<button class="btn-primary" onclick="taskCenterQuickUpdate(${Number(task.id)}, 'status', 'active')">Взять в работу</button>` : ''}
+            ${canWork && task.status === 'active' ? `<button class="btn-primary" onclick="taskCenterQuickUpdate(${Number(task.id)}, 'status', 'completed')">Закрыть поручение</button>` : ''}
+            ${canWork && task.status === 'completed' ? `<button class="btn-secondary" onclick="taskCenterQuickUpdate(${Number(task.id)}, 'status', 'active')">Вернуть в работу</button>` : ''}
+            ${canManage ? `<button class="btn-secondary" onclick="taskCenterAssignTask(${Number(task.id)})">Передать</button>` : ''}
+            ${canManage ? `<button class="btn-secondary" onclick="taskCenterQuickUpdate(${Number(task.id)}, 'priority', '${task.priority === 'high' ? 'normal' : 'high'}')">${task.priority === 'high' ? 'Обычный приоритет' : 'Высокий приоритет'}</button>` : ''}
+            ${canManage ? `<button class="btn-danger" onclick="taskCenterDeleteTask(${Number(task.id)})">Удалить поручение</button>` : ''}
         </div>
     `;
 }
 
 async function taskCenterSendMessage(taskId) {
+    const task = tasksDB.find(item => Number(item.id) === Number(taskId));
+    if (!taskCenterCanWork(task)) return customAlert('Комментарии доступны только исполнителю, автору поручения и директору.');
     const input = document.getElementById('taskDetailMessage');
     const text = input?.value?.trim();
     if (!text) return;
@@ -682,6 +840,9 @@ async function taskCenterSendMessage(taskId) {
 }
 
 async function taskCenterQuickUpdate(taskId, field, value) {
+    const task = tasksDB.find(item => Number(item.id) === Number(taskId));
+    if (field === 'status' && !taskCenterCanWork(task)) return customAlert('Менять статус может исполнитель, автор поручения или директор.');
+    if (field !== 'status' && !taskCenterCanManage(task)) return customAlert('Изменять поручение может только его автор или директор.');
     const payload = { [field]: value };
     if (field === 'status') payload.status = value;
     const response = await apiCall(`/tasks/${taskId}`, 'PUT', payload);
@@ -689,6 +850,36 @@ async function taskCenterQuickUpdate(taskId, field, value) {
     await loadTasks();
     taskCenterState.selectedTaskId = Number(taskId);
     renderTasks();
+}
+
+async function taskCenterAssignTask(taskId) {
+    const task = tasksDB.find(item => Number(item.id) === Number(taskId));
+    if (!taskCenterCanManage(task)) return customAlert('Передавать поручение может только его автор или директор.');
+    const users = allUsersDB.filter(user => user.status === 'approved');
+    if (!users.length) return customAlert('Нет доступных сотрудников для передачи поручения.');
+    const list = users.map((user, index) => `${index + 1}. ${user.name} (${user.role || 'роль не указана'})`).join('\n');
+    const answer = await customPrompt(`Кому передать поручение?\n${list}`);
+    const assignee = users[Number(answer) - 1];
+    if (!assignee) return;
+    const response = await apiCall(`/tasks/${taskId}`, 'PUT', { executor: assignee.name });
+    if (response?.error) return customAlert(response.message || 'Не удалось передать поручение.');
+    await loadTasks();
+    taskCenterState.selectedTaskId = Number(taskId);
+    renderTasks();
+    showToast('Поручения', `Передано: ${assignee.name}`);
+}
+
+async function taskCenterDeleteTask(taskId) {
+    const task = tasksDB.find(item => Number(item.id) === Number(taskId));
+    if (!taskCenterCanManage(task)) return customAlert('Удалить поручение может только тот, кто его создал, или директор.');
+    if (!(await customConfirm(`Удалить поручение «${task?.title || 'Без названия'}» безвозвратно?`))) return;
+    const response = await apiCall(`/tasks/${taskId}`, 'DELETE');
+    if (response?.error) return customAlert(response.message || 'Не удалось удалить поручение.');
+    taskCenterState.selectedTaskId = null;
+    taskCenterState.selectedIds = taskCenterState.selectedIds.filter(id => Number(id) !== Number(taskId));
+    await loadTasks();
+    renderTasks();
+    showToast('Поручения', 'Поручение удалено');
 }
 
 async function taskCenterBulkUpdate(field, value) {
@@ -727,9 +918,13 @@ function renderTasks() {
         if (mount) {
             mount.innerHTML = typeof renderInlineEmptyState === 'function'
                 ? renderInlineEmptyState(
-                    'Под текущие условия задач не найдено.',
-                    'Сбрось фильтры, измени режим или создай новое поручение.',
-                    '<button class="btn-primary" onclick="openCreateTaskModal()">Новое поручение</button><button class="btn-secondary" onclick="taskCenterResetLayout()">Сбросить</button>'
+                    isDesignOfficeTaskRole() ? 'Для КБ сейчас нет поручений.' : 'Поручений по выбранным условиям нет.',
+                    isDesignOfficeTaskRole()
+                        ? 'Когда директор, менеджер или производство назначит задачу на КБ, она появится здесь. Пока можно проверить документы или производство.'
+                        : 'Сбросьте фильтр, измените поиск или создайте новое поручение.',
+                    isDesignOfficeTaskRole()
+                        ? '<button class="btn-primary" onclick="navigateTo(\'production\')">Производство</button><button class="btn-secondary" onclick="navigateTo(\'documents\')">Документы</button>'
+                        : '<button class="btn-primary" onclick="openCreateTaskModal()">Новое поручение</button><button class="btn-secondary" onclick="taskCenterResetLayout()">Сбросить</button>'
                 )
                 : '<div class="task-center-empty">Под текущие условия задач не найдено.</div>';
         }
@@ -747,11 +942,7 @@ function renderTasks() {
 
     const mount = document.getElementById('taskCenterViewMount');
     if (mount) {
-        if (taskCenterState.mode === 'deadlines') mount.innerHTML = renderTaskDeadlineBoard(rows);
-        else if (taskCenterState.mode === 'plan') mount.innerHTML = renderTaskPlan(rows);
-        else if (taskCenterState.mode === 'calendar') mount.innerHTML = renderTaskCalendar(rows);
-        else if (taskCenterState.mode === 'gantt') mount.innerHTML = renderTaskGantt(rows);
-        else mount.innerHTML = renderTaskTable(rows);
+        mount.innerHTML = renderKbTaskList(rows);
     }
     renderTaskCenterCounters(rows);
     renderTaskCenterBulkBar();
@@ -759,14 +950,6 @@ function renderTasks() {
 }
 
 function openCreateTaskModal(preset = {}) {
-    flatpickr("#taskDeadline", {
-        locale: "ru",
-        enableTime: true,
-        time_24hr: true,
-        dateFormat: "d.m.Y H:i",
-        minDate: "today"
-    });
-
     const sel = document.getElementById('taskExecutor');
     if (sel) {
         sel.innerHTML = '<option value="" disabled selected>Выберите исполнителя</option>' + allUsersDB.filter(user => user.status === 'approved').map(user => `<option value="${escapeHtml(user.name)}">${escapeHtml(user.name)} (${escapeHtml(user.role)})</option>`).join('');
@@ -775,11 +958,15 @@ function openCreateTaskModal(preset = {}) {
     if (typeof clearFormErrors === 'function') clearFormErrors('taskForm');
     const titleEl = document.getElementById('taskTitle');
     const descEl = document.getElementById('taskDesc');
+    const deadlineEl = document.getElementById('taskDeadline');
     const projectEl = document.getElementById('taskProjectId');
     const priorityEl = document.getElementById('taskPriority');
     const recurrenceEl = document.getElementById('taskRecurrence');
     if (titleEl) titleEl.value = preset.title || '';
     if (descEl) descEl.value = preset.description || '';
+    if (deadlineEl) {
+        deadlineEl.value = taskDateToInputValue(preset.deadline || '');
+    }
     if (sel && preset.executor) sel.value = preset.executor;
     if (projectEl) {
         const options = ['<option value="0">Без проекта</option>'].concat((projectsDB || []).map(project => `<option value="${project.id}">${escapeHtml(project.name || `Проект #${project.id}`)}</option>`));
@@ -798,8 +985,9 @@ async function submitTask() {
     const title = document.getElementById('taskTitle').value.trim();
     const desc = document.getElementById('taskDesc').value.trim();
     const exec = document.getElementById('taskExecutor').value;
-    const dead = document.getElementById('taskDeadline').value;
+    const dead = taskDateFromInputValue(document.getElementById('taskDeadline').value);
     const prio = document.getElementById('taskPriority') && document.getElementById('taskPriority').checked ? 'high' : 'normal';
+    const recurrence = document.getElementById('taskRecurrence')?.value || 'none';
     const pId = document.getElementById('taskProjectId') ? (parseInt(document.getElementById('taskProjectId').value, 10) || 0) : 0;
     const errors = [];
     if (!title) errors.push({ field: 'taskTitle', message: 'Кратко сформулируйте поручение.' });
@@ -816,6 +1004,7 @@ async function submitTask() {
         author: currentUser.name,
         executor: exec,
         deadline: dead,
+        recurrence,
         priority: prio,
         project_id: pId
     });
@@ -871,9 +1060,12 @@ window.taskCenterOpenColumns = taskCenterOpenColumns;
 window.taskCenterToggleColumn = taskCenterToggleColumn;
 window.taskCenterRestoreDefaultColumns = taskCenterRestoreDefaultColumns;
 window.taskCenterSelectTask = taskCenterSelectTask;
+window.taskCenterOpenDetails = taskCenterOpenDetails;
 window.taskCenterToggleSelect = taskCenterToggleSelect;
 window.taskCenterToggleSelectAll = taskCenterToggleSelectAll;
 window.taskCenterQuickUpdate = taskCenterQuickUpdate;
+window.taskCenterAssignTask = taskCenterAssignTask;
+window.taskCenterDeleteTask = taskCenterDeleteTask;
 window.taskCenterBulkUpdate = taskCenterBulkUpdate;
 window.taskCenterBulkAssign = taskCenterBulkAssign;
 window.taskCenterClearSelection = taskCenterClearSelection;

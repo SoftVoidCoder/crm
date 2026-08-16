@@ -3,7 +3,7 @@
         <div class="view-heading">
     <span class="view-eyebrow">ЭПЛ</span>
             <h1 class="view-title">Бухгалтерия / ЭПЛ</h1>
-    <p class="view-subtitle">Единый контур для электронных путевых листов: справочники водителей и ТС, маршрутные карточки, титулы медосмотра и техконтроля, QR-код и подготовка к передаче во внешний контур.</p>
+    <p class="view-subtitle">Создайте электронный путевой лист за три шага и ведите весь рейс в одной понятной карточке.</p>
         </div>
     </div>
 
@@ -42,13 +42,21 @@
         </section>
     </div>
 
-    <div class="tabs accounting-tabs">
-        <button id="accountingTabWaybills" class="tab active" onclick="switchAccountingTab('waybills')">ЭПЛ</button>
-        <button id="accountingTabDrivers" class="tab" onclick="switchAccountingTab('drivers')">Водители</button>
-        <button id="accountingTabVehicles" class="tab" onclick="switchAccountingTab('vehicles')">Транспорт</button>
-    </div>
+    <section class="accounting-quick-flow" aria-label="Порядок создания ЭПЛ">
+        <div class="accounting-quick-flow__heading">
+            <div>
+                <strong>Создание ЭПЛ по шагам</strong>
+                <span id="accountingStepHint">Сначала добавьте водителя, затем транспорт и только после этого создайте путевой лист.</span>
+            </div>
+        </div>
+        <div class="tabs accounting-tabs">
+            <button id="accountingTabDrivers" class="tab active" onclick="switchAccountingTab('drivers')"><span>1</span> Водитель</button>
+            <button id="accountingTabVehicles" class="tab" onclick="switchAccountingTab('vehicles')"><span>2</span> Транспорт</button>
+            <button id="accountingTabWaybills" class="tab" onclick="switchAccountingTab('waybills')"><span>3</span> Путевой лист</button>
+        </div>
+    </section>
 
-    <div id="accountingWaybillsPanel">
+    <div id="accountingWaybillsPanel" style="display:none;">
         <div class="finance-layout">
             <section class="surface-card surface-card--padded ops-form-card">
                 <div class="section-header">
@@ -163,7 +171,7 @@
         </section>
     </div>
 
-    <div id="accountingDriversPanel" style="display:none;">
+    <div id="accountingDriversPanel">
         <div class="finance-layout">
             <section class="surface-card surface-card--padded ops-form-card">
                 <div class="section-header"><div><h3 class="section-title">Справочник водителей</h3><p class="section-subtitle">Держи под рукой удостоверения, допуски и профиль подписи для ЭПЛ.</p></div></div>

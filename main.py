@@ -614,28 +614,56 @@ def read_guest_portal(request: Request, token: str):
     if not project:
         raise HTTPException(status_code=404, detail="Ссылка портала недействительна")
 
-    checklist_summary = []
-    for s_idx, section in enumerate(project.get("checklist", [])):
-        tasks = section.get("tasks", [])
-        done = 0
-        for t_idx, _task in enumerate(tasks):
-            state = (project.get("checkedState") or {}).get(f"task_{s_idx}_{t_idx}", "")
-            if str(state).startswith("DONE"):
-                done += 1
-        checklist_summary.append({
-            "title": section.get("title", "Этап"),
-            "done": done,
-            "total": len(tasks)
+    stage_titles = ["Подготовка", "Согласование", "Выполнение", "Завершение"]
+    checked_state = project.get("checkedState") or {}
+    subtasks = project.get("subtasks") or {}
+    workflow_timers = ((project.get("archive_details") or {}).get("workflow_timers") or {})
+    stage_states = []
+    for index, title in enumerate(stage_titles):
+        stage_key = f"workflow_stage_{index}"
+        raw_state = str(checked_state.get(stage_key, ""))
+        stage_items = subtasks.get(stage_key) or []
+        items_complete = bool(stage_items) and all(bool(item.get("done")) for item in stage_items)
+        timer = workflow_timers.get(stage_key) or {}
+        elapsed_seconds = max(0, int(float(timer.get("elapsed_seconds") or 0)))
+        timer_running = bool(timer.get("running"))
+        timer_started_at = float(timer.get("started_at") or 0)
+        if timer_running and timer_started_at:
+            elapsed_seconds += max(0, int((time.time() * 1000 - timer_started_at) / 1000))
+        if raw_state.startswith("DONE"):
+            state = "done"
+            label = "Завершён"
+        elif raw_state.startswith("IN_PROGRESS") or timer_running or elapsed_seconds > 0:
+            state = "in_progress"
+            label = "В работе"
+        elif items_complete:
+            state = "done"
+            label = "Завершён"
+        else:
+            state = "planned"
+            label = "Не начат"
+        stage_states.append({
+            "title": title,
+            "state": state,
+            "label": label,
+            "elapsed_seconds": elapsed_seconds,
+            "timer_running": timer_running,
         })
 
-    files = sorted(project.get("files", []), key=lambda item: item.get("time", ""), reverse=True)[:8]
-    logs = project.get("logs", [])[:8]
+    active_stage = next((stage for stage in stage_states if stage["state"] == "in_progress"), None)
+    if active_stage is None:
+        active_stage = next((stage for stage in reversed(stage_states) if stage["state"] == "done"), None)
+    if active_stage is None:
+        active_stage = next((stage for stage in stage_states if stage["state"] == "planned"), stage_states[0])
+    if project.get("status") == "archive":
+        final_stage = stage_states[-1]
+        active_stage = {**final_stage, "title": "Завершение", "state": "done", "label": "Завершён"}
+    elif project.get("status") in {"canceled", "terminated"}:
+        active_stage = {**active_stage, "state": "canceled", "label": "Проект отменён", "timer_running": False}
 
     return templates.TemplateResponse(request, "portal.html", {
         "project": project,
-        "checklist_summary": checklist_summary,
-        "files": files,
-        "logs": logs
+        "current_stage": active_stage,
     })
 
 # === НОВЫЙ ЭНДПОИНТ WEBSOCKET ===

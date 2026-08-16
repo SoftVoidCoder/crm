@@ -11,3 +11,5 @@ korda_crm/
 logs/
 backups/
 backups/*.db
+.tmp-counterparty-import/
+outputs/

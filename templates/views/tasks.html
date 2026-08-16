@@ -1,13 +1,11 @@
 <div id="tasksView" class="view-page task-center-page" style="display: none;">
     <div class="view-header task-center-header">
         <div class="view-heading">
-            <span class="view-eyebrow">Операционный центр</span>
-            <h1 class="view-title">Центр задач</h1>
-            <p class="view-subtitle">Плотный реестр поручений, быстрые действия, сроки, календарь и живая переписка по каждой задаче.</p>
+            <span class="view-eyebrow">Рабочие поручения</span>
+            <h1 class="view-title">Поручения</h1>
+            <p class="view-subtitle">Один простой список: что нужно сделать, кто отвечает, какой срок и что уже выполнено.</p>
         </div>
         <div class="view-actions task-center-header__actions">
-            <button class="btn-secondary" onclick="taskCenterResetLayout()">Сбросить вид</button>
-            <button class="btn-secondary" onclick="taskCenterSaveCurrentFilter()">Сохранить фильтр</button>
             <button class="btn-primary" onclick="openCreateTaskModal()">+ Дать поручение</button>
         </div>
     </div>
@@ -22,7 +20,7 @@
             <div class="task-center-toolbar__filters">
                 <select id="taskCenterStatusFilter" class="auth-input" onchange="taskCenterSetFilter('statusScope', this.value)">
                     <option value="all">Все статусы</option>
-                    <option value="active">В работе</option>
+                    <option value="active">Активные</option>
                     <option value="completed">Выполнено</option>
                     <option value="overdue">Просрочено</option>
                     <option value="mine">Назначено мне</option>
@@ -33,19 +31,7 @@
                     <option value="high">Высокий</option>
                     <option value="normal">Нормальный</option>
                 </select>
-                <select id="taskCenterSavedFilter" class="auth-input" onchange="taskCenterApplySavedFilter(this.value)">
-                    <option value="">Сохранённые фильтры</option>
-                </select>
-                <button class="btn-secondary" onclick="taskCenterOpenColumns()">Колонки</button>
             </div>
-        </div>
-
-        <div class="task-center-modes">
-            <button class="tab active" id="taskModeList" onclick="taskCenterSwitchMode('list')">Список</button>
-            <button class="tab" id="taskModeDeadlines" onclick="taskCenterSwitchMode('deadlines')">Сроки</button>
-            <button class="tab" id="taskModePlan" onclick="taskCenterSwitchMode('plan')">Мой план</button>
-            <button class="tab" id="taskModeCalendar" onclick="taskCenterSwitchMode('calendar')">Календарь</button>
-            <button class="tab" id="taskModeGantt" onclick="taskCenterSwitchMode('gantt')">Гант</button>
         </div>
 
         <div id="taskCenterBulkBar" class="task-center-bulkbar" style="display:none;"></div>

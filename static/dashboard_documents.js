@@ -6,7 +6,7 @@ let currentDocTab = 'incoming';
 let documentsExtraFilter = 'all';
 let selectedDocuments = new Set();
 let documentsOneCImportPreviewState = null;
-const documentDraftFieldIds = ['docType', 'docDate', 'docNumber', 'docSenderName', 'docRecipientName', 'docSourceNumber', 'docSourceDate', 'docDeliveryMethod', 'docSignerName', 'docExecutorName', 'docCorrespondent', 'docSubject', 'docProjectId', 'docParentId', 'docPriority'];
+const documentDraftFieldIds = ['docType', 'docKind', 'docDate', 'docNumber', 'docClientSearch', 'docClientId', 'docClientSource', 'docClientSourceId', 'docContractSearch', 'docContractId', 'docExecutorName', 'docCorrespondent', 'docSubject', 'docDealId', 'docProductionOrderSearch', 'docProductionOrderId', 'docPriority'];
 const TENDER_REQUIRED_DOCUMENTS = [
     { key: 'company_card', label: 'Карточка компании', keywords: ['карточк', 'реквизит', 'инн', 'кпп'] },
     { key: 'authority', label: 'Доверенность / полномочия', keywords: ['доверен', 'полномоч', 'приказ директор'] },
@@ -47,12 +47,305 @@ function defaultDocumentDateValue() {
     return `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
 }
 
-function openDocumentModalWithPreset(preset = {}) {
+const DOCUMENT_KIND_LABELS = {
+    commercial_proposal: 'Коммерческое предложение',
+    company_details: 'Карточка предприятия / реквизиты',
+    technical_proposal: 'Техническое предложение',
+    contract: 'Договор',
+    contract_specification: 'Спецификация к договору',
+    invoice: 'Счёт',
+    act_upd: 'Акт / УПД',
+    technical_task: 'Техническое задание',
+    drawing: 'Чертёж',
+    product_specification: 'Спецификация изделия',
+    technology_card: 'Технологическая карта',
+    production_order: 'Производственное задание',
+    purchase_request: 'Заявка на закупку',
+    supplier_order: 'Заказ поставщику',
+    waybill: 'Накладная',
+    quality_act: 'Акт ОТК',
+    service_act: 'Сервисный / гарантийный акт',
+    internal_memo: 'Служебная записка',
+    other: 'Другой документ',
+};
+
+function documentKindLabel(code = '') {
+    return DOCUMENT_KIND_LABELS[String(code || '').trim()] || 'Документ';
+}
+
+function inferredDocumentKindCode(doc = {}) {
+    if (String(doc.document_kind_code || '').trim()) return String(doc.document_kind_code).trim();
+    const text = `${doc.subject || ''} ${doc.number || ''}`.toLocaleLowerCase('ru-RU');
+    if (/реквизит|карточк[аи] предприятия/.test(text)) return 'company_details';
+    if (/коммерческ|(^|\s)кп([\s-]|$)/.test(text)) return 'commercial_proposal';
+    if (/договор/.test(text)) return 'contract';
+    if (/сч[её]т/.test(text)) return 'invoice';
+    if (/акт|упд/.test(text)) return 'act_upd';
+    if (/техническ.*задан|(^|\s)тз([\s-]|$)/.test(text)) return 'technical_task';
+    if (/черт[её]ж/.test(text)) return 'drawing';
+    if (/спецификац/.test(text)) return 'product_specification';
+    return 'other';
+}
+
+window.documentKindLabel = documentKindLabel;
+
+function documentClientById(clientId) {
+    return (Array.isArray(clientsDB) ? clientsDB : []).find(client => Number(client.id || 0) === Number(clientId || 0)) || null;
+}
+
+function documentBitrixProspects() {
+    const rows = (typeof outreachProspectsDB !== 'undefined' && Array.isArray(outreachProspectsDB) ? outreachProspectsDB : [])
+        .filter(row => String(row.source_name || '').trim() === 'Bitrix24 API');
+    const isRegularManager = String(currentUser?.role || '') === 'Менеджер' && Number(currentUser?.is_head || 0) !== 1;
+    if (!isRegularManager) return rows;
+    const actorEmail = String(currentUser?.email || '').trim().toLocaleLowerCase('ru-RU');
+    return rows.filter(row => String(row.manager_email || '').trim().toLocaleLowerCase('ru-RU') === actorEmail);
+}
+
+function documentClientChoices() {
+    const counterparties = (Array.isArray(clientsDB) ? clientsDB : []).map(client => ({
+        source: 'client',
+        sourceId: Number(client.id || 0),
+        clientId: Number(client.id || 0),
+        name: String(client.name || 'Клиент без названия'),
+        inn: String(client.inn || ''),
+        phone: String(client.phone || client.contact || ''),
+        contact: String(client.contact || ''),
+    }));
+    const bitrixClients = documentBitrixProspects().map(prospect => ({
+        source: 'bitrix24',
+        sourceId: Number(prospect.id || 0),
+        clientId: Number(prospect.converted_client_id || 0),
+        name: String(prospect.company_name || prospect.contact_name || 'Клиент Bitrix24'),
+        inn: String(prospect.company_inn || ''),
+        phone: String(prospect.phone || ''),
+        contact: String(prospect.contact_name || prospect.email || ''),
+    }));
+    return [...bitrixClients, ...counterparties];
+}
+
+function documentClientOptionLabel(choice = {}) {
+    const sourceLabel = choice.source === 'bitrix24' ? 'Bitrix24' : 'Контрагент CRM';
+    return [choice.name || 'Клиент без названия', choice.inn ? `ИНН ${choice.inn}` : '', choice.phone || '', sourceLabel].filter(Boolean).join(' — ');
+}
+
+function documentClientChoiceByReference(source = '', sourceId = 0, clientId = 0, fallbackName = '') {
+    const choices = documentClientChoices();
+    const sourceMatch = choices.find(item => item.source === String(source || '') && Number(item.sourceId || 0) === Number(sourceId || 0));
+    if (sourceMatch) return sourceMatch;
+    const clientMatch = choices.find(item => item.source === 'client' && Number(item.clientId || 0) === Number(clientId || 0));
+    if (clientMatch) return clientMatch;
+    const normalizedName = String(fallbackName || '').trim().toLocaleLowerCase('ru-RU');
+    return choices.find(item => normalizedName && String(item.name || '').trim().toLocaleLowerCase('ru-RU') === normalizedName) || null;
+}
+
+function populateDocumentClientPicker(selectedClientId = 0, fallbackName = '', selectedSource = '', selectedSourceId = 0) {
+    const options = document.getElementById('docClientOptions');
+    const search = document.getElementById('docClientSearch');
+    const hidden = document.getElementById('docClientId');
+    const source = document.getElementById('docClientSource');
+    const sourceId = document.getElementById('docClientSourceId');
+    if (!options || !search || !hidden || !source || !sourceId) return;
+    const choices = documentClientChoices();
+    options.innerHTML = choices.map(choice => `<option value="${documentPackageEscape(documentClientOptionLabel(choice))}"></option>`).join('');
+    const selected = documentClientChoiceByReference(selectedSource, selectedSourceId, selectedClientId, fallbackName);
+    hidden.value = String(Number(selected?.clientId || 0));
+    source.value = String(selected?.source || '');
+    sourceId.value = String(Number(selected?.sourceId || 0));
+    search.value = selected ? documentClientOptionLabel(selected) : String(fallbackName || '');
+    handleDocumentClientChoice(search.value, false);
+}
+
+function handleDocumentClientChoice(value, fillRoute = true) {
+    const hidden = document.getElementById('docClientId');
+    const source = document.getElementById('docClientSource');
+    const sourceId = document.getElementById('docClientSourceId');
+    const hint = document.getElementById('docClientSelectionHint');
+    const normalized = String(value || '').trim().toLocaleLowerCase('ru-RU');
+    const choice = documentClientChoices().find(item => {
+        return documentClientOptionLabel(item).toLocaleLowerCase('ru-RU') === normalized || String(item.name || '').trim().toLocaleLowerCase('ru-RU') === normalized;
+    }) || null;
+    if (hidden) hidden.value = String(Number(choice?.clientId || 0));
+    if (source) source.value = String(choice?.source || '');
+    if (sourceId) sourceId.value = String(Number(choice?.sourceId || 0));
+    if (hint) {
+        const sourceLabel = choice?.source === 'bitrix24' ? 'Bitrix24' : 'базы контрагентов';
+        hint.textContent = choice ? `Выбран клиент из ${sourceLabel}: ${choice.name}${choice.inn ? ` · ИНН ${choice.inn}` : ''}` : (normalized ? 'Название будет сохранено вручную. Сделку можно выбрать только для клиента из CRM или Bitrix24.' : 'Можно выбрать клиента из CRM и Bitrix24 или указать название вручную.');
+        hint.classList.toggle('is-selected', !!choice);
+    }
+    refreshDocumentDealPicker(0, choice);
+    if (!fillRoute) return;
+    const type = String(document.getElementById('docType')?.value || 'incoming');
+    const name = String(choice?.name || value || '').trim();
+    const corr = document.getElementById('docCorrespondent');
+    const sender = document.getElementById('docSenderName');
+    const recipient = document.getElementById('docRecipientName');
+    if (corr) corr.value = name;
+    if (type === 'outgoing') {
+        if (recipient) recipient.value = name;
+    } else if (type === 'incoming') {
+        if (sender) sender.value = name;
+    }
+}
+
+window.handleDocumentClientChoice = handleDocumentClientChoice;
+
+function refreshDocumentDealPicker(selectedDealId = 0, selectedChoice = null) {
+    const select = document.getElementById('docDealId');
+    if (!select) return;
+    const directlySelectedDeal = Number(selectedDealId || 0) > 0 && typeof crmDealsDB !== 'undefined' && Array.isArray(crmDealsDB)
+        ? crmDealsDB.find(deal => Number(deal.id || 0) === Number(selectedDealId || 0))
+        : null;
+    const choice = selectedChoice || documentClientChoiceByReference(
+        document.getElementById('docClientSource')?.value || '',
+        Number(document.getElementById('docClientSourceId')?.value || 0),
+        Number(document.getElementById('docClientId')?.value || 0),
+        document.getElementById('docClientSearch')?.value || '',
+    );
+    if (!choice) {
+        if (directlySelectedDeal) {
+            select.innerHTML = `<option value="${Number(directlySelectedDeal.id || 0)}">${documentPackageEscape(directlySelectedDeal.title || directlySelectedDeal.client_name || `Сделка №${directlySelectedDeal.id}`)}</option>`;
+            select.value = String(Number(directlySelectedDeal.id || 0));
+            return;
+        }
+        select.innerHTML = '<option value="0">Сначала выберите клиента</option>';
+        return;
+    }
+    const normalizedName = String(choice.name || '').trim().toLocaleLowerCase('ru-RU');
+    const deals = (typeof crmDealsDB !== 'undefined' && Array.isArray(crmDealsDB) ? crmDealsDB : []).filter(deal => {
+        const sameClientId = Number(choice.clientId || 0) > 0 && Number(deal.client_id || 0) === Number(choice.clientId || 0);
+        const sameName = normalizedName && String(deal.client_name || deal.title || '').trim().toLocaleLowerCase('ru-RU') === normalizedName;
+        return sameClientId || sameName;
+    });
+    select.innerHTML = `<option value="0">Без привязки к сделке</option>${deals.map(deal => `<option value="${Number(deal.id || 0)}">${documentPackageEscape(deal.title || deal.client_name || `Сделка №${deal.id}`)}</option>`).join('')}`;
+    select.value = String(Number(selectedDealId || 0));
+    if (!deals.length) select.innerHTML = '<option value="0">У клиента пока нет сделки</option>';
+}
+
+window.refreshDocumentDealPicker = refreshDocumentDealPicker;
+
+function documentContractChoices() {
+    const rows = typeof contractRegistryDB !== 'undefined' && Array.isArray(contractRegistryDB) ? contractRegistryDB : [];
+    return rows.map(contract => ({
+        id: Number(contract.id || 0),
+        number: String(contract.contract_number || '').trim(),
+        title: String(contract.title || '').trim(),
+        client: String(contract.client_name || contract.client || '').trim(),
+    })).filter(contract => contract.id > 0);
+}
+
+function documentContractLabel(contract = {}) {
+    return [contract.number || `Договор №${contract.id || ''}`, contract.title || '', contract.client || ''].filter(Boolean).join(' — ');
+}
+
+function populateDocumentContractPicker(selectedContractId = 0) {
+    const options = document.getElementById('docContractOptions');
+    const search = document.getElementById('docContractSearch');
+    const hidden = document.getElementById('docContractId');
+    const hint = document.getElementById('docContractHint');
+    if (!options || !search || !hidden) return;
+    const choices = documentContractChoices();
+    options.innerHTML = choices.map(contract => `<option value="${documentPackageEscape(documentContractLabel(contract))}"></option>`).join('');
+    const selected = choices.find(contract => Number(contract.id || 0) === Number(selectedContractId || 0)) || null;
+    hidden.value = String(Number(selected?.id || 0));
+    search.value = selected ? documentContractLabel(selected) : '';
+    if (hint) {
+        hint.textContent = selected ? `Документ будет связан с договором ${selected.number || `№${selected.id}`}.` : 'Если выбрать договор, документ появится в его карточке.';
+        hint.classList.toggle('is-selected', !!selected);
+    }
+}
+
+function handleDocumentContractChoice(value) {
+    const hidden = document.getElementById('docContractId');
+    const hint = document.getElementById('docContractHint');
+    const normalized = String(value || '').trim().toLocaleLowerCase('ru-RU');
+    const choice = documentContractChoices().find(contract => {
+        return documentContractLabel(contract).toLocaleLowerCase('ru-RU') === normalized
+            || String(contract.number || '').toLocaleLowerCase('ru-RU') === normalized;
+    }) || null;
+    if (hidden) hidden.value = String(Number(choice?.id || 0));
+    if (hint) {
+        hint.textContent = choice ? `Документ будет связан с договором ${choice.number || `№${choice.id}`}.` : (normalized ? 'Выберите договор из выпадающего списка.' : 'Если выбрать договор, документ появится в его карточке.');
+        hint.classList.toggle('is-selected', !!choice);
+    }
+}
+
+window.handleDocumentContractChoice = handleDocumentContractChoice;
+
+function documentProductionOrderChoices() {
+    const rows = typeof productionOrdersDB !== 'undefined' && Array.isArray(productionOrdersDB) ? productionOrdersDB : [];
+    return rows.map(order => ({
+        id: Number(order.id || 0),
+        name: String(order.order_name || `Заказ №${order.id || ''}`).trim(),
+        client: String(order.client_name || '').trim(),
+        stage: String(order.stage || '').trim(),
+    })).filter(order => order.id > 0);
+}
+
+function documentProductionOrderLabel(order = {}) {
+    return [order.name || `Заказ №${order.id || ''}`, order.client || '', order.stage || ''].filter(Boolean).join(' — ');
+}
+
+function populateDocumentProductionOrderPicker(selectedOrderId = 0) {
+    const options = document.getElementById('docProductionOrderOptions');
+    const search = document.getElementById('docProductionOrderSearch');
+    const hidden = document.getElementById('docProductionOrderId');
+    const hint = document.getElementById('docProductionOrderHint');
+    if (!options || !search || !hidden) return;
+    const choices = documentProductionOrderChoices();
+    options.innerHTML = choices.map(order => `<option value="${documentPackageEscape(documentProductionOrderLabel(order))}"></option>`).join('');
+    const selected = choices.find(order => Number(order.id || 0) === Number(selectedOrderId || 0)) || null;
+    hidden.value = String(Number(selected?.id || 0));
+    search.value = selected ? documentProductionOrderLabel(selected) : '';
+    if (hint) {
+        hint.textContent = selected ? `Документ будет связан с заказом: ${selected.name}` : 'Если выбрать заказ, документ появится в карточке этого заказа.';
+        hint.classList.toggle('is-selected', !!selected);
+    }
+}
+
+function handleDocumentProductionOrderChoice(value) {
+    const hidden = document.getElementById('docProductionOrderId');
+    const hint = document.getElementById('docProductionOrderHint');
+    const normalized = String(value || '').trim().toLocaleLowerCase('ru-RU');
+    const choice = documentProductionOrderChoices().find(order => {
+        return documentProductionOrderLabel(order).toLocaleLowerCase('ru-RU') === normalized
+            || String(order.name || '').trim().toLocaleLowerCase('ru-RU') === normalized;
+    }) || null;
+    if (hidden) hidden.value = String(Number(choice?.id || 0));
+    if (hint) {
+        hint.textContent = choice ? `Документ будет связан с заказом: ${choice.name}` : (normalized ? 'Выберите заказ из выпадающего списка.' : 'Если выбрать заказ, документ появится в карточке этого заказа.');
+        hint.classList.toggle('is-selected', !!choice);
+    }
+}
+
+window.handleDocumentProductionOrderChoice = handleDocumentProductionOrderChoice;
+
+async function ensureDocumentClientSources() {
+    const loaders = [];
+    if (typeof loadClients === 'function') loaders.push(loadClients());
+    if (typeof loadOutreachProspects === 'function') loaders.push(loadOutreachProspects());
+    if (typeof loadCrmDeals === 'function') loaders.push(loadCrmDeals());
+    if (typeof apiCall === 'function') {
+        loaders.push(apiCall('/production/orders').then(rows => {
+            if (Array.isArray(rows) && typeof productionOrdersDB !== 'undefined') productionOrdersDB = rows;
+        }).catch(() => null));
+        loaders.push(apiCall('/contracts').then(rows => {
+            if (Array.isArray(rows) && typeof contractRegistryDB !== 'undefined') contractRegistryDB = rows;
+        }).catch(() => null));
+    }
+    if (loaders.length) await Promise.allSettled(loaders);
+}
+
+window.ensureDocumentClientSources = ensureDocumentClientSources;
+
+async function openDocumentModalWithPreset(preset = {}) {
     const modal = document.getElementById('createDocModal');
     if (!modal) return;
+    await ensureDocumentClientSources();
     if (typeof bindFormFieldErrorCleanup === 'function') bindFormFieldErrorCleanup('documentForm');
     if (typeof clearFormErrors === 'function') clearFormErrors('createDocModal');
     const typeEl = document.getElementById('docType');
+    const kindEl = document.getElementById('docKind');
     const numberEl = document.getElementById('docNumber');
     const dateEl = document.getElementById('docDate');
     const senderEl = document.getElementById('docSenderName');
@@ -65,9 +358,12 @@ function openDocumentModalWithPreset(preset = {}) {
     const corrEl = document.getElementById('docCorrespondent');
     const subjEl = document.getElementById('docSubject');
     const priorityEl = document.getElementById('docPriority');
-    const projectEl = document.getElementById('docProjectId');
+    const dealEl = document.getElementById('docDealId');
+    const contractEl = document.getElementById('docContractId');
     const parentEl = document.getElementById('docParentId');
-    if (typeEl) typeEl.value = preset.type || 'incoming';
+    const fileEl = document.getElementById('docFile');
+    if (typeEl) typeEl.value = preset.type || 'outgoing';
+    if (kindEl) kindEl.value = preset.document_kind_code || preset.document_kind || 'commercial_proposal';
     if (dateEl) dateEl.value = preset.d_date || defaultDocumentDateValue();
     if (senderEl) senderEl.value = preset.sender_name || '';
     if (recipientEl) recipientEl.value = preset.recipient_name || '';
@@ -75,29 +371,61 @@ function openDocumentModalWithPreset(preset = {}) {
     if (sourceDateEl) sourceDateEl.value = preset.source_date || '';
     if (deliveryMethodEl) deliveryMethodEl.value = preset.delivery_method || '';
     if (signerEl) signerEl.value = preset.signer_name || '';
-    if (executorEl) executorEl.value = preset.executor_name || '';
+    if (executorEl) executorEl.value = preset.executor_name || currentUser?.name || '';
     if (corrEl) corrEl.value = preset.correspondent || '';
     if (subjEl) subjEl.value = preset.subject || '';
     if (priorityEl) priorityEl.checked = preset.priority === 'high';
-    if (projectEl) projectEl.value = String(Number(preset.project_id || 0));
     if (parentEl) parentEl.value = String(Number(preset.parent_id || 0));
+    if (fileEl) fileEl.value = '';
+    updateDocumentFileName();
+    populateDocumentClientPicker(Number(preset.client_id || 0), preset.client_name || preset.correspondent || '', preset.client_source || '', Number(preset.client_source_id || 0));
+    refreshDocumentDealPicker(Number(preset.deal_id || 0));
+    populateDocumentContractPicker(Number(preset.contract_id || 0));
+    populateDocumentProductionOrderPicker(Number(preset.production_order_id || 0));
+    if (dealEl) dealEl.value = String(Number(preset.deal_id || 0));
+    if (contractEl) contractEl.value = String(Number(preset.contract_id || 0));
     modal.style.display = 'flex';
     if (numberEl) {
         if (preset.number) numberEl.value = preset.number;
         else window.generateDocNumber?.();
     }
-    bindDocumentDraftAutosave();
-    bindDocumentSmartHints();
-    if (subjEl) subjEl.focus();
+    syncDocumentKindWithDirection();
+    const flow = modal.querySelector('.document-create-flow');
+    if (flow) flow.scrollTop = 0;
 }
 
 window.openDocumentModalWithPreset = openDocumentModalWithPreset;
+
+function closeDocumentCreateModal() {
+    const modal = document.getElementById('createDocModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function updateDocumentFileName() {
+    const file = document.getElementById('docFile')?.files?.[0] || null;
+    const label = document.getElementById('docFileName');
+    if (label) label.textContent = file ? file.name : 'Выберите файл с компьютера';
+}
+
+function syncDocumentKindWithDirection() {
+    const direction = document.getElementById('docType')?.value || 'outgoing';
+    const kind = document.getElementById('docKind');
+    if (!kind) return;
+    if (direction === 'internal_memo' && kind.value !== 'internal_memo') kind.value = 'internal_memo';
+    if (direction !== 'internal_memo' && kind.value === 'internal_memo') kind.value = direction === 'outgoing' ? 'commercial_proposal' : 'other';
+    window.generateDocNumber?.();
+}
+
+window.closeDocumentCreateModal = closeDocumentCreateModal;
+window.updateDocumentFileName = updateDocumentFileName;
+window.syncDocumentKindWithDirection = syncDocumentKindWithDirection;
 
 window.duplicateDocument = function(id) {
     const doc = documentsDB.find(item => Number(item.id) === Number(id));
     if (!doc) return;
     openDocumentModalWithPreset({
         type: doc.type || 'incoming',
+        document_kind_code: doc.document_kind_code || 'other',
         d_date: defaultDocumentDateValue(),
         number: '',
         sender_name: doc.sender_name || '',
@@ -110,7 +438,12 @@ window.duplicateDocument = function(id) {
         correspondent: doc.correspondent || '',
         subject: doc.subject ? `${doc.subject} (копия)` : '',
         priority: doc.priority || 'normal',
-        project_id: doc.project_id || 0,
+        client_id: doc.client_id || 0,
+        client_source: doc.client_source || '',
+        client_source_id: doc.client_source_id || 0,
+        deal_id: 0,
+        contract_id: doc.contract_id || 0,
+        production_order_id: doc.production_order_id || 0,
         parent_id: doc.id || 0,
     });
     window.generateDocNumber?.();
@@ -133,6 +466,28 @@ function switchDocTab(tab) {
         el.classList.toggle('active', on);
         el.setAttribute('aria-selected', on ? 'true' : 'false');
     });
+    const registryCopy = {
+        incoming: {
+            title: 'Входящие документы',
+            hint: 'Письма, запросы, акты и другие документы, которые компания получила извне.',
+        },
+        outgoing: {
+            title: 'Исходящие документы',
+            hint: 'Официальные письма, ответы и коммерческие предложения, отправленные клиентам и партнёрам.',
+        },
+        internal: {
+            title: 'Внутренние документы компании',
+            hint: 'Приказы, служебные записки, регламенты и инструкции для сотрудников.',
+        },
+        drafts: {
+            title: 'Не закончено',
+            hint: 'Документы, которые сохранили, но ещё не зарегистрировали в общем архиве.',
+        },
+    }[tab] || {};
+    const title = document.getElementById('documentsRegistryTitle');
+    const hint = document.getElementById('documentsRegistryHint');
+    if (title) title.textContent = registryCopy.title || 'Документы';
+    if (hint) hint.textContent = registryCopy.hint || '';
     renderDocuments();
 }
 
@@ -143,7 +498,7 @@ function documentMatchesExtraFilter(doc) {
 }
 
 function getFilteredDocuments() {
-    const searchInput = document.getElementById('searchInput');
+    const searchInput = document.getElementById('documentRegistrySearch');
     const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
     const filtered = documentsDB.filter(doc => {
         const matchesTab = currentDocTab === 'drafts'
@@ -154,8 +509,12 @@ function getFilteredDocuments() {
         if (!matchesTab) return false;
         if (!documentMatchesExtraFilter(doc)) return false;
         if (!query) return true;
+        const assignedChoice = documentClientChoiceByReference(doc.client_source, doc.client_source_id, doc.client_id, doc.correspondent || doc.sender_name || doc.recipient_name || '');
+        const assignedDeal = (typeof crmDealsDB !== 'undefined' && Array.isArray(crmDealsDB) ? crmDealsDB : []).find(deal => Number(deal.id || 0) === Number(doc.deal_id || 0));
+        const assignedContract = documentContractChoices().find(contract => Number(contract.id || 0) === Number(doc.contract_id || 0));
         const haystack = [
             doc.number || '',
+            documentKindLabel(inferredDocumentKindCode(doc)),
             doc.correspondent || '',
             doc.sender_name || '',
             doc.recipient_name || '',
@@ -164,12 +523,27 @@ function getFilteredDocuments() {
             doc.executor_name || '',
             doc.subject || '',
             doc.status || '',
+            assignedChoice?.name || '',
+            assignedChoice?.inn || '',
+            assignedChoice?.phone || '',
+            assignedDeal?.title || '',
+            assignedDeal?.client_name || '',
+            assignedContract?.number || '',
+            assignedContract?.title || '',
+            assignedContract?.client || '',
+            Number(doc.contract_id || 0) > 0 ? `договор ${Number(doc.contract_id)}` : '',
         ].join(' ').toLowerCase();
         return haystack.includes(query);
     });
     filtered.sort((a, b) => (b.priority === 'high' ? 1 : 0) - (a.priority === 'high' ? 1 : 0));
     return filtered;
 }
+
+window.clearDocumentRegistrySearch = function() {
+    const input = document.getElementById('documentRegistrySearch');
+    if (input) input.value = '';
+    renderDocuments();
+};
 
 function setDocumentsExtraFilter(filter = 'all') {
     documentsExtraFilter = filter || 'all';
@@ -194,19 +568,19 @@ function registerDocumentsSavedFilters() {
         getPayload: () => ({
             currentDocTab,
             documentsExtraFilter,
-            query: document.getElementById('searchInput')?.value || '',
+            query: document.getElementById('documentRegistrySearch')?.value || '',
         }),
         applyPayload: payload => {
             currentDocTab = payload.currentDocTab || 'incoming';
             documentsExtraFilter = payload.documentsExtraFilter || 'all';
-            const searchInput = document.getElementById('searchInput');
+            const searchInput = document.getElementById('documentRegistrySearch');
             if (searchInput) searchInput.value = payload.query || '';
             switchDocTab(currentDocTab);
         },
         presets: [
-            { id: 'documentsExtraAllBtn', key: 'all', label: 'Все', payload: () => ({ currentDocTab, documentsExtraFilter: 'all', query: document.getElementById('searchInput')?.value || '' }) },
-            { id: 'documentsExtraNoScanBtn', key: 'no_scan', label: 'Без скана', payload: () => ({ currentDocTab, documentsExtraFilter: 'no_scan', query: document.getElementById('searchInput')?.value || '' }) },
-            { id: 'documentsExtraHighPriorityBtn', key: 'high_priority', label: 'Приоритетные', payload: () => ({ currentDocTab, documentsExtraFilter: 'high_priority', query: document.getElementById('searchInput')?.value || '' }) },
+            { id: 'documentsExtraAllBtn', key: 'all', label: 'Все', payload: () => ({ currentDocTab, documentsExtraFilter: 'all', query: document.getElementById('documentRegistrySearch')?.value || '' }) },
+            { id: 'documentsExtraNoScanBtn', key: 'no_scan', label: 'Без скана', payload: () => ({ currentDocTab, documentsExtraFilter: 'no_scan', query: document.getElementById('documentRegistrySearch')?.value || '' }) },
+            { id: 'documentsExtraHighPriorityBtn', key: 'high_priority', label: 'Приоритетные', payload: () => ({ currentDocTab, documentsExtraFilter: 'high_priority', query: document.getElementById('documentRegistrySearch')?.value || '' }) },
         ],
         updateState: updateDocumentsFilterButtons,
     });
@@ -226,6 +600,7 @@ function getSelectedDocumentRows() {
 
 function updateDocumentsBulkBar(visibleDocs = getFilteredDocuments()) {
     const summary = document.getElementById('documentsBulkSummary');
+    const toolbar = document.getElementById('documentsBulkToolbar');
     const selectAllCheckbox = document.getElementById('documentsSelectAllCheckbox');
     const selectedCount = selectedDocuments.size;
     const visibleCount = visibleDocs.length;
@@ -234,6 +609,7 @@ function updateDocumentsBulkBar(visibleDocs = getFilteredDocuments()) {
             ? `Выделено документов: ${selectedCount}`
             : `Выделение: 0 документов`;
     }
+    if (toolbar) toolbar.hidden = selectedCount === 0;
     if (selectAllCheckbox) {
         selectAllCheckbox.checked = visibleCount > 0 && visibleDocs.every(doc => selectedDocuments.has(Number(doc.id)));
         selectAllCheckbox.indeterminate = visibleCount > 0 && !selectAllCheckbox.checked && visibleDocs.some(doc => selectedDocuments.has(Number(doc.id)));
@@ -545,6 +921,7 @@ function downloadDocumentPackageZip(packageId) {
 function buildDocumentUpdatePayload(doc, overrides = {}) {
     return {
         type: doc.type,
+        document_kind_code: doc.document_kind_code || 'other',
         number: doc.number,
         d_date: doc.d_date || '',
         correspondent: doc.correspondent || '',
@@ -557,9 +934,14 @@ function buildDocumentUpdatePayload(doc, overrides = {}) {
         executor_name: doc.executor_name || '',
         subject: doc.subject || '',
         status: doc.status || 'registered',
+        client_id: Number(doc.client_id || 0),
+        client_source: doc.client_source || '',
+        client_source_id: Number(doc.client_source_id || 0),
+        deal_id: Number(doc.deal_id || 0),
         project_id: Number(doc.project_id || 0),
         contract_id: Number(doc.contract_id || 0),
         object_id: Number(doc.object_id || 0),
+        production_order_id: Number(doc.production_order_id || 0),
         parent_id: Number(doc.parent_id || 0),
         priority: doc.priority || 'normal',
         resolution: doc.resolution || '',
@@ -634,20 +1016,16 @@ function isRecentDocument(row) {
 function renderDocumentsOpsCounters(rows) {
     const mount = document.getElementById('documentsOpsCounters');
     if (!mount) return;
-    const incoming = rows.filter(item => String(item.type || '').toLowerCase() === 'incoming').length;
-    const outgoing = rows.filter(item => String(item.type || '').toLowerCase() === 'outgoing').length;
-    const internal = rows.filter(item => String(item.type || '').toLowerCase().startsWith('internal')).length;
     const controlled = rows.filter(item => item.resolution_task_id || item.resolution_deadline || item.resolution_assignee).length;
     const overdue = rows.filter(isDocumentOverdue).length;
     const needsAnswer = rows.filter(item => String(item.type || '').toLowerCase() === 'incoming' && !isDocumentClosedState(item.status) && (item.resolution_deadline || item.resolution_task_id)).length;
     const fresh = rows.filter(isRecentDocument).length;
+    const withoutFile = rows.filter(item => !item.file_url && item.status !== 'draft').length;
     const counters = [
-        { label: 'Новые письма', value: fresh, note: 'документы за 7 дней', tone: 'accent' },
-        { label: 'На контроле', value: controlled, note: 'есть резолюция или поручение', tone: controlled ? 'warning' : 'neutral' },
-        { label: 'Просрочено', value: overdue, note: 'срок ответа уже прошёл', tone: overdue ? 'critical' : 'positive' },
-        { label: 'Требует ответа', value: needsAnswer, note: 'входящие с контрольным сроком', tone: needsAnswer ? 'warning' : 'neutral' },
-        { label: 'Входящие', value: incoming, note: 'по текущему фильтру', tone: 'neutral' },
-        { label: 'Исходящие / внутренние', value: `${outgoing} / ${internal}`, note: 'операционный баланс', tone: 'neutral' },
+        { label: 'Добавлено недавно', value: fresh, note: 'за последние 7 дней', tone: 'accent' },
+        { label: 'Нужно выполнить', value: controlled || needsAnswer, note: 'есть ответственный или срок', tone: controlled || needsAnswer ? 'warning' : 'positive' },
+        { label: 'Срок уже прошёл', value: overdue, note: 'требует внимания', tone: overdue ? 'critical' : 'positive' },
+        { label: 'Нет файла', value: withoutFile, note: 'нужно прикрепить скан или PDF', tone: withoutFile ? 'warning' : 'positive' },
     ];
     mount.innerHTML = counters.map(item => `
         <article class="documents-ops-counter documents-ops-counter--${item.tone}">
@@ -846,10 +1224,17 @@ window.quickAssignDocument = async function(id) {
 window.quickDocumentStatus = async function(id) {
     const row = findDocumentRow(id);
     if (!row) return;
-    const nextStatus = await customPrompt('Статус документа: draft / registered / signed / archived', row.status || 'registered');
+    const statusOptions = [
+        { value: 'draft', label: 'Черновик' },
+        { value: 'registered', label: 'Зарегистрирован' },
+        { value: 'signed', label: 'Подписан' },
+        { value: 'archived', label: 'В архиве' },
+    ];
+    const currentStatus = statusOptions.some(item => item.value === row.status) ? row.status : 'registered';
+    const nextStatus = await customSelectPrompt('Выберите новый статус документа', statusOptions, currentStatus);
     if (nextStatus === null) return;
     await persistDocumentQuickUpdate(id, {
-        status: String(nextStatus || '').trim() || row.status || 'registered',
+        status: nextStatus,
     }, 'Статус документа обновлён');
 };
 
@@ -988,6 +1373,126 @@ window.openDocumentLinkedContext = function(id) {
     customAlert('У документа пока нет привязки к проекту или договору.');
 };
 
+function documentPreviewLabel(value, fallback = 'Не указано') {
+    const text = String(value ?? '').trim();
+    return text || fallback;
+}
+
+function documentTypeTitle(value) {
+    const map = {
+        incoming: 'Входящий документ',
+        outgoing: 'Исходящий документ',
+        internal: 'Внутренний документ',
+        contract: 'Договор',
+        act: 'Акт',
+        invoice: 'Счёт',
+        internal_order: 'Приказ',
+        internal_memo: 'Служебная записка',
+        internal_reg: 'Регламент',
+    };
+    return map[String(value || '').trim()] || documentPreviewLabel(value, 'Документ');
+}
+
+function documentStatusTitle(value) {
+    const map = {
+        draft: 'Черновик',
+        registered: 'Зарегистрирован',
+        signed: 'Подписан',
+        archived: 'В архиве',
+        closed: 'Закрыт',
+        done: 'Выполнен',
+    };
+    return map[String(value || '').trim()] || documentPreviewLabel(value, 'Статус не указан');
+}
+
+function documentPreviewRow(label, value) {
+    return `
+        <div class="document-preview__row">
+            <span>${documentPackageEscape(label)}</span>
+            <strong>${documentPackageEscape(documentPreviewLabel(value))}</strong>
+        </div>
+    `;
+}
+
+window.openDocumentPreview = function(id) {
+    const row = findDocumentRow(id);
+    if (!row) {
+        return customAlert('Документ не найден.');
+    }
+    const assignedChoice = documentClientChoiceByReference(row.client_source, row.client_source_id, row.client_id, row.correspondent || row.sender_name || row.recipient_name || '');
+    const assignedClient = assignedChoice || documentClientById(row.client_id);
+    const assignedDeal = (typeof crmDealsDB !== 'undefined' && Array.isArray(crmDealsDB) ? crmDealsDB : []).find(deal => Number(deal.id || 0) === Number(row.deal_id || 0)) || null;
+    const assignedContract = documentContractChoices().find(contract => Number(contract.id || 0) === Number(row.contract_id || 0)) || null;
+    const assignedOrder = (typeof productionOrdersDB !== 'undefined' && Array.isArray(productionOrdersDB) ? productionOrdersDB : []).find(order => Number(order.id || 0) === Number(row.production_order_id || 0)) || null;
+    const fileUrl = String(row.file_url || '').trim();
+    const modal = document.getElementById('genericModal');
+    if (!modal) {
+        if (fileUrl) window.open(fileUrl, '_blank', 'noopener');
+        else customAlert('Карточка документа есть, но файл ещё не загружен.');
+        return;
+    }
+    const card = modal.querySelector('.modal-card');
+    if (card) card.style.maxWidth = '820px';
+    document.getElementById('genModalTitle').innerText = row.number || `Документ #${row.id}`;
+    document.getElementById('genModalBody').innerHTML = `
+        <div class="document-preview">
+            <div class="document-preview__hero">
+                <div>
+                    <span>${documentPackageEscape(documentTypeTitle(row.type))}</span>
+                    <h3>${documentPackageEscape(row.subject || row.correspondent || row.number || `Документ #${row.id}`)}</h3>
+                    <p>${documentPackageEscape(row.correspondent || row.sender_name || row.recipient_name || 'Корреспондент не указан')}</p>
+                </div>
+                <em>${documentPackageEscape(documentStatusTitle(row.status))}</em>
+            </div>
+            <div class="document-preview__grid">
+                ${documentPreviewRow('Номер', row.number || `#${row.id}`)}
+                ${documentPreviewRow('Дата', row.d_date)}
+                ${documentPreviewRow('От кого', row.sender_name || row.correspondent)}
+                ${documentPreviewRow('Кому', row.recipient_name || row.correspondent)}
+                ${documentPreviewRow('Ответственный', row.executor_name || row.resolution_assignee)}
+                ${documentPreviewRow('Срок ответа', row.resolution_deadline)}
+                ${documentPreviewRow('Клиент', assignedClient ? `${assignedClient.name || 'Без названия'}${assignedChoice?.source === 'bitrix24' ? ' · Bitrix24' : ' · CRM'}` : '')}
+                ${documentPreviewRow('Договор', assignedContract ? documentContractLabel(assignedContract) : '')}
+                ${documentPreviewRow('Сделка', assignedDeal ? (assignedDeal.title || assignedDeal.client_name || `#${assignedDeal.id}`) : '')}
+                ${documentPreviewRow('Заказ КБ', assignedOrder ? (assignedOrder.order_name || assignedOrder.project_name || `Заказ #${assignedOrder.id}`) : '')}
+                ${documentPreviewRow('Файл', fileUrl ? 'Файл прикреплён' : 'Файл ещё не загружен')}
+            </div>
+            <div class="document-preview__note">
+                <span>Комментарий / резолюция</span>
+                <p>${documentPackageEscape(documentPreviewLabel(row.resolution || row.comment, 'Пока нет комментария.'))}</p>
+            </div>
+        </div>
+    `;
+    document.getElementById('genModalFooter').innerHTML = `
+        ${fileUrl ? '<button class="btn-primary" id="docPreviewOpenFile">Открыть файл</button>' : '<button class="btn-primary" id="docPreviewUploadFile">Загрузить файл</button>'}
+        ${Number(row.contract_id || 0) > 0 ? '<button class="btn-secondary" id="docPreviewOpenContract">Открыть договор</button>' : ''}
+        <button class="btn-secondary" id="docPreviewEdit">Редактировать</button>
+        <button class="btn-secondary" id="docPreviewClose">Закрыть</button>
+    `;
+    modal.style.display = 'flex';
+    const close = () => {
+        modal.style.display = 'none';
+        if (card) card.style.maxWidth = '';
+    };
+    const openFileBtn = document.getElementById('docPreviewOpenFile');
+    if (openFileBtn) openFileBtn.onclick = () => window.open(fileUrl, '_blank', 'noopener');
+    const uploadBtn = document.getElementById('docPreviewUploadFile');
+    if (uploadBtn) uploadBtn.onclick = () => {
+        close();
+        uploadDocFile(Number(row.id || 0));
+    };
+    const openContractBtn = document.getElementById('docPreviewOpenContract');
+    if (openContractBtn) openContractBtn.onclick = () => {
+        close();
+        openContractCard(Number(row.contract_id || 0));
+    };
+    document.getElementById('docPreviewEdit').onclick = () => {
+        close();
+        editDocument(Number(row.id || 0));
+    };
+    document.getElementById('docPreviewClose').onclick = close;
+};
+
 function exportDocumentsToExcel(rows, suffix = 'selection') {
     if (typeof XLSX === 'undefined') {
         return customAlert('Модуль экспорта пока не загрузился. Обновите страницу и попробуйте ещё раз.');
@@ -1083,19 +1588,19 @@ function renderDocuments() {
     const filtered = getFilteredDocuments();
     updateDocumentsBulkBar(filtered);
     renderDocumentPackagesMount();
-    renderDocumentsOpsCounters(filtered);
+    renderDocumentsOpsCounters(Array.isArray(documentsDB) ? documentsDB : []);
     renderTenderDirectorMount(filtered);
     renderReceptionDirectorMount(filtered);
 
     // --- Empty state ---
     if (filtered.length === 0) {
-        const query = document.getElementById('searchInput')?.value?.trim();
+        const query = document.getElementById('documentRegistrySearch')?.value?.trim();
         const title = query ? 'Документы по запросу не найдены.' : 'Документы пока пусты.';
         const text = query
             ? 'Смени вкладку или очисти поиск, чтобы вернуться к полному реестру.'
             : 'Зарегистрируй первый документ, чтобы здесь появился рабочий реестр.';
         const actions = query
-            ? `<button class="krd-btn krd-btn--outline krd-btn--sm" onclick="document.getElementById('searchInput').value=''; renderDocuments()">Сбросить поиск</button>`
+            ? `<button class="krd-btn krd-btn--outline krd-btn--sm" onclick="clearDocumentRegistrySearch()">Сбросить поиск</button>`
             : `<button class="krd-btn krd-btn--primary krd-btn--sm" onclick="openDocumentModalWithPreset({ type: currentDocTab === 'drafts' ? 'incoming' : currentDocTab })">Зарегистрировать документ</button>`;
         container.innerHTML = `
             <div class="krd-empty">
@@ -1124,9 +1629,13 @@ function renderDocuments() {
 
     const renderRows = () => filtered.map(doc => {
         const id = Number(doc.id || 0);
+        const assignedChoice = documentClientChoiceByReference(doc.client_source, doc.client_source_id, doc.client_id, doc.correspondent || doc.sender_name || doc.recipient_name || '');
+        const assignedClient = assignedChoice || documentClientById(doc.client_id);
+        const assignedDeal = (typeof crmDealsDB !== 'undefined' && Array.isArray(crmDealsDB) ? crmDealsDB : []).find(deal => Number(deal.id || 0) === Number(doc.deal_id || 0)) || null;
         const hasFile = !!doc.file_url;
         const status = statusMap[doc.status] || statusMap.archived;
         const subtype = typeLabels[doc.type];
+        const kindLabel = documentKindLabel(inferredDocumentKindCode(doc));
         const isHighPriority = doc.priority === 'high';
         const favBtn = typeof renderEntityFavoriteButton === 'function'
             ? renderEntityFavoriteButton('document', doc.id, doc.number || doc.subject || `Документ #${doc.id}`, `${doc.type || ''} · ${doc.status || ''} · ${doc.correspondent || ''}`, 'documents', 'renderDocuments') : '';
@@ -1138,6 +1647,8 @@ function renderDocuments() {
             : '';
         const routeMeta = [doc.sender_name, doc.recipient_name].filter(Boolean).join(' -> ');
         const linkMeta = [
+            assignedClient ? `Клиент: ${esc(assignedClient.name || 'Без названия')}` : '',
+            assignedDeal ? `Сделка: ${esc(assignedDeal.title || assignedDeal.client_name || `№${assignedDeal.id}`)}` : '',
             Number(doc.contract_id || 0) > 0 ? `Договор #${esc(doc.contract_id)}` : '',
             Number(doc.project_id || 0) > 0 ? `Проект #${esc(doc.project_id)}` : '',
             Number(doc.object_id || 0) > 0 ? `Объект #${esc(doc.object_id)}` : '',
@@ -1158,14 +1669,15 @@ function renderDocuments() {
             : '';
 
         // right-side actions
+        const previewAction = `<button class="krd-btn krd-btn--primary krd-btn--xs" onclick="openDocumentPreview(${id})">Просмотр</button>`;
         const fileAction = hasFile
             ? `<a class="krd-btn krd-btn--outline krd-btn--xs" href="${esc(doc.file_url)}" target="_blank" rel="noopener">
                 <svg class="krd-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                Открыть
+                Открыть файл
               </a>`
             : `<button class="krd-btn krd-btn--outline krd-btn--xs" onclick="uploadDocFile(${id})">
                 <svg class="krd-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                Прикрепить
+                Добавить файл
               </button>`;
 
         const newVersionBtn = hasFile
@@ -1185,8 +1697,11 @@ function renderDocuments() {
                     ${favBtn}${watchBtn}
                     <span>${esc(doc.number || `#${id}`)}</span>
                     ${versionBadge}
+                    <span class="krd-badge krd-badge--primary krd-badge--sm">${esc(kindLabel)}</span>
                     ${subtype ? `<span class="krd-badge ${subtype.cls} krd-badge--sm">${esc(subtype.label)}</span>` : ''}
                     ${isHighPriority ? `<span class="krd-badge krd-badge--danger krd-badge--sm">Приоритет</span>` : ''}
+                    ${assignedClient ? `<span class="krd-badge krd-badge--success krd-badge--sm">Для клиента: ${esc(assignedClient.name || 'Без названия')} · ${assignedChoice?.source === 'bitrix24' ? 'Bitrix24' : 'CRM'}</span>` : ''}
+                    ${assignedDeal ? `<span class="krd-badge krd-badge--primary krd-badge--sm">В сделке</span>` : ''}
                 </div>
                 <div class="krd-file-row__name-meta">
                     <span>${esc(doc.subject || 'Без темы')}</span>
@@ -1209,16 +1724,23 @@ function renderDocuments() {
             <div class="krd-file-row__status"><span class="krd-badge ${status.cls}">${esc(status.label)}</span></div>
             <div class="krd-file-row__actions krd-file-row__actions--wrap">
                 <input type="checkbox" ${selectedDocuments.has(id) ? 'checked' : ''} onchange="toggleDocumentSelection(${id}, this.checked)" aria-label="Выделить документ">
+                ${previewAction}
                 ${fileAction}
-                ${newVersionBtn}
-                <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="quickAssignDocument(${id})">Назначить</button>
-                <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="quickDocumentStatus(${id})">Статус</button>
-                <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="quickDocumentComment(${id})">Коммент</button>
-                <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="quickDocumentTask(${id})">Задача</button>
-                <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="quickDocumentReminder(${id})">Срок</button>
-                <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="openDocumentLinkedContext(${id})">Открыть</button>
-                <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="editDocument(${id})">Изменить</button>
-                <button class="krd-btn krd-btn--danger-ghost krd-btn--xs" onclick="deleteDocument(${id})">Удалить</button>
+                ${Number(doc.contract_id || 0) > 0 ? `<button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="openContractCard(${Number(doc.contract_id || 0)})">Открыть договор</button>` : ''}
+                <button class="krd-btn krd-btn--outline krd-btn--xs" onclick="quickAssignDocument(${id})">Назначить ответственного</button>
+                <details class="document-row-menu">
+                    <summary class="krd-btn krd-btn--ghost krd-btn--xs">Ещё</summary>
+                    <div class="document-row-menu__items">
+                        ${newVersionBtn}
+                        <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="quickDocumentStatus(${id})">Изменить статус</button>
+                        <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="quickDocumentComment(${id})">Добавить комментарий</button>
+                        <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="quickDocumentTask(${id})">Создать задачу</button>
+                        <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="quickDocumentReminder(${id})">Установить срок</button>
+                        ${Number(doc.contract_id || 0) > 0 ? '' : `<button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="openDocumentLinkedContext(${id})">Открыть проект</button>`}
+                        <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="editDocument(${id})">Изменить данные</button>
+                        <button class="krd-btn krd-btn--danger-ghost krd-btn--xs" onclick="deleteDocument(${id})">Удалить документ</button>
+                    </div>
+                </details>
             </div>
         </div>
         <div class="krd-file-history" id="docVersions-${id}" data-document-id="${id}" hidden></div>`;
@@ -1236,6 +1758,7 @@ async function submitDocument(status = 'registered') {
     if (typeof bindFormFieldErrorCleanup === 'function') bindFormFieldErrorCleanup('documentForm');
     if (typeof clearFormErrors === 'function') clearFormErrors('createDocModal');
     const type = document.getElementById('docType').value;
+    const documentKindCode = document.getElementById('docKind')?.value || '';
     const number = document.getElementById('docNumber').value.trim();
     const dDate = document.getElementById('docDate').value.trim();
     const senderName = document.getElementById('docSenderName')?.value.trim() || '';
@@ -1247,13 +1770,21 @@ async function submitDocument(status = 'registered') {
     const executorName = document.getElementById('docExecutorName')?.value.trim() || '';
     const corr = document.getElementById('docCorrespondent').value.trim();
     const subj = document.getElementById('docSubject').value.trim();
-    const projectId = parseInt(document.getElementById('docProjectId')?.value || '0', 10) || 0;
+    const clientId = parseInt(document.getElementById('docClientId')?.value || '0', 10) || 0;
+    const clientSource = document.getElementById('docClientSource')?.value || '';
+    const clientSourceId = parseInt(document.getElementById('docClientSourceId')?.value || '0', 10) || 0;
+    const dealId = parseInt(document.getElementById('docDealId')?.value || '0', 10) || 0;
+    const contractId = parseInt(document.getElementById('docContractId')?.value || '0', 10) || 0;
+    const productionOrderId = parseInt(document.getElementById('docProductionOrderId')?.value || '0', 10) || 0;
     const parentId = parseInt(document.getElementById('docParentId')?.value || '0', 10) || 0;
     const priority = document.getElementById('docPriority')?.checked ? 'high' : 'normal';
+    const file = document.getElementById('docFile')?.files?.[0] || null;
 
     const errors = [];
+    if (!documentKindCode) errors.push({ field: 'docKind', message: 'Выберите вид документа.' });
     if (!number) errors.push({ field: 'docNumber', message: 'Укажите номер документа.' });
     if (!subj) errors.push({ field: 'docSubject', message: 'Укажите тему документа.' });
+    if (!file) errors.push({ field: 'docFile', message: 'Прикрепите файл документа.' });
     if (errors.length) {
         if (typeof showFormErrors === 'function') showFormErrors(errors, 'createDocModal');
         return;
@@ -1261,6 +1792,7 @@ async function submitDocument(status = 'registered') {
 
     const res = await apiCall('/documents', 'POST', {
         type,
+        document_kind_code: documentKindCode,
         number,
         d_date: dDate,
         correspondent: corr,
@@ -1273,17 +1805,29 @@ async function submitDocument(status = 'registered') {
         executor_name: executorName,
         subject: subj,
         status,
-        project_id: projectId,
+        client_id: clientId,
+        client_source: clientSource,
+        client_source_id: clientSourceId,
+        deal_id: dealId,
+        contract_id: contractId,
+        production_order_id: productionOrderId,
         parent_id: parentId,
         priority,
     });
     if (!res || res.error) {
-        return customAlert("Не удалось сохранить документ. Проверьте заполнение полей и попробуйте ещё раз.");
+        return customAlert(res?.message || "Не удалось сохранить документ. Проверьте заполнение полей и попробуйте ещё раз.");
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    const uploadRes = await apiCall(`/documents/${Number(res.id || 0)}/upload`, 'POST', formData);
+    if (!uploadRes || uploadRes.error) {
+        await apiCall(`/documents/${Number(res.id || 0)}`, 'DELETE');
+        return customAlert(uploadRes?.message || 'Файл не загрузился. Карточка не создана — выберите файл и попробуйте ещё раз.');
     }
     if (typeof markWorkflowFocus === 'function') markWorkflowFocus('document', Number(res.id || 0));
     if (typeof clearFormDraft === 'function') clearFormDraft('document');
 
-    document.getElementById('createDocModal').style.display = 'none';
+    closeDocumentCreateModal();
     document.getElementById('docNumber').value = '';
     document.getElementById('docDate').value = '';
     if (document.getElementById('docSenderName')) document.getElementById('docSenderName').value = '';
@@ -1295,11 +1839,28 @@ async function submitDocument(status = 'registered') {
     if (document.getElementById('docExecutorName')) document.getElementById('docExecutorName').value = '';
     document.getElementById('docCorrespondent').value = '';
     document.getElementById('docSubject').value = '';
+    if (document.getElementById('docClientSearch')) document.getElementById('docClientSearch').value = '';
+    if (document.getElementById('docClientId')) document.getElementById('docClientId').value = '0';
+    if (document.getElementById('docClientSource')) document.getElementById('docClientSource').value = '';
+    if (document.getElementById('docClientSourceId')) document.getElementById('docClientSourceId').value = '0';
+    if (document.getElementById('docContractSearch')) document.getElementById('docContractSearch').value = '';
+    if (document.getElementById('docContractId')) document.getElementById('docContractId').value = '0';
+    if (document.getElementById('docProductionOrderSearch')) document.getElementById('docProductionOrderSearch').value = '';
+    if (document.getElementById('docProductionOrderId')) document.getElementById('docProductionOrderId').value = '0';
     if (document.getElementById('docPriority')) document.getElementById('docPriority').checked = false;
-    if (document.getElementById('docProjectId')) document.getElementById('docProjectId').value = '0';
+    if (document.getElementById('docFile')) document.getElementById('docFile').value = '';
+    updateDocumentFileName();
+    if (document.getElementById('docDealId')) document.getElementById('docDealId').innerHTML = '<option value="0">Сначала выберите клиента</option>';
     if (document.getElementById('docParentId')) document.getElementById('docParentId').value = '0';
 
-    await loadDocuments();
+    await Promise.all([
+        loadDocuments(),
+        dealId > 0 && typeof loadCrmDeals === 'function' ? loadCrmDeals() : Promise.resolve(),
+    ]);
+    if (dealId > 0 && typeof openDealEditor === 'function' && Number(editingDealId || 0) === dealId) {
+        openDealEditor(dealId);
+        if (typeof switchDealEditorStep === 'function') switchDealEditorStep(5, false);
+    }
     showToast('Канцелярия', status === 'draft' ? 'Документ сохранён в черновики' : 'Документ зарегистрирован');
     switchDocTab(status === 'draft' ? 'drafts' : (type.startsWith('internal_') ? 'internal' : type));
     if (typeof scrollToWorkflowTarget === 'function') scrollToWorkflowTarget('[data-document-id].workflow-row-highlight, [data-document-id]');
@@ -1351,6 +1912,7 @@ async function deleteDocument(id) {
 
 window.generateDocNumber = function() {
     const type = document.getElementById('docType')?.value || 'incoming';
+    const kind = document.getElementById('docKind')?.value || '';
     const dateValue = document.getElementById('docDate')?.value.trim() || '';
     const parts = dateValue ? dateValue.split('.') : [];
     const now = new Date();
@@ -1358,12 +1920,31 @@ window.generateDocNumber = function() {
     const month = parts[1] || String(now.getMonth() + 1).padStart(2, '0');
     const year = (parts[2] || String(now.getFullYear())).slice(-2);
     const typePrefix = {
+        commercial_proposal: 'КП',
+        technical_proposal: 'ТП',
+        contract: 'ДОГ',
+        contract_specification: 'СПЕЦ',
+        invoice: 'СЧ',
+        act_upd: 'АКТ',
+        technical_task: 'ТЗ',
+        drawing: 'ЧЕРТ',
+        product_specification: 'СИ',
+        technology_card: 'ТК',
+        production_order: 'ПЗ',
+        purchase_request: 'ЗЗ',
+        supplier_order: 'ЗП',
+        waybill: 'НАКЛ',
+        quality_act: 'ОТК',
+        service_act: 'СЕРВ',
+        internal_memo: 'СЗ',
+        other: 'ДОК',
+    }[kind] || ({
         incoming: 'ВХ',
         outgoing: 'ИСХ',
         internal_order: 'ПР',
         internal_memo: 'СЗ',
         internal_reg: 'РЕГ',
-    }[type] || 'DOC';
+    }[type] || 'ДОК');
     const docPrefix = `${typePrefix}-${year}${month}${day}`;
     const siblings = documentsDB.filter(doc => String(doc.number || '').startsWith(docPrefix)).length + 1;
     const docNumberInput = document.getElementById('docNumber');

@@ -195,7 +195,7 @@ def create_task_record(*, title: str, description: str, author: str, executor: s
                 id, title, description, author, executor, deadline, status, created_at, recurrence, priority, project_id, history, chat, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (task_id, title, description, author, executor, deadline, "active", now_human, recurrence, priority, project_id, "[]", "[]", now_ts),
+            (task_id, title, description, author, executor, deadline, "assigned", now_human, recurrence, priority, project_id, "[]", "[]", now_ts),
         )
         conn.commit()
         return task_id
@@ -253,6 +253,20 @@ def update_task_record(
         values.append(task_id)
         c.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id=?", tuple(values))
         conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_task_record(task_id: int):
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute("UPDATE documents SET resolution_task_id=0 WHERE resolution_task_id=?", (task_id,))
+        c.execute("UPDATE document_linked_tasks SET task_id=0 WHERE task_id=?", (task_id,))
+        c.execute("DELETE FROM tasks WHERE id=?", (task_id,))
+        deleted = c.rowcount > 0
+        conn.commit()
+        return deleted
     finally:
         conn.close()
 

@@ -2,10 +2,12 @@ let contractRegistryDB = [];
 let businessObjectsRegistryDB = [];
 let contract360DB = null;
 let currentContract360Id = 0;
-let currentContract360Tab = 'overview';
+let currentContract360Tab = 'registry';
+let contract360Editing = false;
 let contractRegistrySelection = new Set();
 let contractRegistryFilters = {
     search: '',
+    status: '',
     folder: '',
     type: '',
     vat: '',
@@ -27,6 +29,9 @@ function contractStateLabel(value) {
         planned: 'запланирован',
         approved: 'согласован',
         pending: 'на согласовании',
+        paused: 'приостановлен',
+        terminated: 'расторгнут',
+        archived: 'в архиве',
         processing: 'в обработке',
         queued: 'в очереди',
         retry: 'повтор',
@@ -188,6 +193,7 @@ function contractRegistrySortRows(rows = []) {
 function getContractRegistryFiltersFromDom() {
     contractRegistryFilters = {
         search: document.getElementById('contractRegistrySearch')?.value?.trim() || '',
+        status: document.getElementById('contractRegistryStatus')?.value || '',
         folder: document.getElementById('contractRegistryFolder')?.value?.trim() || '',
         type: document.getElementById('contractRegistryType')?.value || '',
         vat: document.getElementById('contractRegistryVat')?.value || '',
@@ -201,6 +207,7 @@ function getFilteredContractRegistryRows() {
     const search = String(contractRegistryFilters.search || '').toLowerCase();
     const folder = String(contractRegistryFilters.folder || '').toLowerCase();
     return contractRegistrySortRows((contractRegistryDB || []).filter(row => {
+        if (contractRegistryFilters.status && String(row.status || '') !== contractRegistryFilters.status) return false;
         if (contractRegistryFilters.type && String(row.contract_type || '') !== contractRegistryFilters.type) return false;
         if (contractRegistryFilters.vat && String(row.vat_mode || '') !== contractRegistryFilters.vat) return false;
         if (contractRegistryFilters.risk && String(row.risk_level || '') !== contractRegistryFilters.risk) return false;
@@ -250,6 +257,7 @@ function fillContractRegistryPresetSelect() {
 function fillContractRegistryFiltersFromState() {
     const map = {
         contractRegistrySearch: contractRegistryFilters.search || '',
+        contractRegistryStatus: contractRegistryFilters.status || '',
         contractRegistryFolder: contractRegistryFilters.folder || '',
         contractRegistryType: contractRegistryFilters.type || '',
         contractRegistryVat: contractRegistryFilters.vat || '',
@@ -334,16 +342,13 @@ function renderContractRegistryCounters(rows = []) {
     const mount = document.getElementById('contract360RegistryCounters');
     if (!mount) return;
     const overdue = rows.filter(isContractOverdue).length;
-    const critical = rows.filter(item => String(item.risk_level || '').toLowerCase() === 'critical').length;
     const approval = rows.filter(item => ['pending', 'approval', 'review'].includes(String(item.status || '').toLowerCase())).length;
     const active = rows.filter(item => String(item.status || '').toLowerCase() === 'active').length;
-    const amount = rows.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const counters = [
-        { label: 'Активные договоры', value: active, note: 'идут в исполнении', tone: active ? 'positive' : 'neutral' },
-        { label: 'Просрочка', value: overdue, note: 'срок окончания уже прошёл', tone: overdue ? 'critical' : 'positive' },
-        { label: 'Ждут согласования', value: approval, note: 'нужна юридическая или внутренняя виза', tone: approval ? 'warning' : 'neutral' },
-        { label: 'Критичный риск', value: critical, note: 'требует внимания директора', tone: critical ? 'critical' : 'neutral' },
-        { label: 'Портфель суммы', value: formatMoney(amount), note: `${rows.length} строк в реестре`, tone: 'accent' },
+        { label: 'Всего договоров', value: rows.length, note: 'в текущем списке', tone: 'accent' },
+        { label: 'Действуют', value: active, note: 'идут в исполнении', tone: active ? 'positive' : 'neutral' },
+        { label: 'На согласовании', value: approval, note: 'ожидают решения', tone: approval ? 'warning' : 'neutral' },
+        { label: 'Просрочены', value: overdue, note: 'нужно проверить срок', tone: overdue ? 'critical' : 'positive' },
     ];
     mount.innerHTML = counters.map(item => `
         <article class="contract360-registry-counter contract360-registry-counter--${item.tone}">
@@ -368,7 +373,6 @@ window.switchContract360Tab = function(tabId = 'overview') {
         'tasks',
         'costs',
         'access',
-        'history',
         'registry',
     ];
     tabs.forEach(tab => {
@@ -385,6 +389,15 @@ window.switchContract360Tab = function(tabId = 'overview') {
             panel.classList.toggle('contract360-panel--active', active);
         }
     });
+    const cardHeader = document.getElementById('contract360CardHeader');
+    const metrics = document.getElementById('contract360Metrics');
+    const showCardContext = currentContract360Tab !== 'registry';
+    if (cardHeader) cardHeader.style.display = showCardContext ? '' : 'none';
+    if (metrics) metrics.style.display = showCardContext ? '' : 'none';
+    if (currentContract360Tab !== 'overview' && contract360Editing) {
+        contract360Editing = false;
+        applyContract360EditMode();
+    }
 };
 
 async function loadContractRegistry(projectId = 0, clientId = 0) {
@@ -430,71 +443,47 @@ function populateContractCardSelects(contract) {
 function renderContractRegistry() {
     const registry = document.getElementById('contract360Registry');
     if (!registry) return;
-    syncContractRegistrySelection();
     const rows = getFilteredContractRegistryRows();
     renderContractRegistryCounters(rows);
-    updateContractRegistrySelectionMeta(rows);
-    const allSelected = rows.length > 0 && rows.every(row => contractRegistrySelection.has(Number(row.id || 0)));
     registry.innerHTML = `
         <div class="table-shell contract-registry-table-shell">
-            <table class="admin-table admin-table--dense crm-registry-table">
+            <table class="admin-table crm-registry-table contract360-simple-table">
                 <thead>
                     <tr>
-                        <th style="width:44px;"><input type="checkbox" ${allSelected ? 'checked' : ''} onchange="toggleContractRegistryAll(this.checked)"></th>
                         <th>Договор</th>
                         <th>Контрагент</th>
-                        <th>Папка / тип</th>
-                        <th>Период</th>
+                        <th>Срок действия</th>
                         <th class="is-num">Сумма</th>
-                        <th>НДС</th>
-                        <th>Риск</th>
                         <th>Статус</th>
-                        <th>Менеджер</th>
-                        <th>Быстрые действия</th>
+                        <th>Ответственный</th>
+                        <th>Действие</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${rows.map(contract => `
                         <tr class="${Number(contract.id) === Number(currentContract360Id) ? 'is-selected' : ''}" onclick="openContractCard(${contract.id})">
-                            <td onclick="event.stopPropagation()">
-                                <input type="checkbox" ${contractRegistrySelection.has(Number(contract.id || 0)) ? 'checked' : ''} onchange="toggleContractRegistryRow(${contract.id}, this.checked)">
-                            </td>
                             <td class="crm-title-cell">
                                 <div class="contract-registry-title-cell">
                                     <strong>${contract.contract_number || 'Без номера'}</strong>
-                                    <div class="table-subtext">${contract.title || 'Без названия'}</div>
+                                    <div class="table-subtext">${contract.title || 'Без названия'} · ${contractTypeLabel(contract.contract_type)}</div>
                                 </div>
                             </td>
                             <td class="crm-contact-cell">
                                 <div>${contract.client_name || 'Без контрагента'}</div>
                                 <div class="table-subtext">${contract.project_name || 'Без проекта'}</div>
                             </td>
-                            <td class="crm-meta-cell">
-                                <div>${contract.folder || 'Все договоры'}</div>
-                                <div class="table-subtext">${contractTypeLabel(contract.contract_type)}${contract.category ? ` · ${contract.category}` : ''}</div>
-                            </td>
                             <td class="crm-action-cell">
                                 <div>${contract.start_date || '—'} → ${contract.end_date || '—'}</div>
-                                <div class="table-subtext">${isContractOverdue(contract) ? 'Есть просрочка' : 'Срок в норме'}</div>
+                                <div class="table-subtext">${isContractOverdue(contract) ? 'Срок истёк' : 'Срок в норме'}</div>
                             </td>
                             <td class="amount is-num crm-amount-cell">${formatMoney(Number(contract.amount || 0), contract.currency || 'RUB')}</td>
-                            <td class="crm-meta-cell">${contractVatLabel(contract.vat_mode)}</td>
-                            <td><span class="contract-risk contract-risk--${contractRiskClass(contract.risk_level)}">${contractRiskLabel(contract.risk_level)}</span></td>
-                            <td><span class="crm-inline-pill crm-inline-pill--${isContractOverdue(contract) ? 'critical' : 'neutral'}">${contractStateLabel(contract.status)}</span></td>
-                            <td class="crm-meta-cell">${contract.manager_name || '—'}</td>
+                            <td><span class="crm-inline-pill crm-inline-pill--${isContractOverdue(contract) ? 'critical' : 'neutral'}">${contractStateLabel(contract.status)}</span>${String(contract.risk_level || '') === 'critical' ? '<div class="table-subtext contract360-risk-note">Высокий риск</div>' : ''}</td>
+                            <td class="crm-meta-cell">${contract.manager_name || 'Не назначен'}</td>
                             <td class="crm-action-cell" onclick="event.stopPropagation()">
-                                <div class="contract-row-actions">
-                                    <button class="btn-secondary" onclick="openContractCard(${contract.id})">Открыть</button>
-                                    <button class="btn-secondary" onclick="assignContractManager(${contract.id})">Назначить</button>
-                                    <button class="btn-secondary" onclick="quickChangeContractStatus(${contract.id})">Статус</button>
-                                    <button class="btn-secondary" onclick="quickCommentContract(${contract.id})">Комментарий</button>
-                                    <button class="btn-secondary" onclick="createContractTask(${contract.id})">Задача</button>
-                                    <button class="btn-secondary" onclick="openContractDocuments(${contract.id})">Документы</button>
-                                    <button class="btn-secondary" onclick="createContractReminder(${contract.id})">Напомнить</button>
-                                </div>
+                                <button class="btn-secondary" onclick="openContractCard(${contract.id})">Открыть карточку</button>
                             </td>
                         </tr>
-                    `).join('') || '<tr><td colspan="11"><div class="empty-state">По текущему фильтру договоры не найдены.</div></td></tr>'}
+                    `).join('') || '<tr><td colspan="7"><div class="empty-state">Договоры не найдены. Измените поиск или создайте договор из карточки проекта.</div></td></tr>'}
                 </tbody>
             </table>
         </div>
@@ -530,7 +519,44 @@ function fillContractMasterForm() {
         const el = document.getElementById(id);
         if (el) el.value = value;
     });
+    if (typeof flatpickr === 'function') {
+        ['contractCardStartDate', 'contractCardEndDate'].forEach(id => {
+            const input = document.getElementById(id);
+            if (input && !input._flatpickr) {
+                flatpickr(input, { locale: 'ru', dateFormat: 'd.m.Y', allowInput: true, disableMobile: true });
+            }
+        });
+    }
+    applyContract360EditMode();
 }
+
+function applyContract360EditMode() {
+    document.querySelectorAll('#contract360PanelOverview .contract360-editable').forEach(field => {
+        field.disabled = !contract360Editing;
+    });
+    const editButton = document.getElementById('contract360EditButton');
+    const saveButton = document.getElementById('contract360SaveButton');
+    const cancelButton = document.getElementById('contract360CancelButton');
+    if (editButton) editButton.classList.toggle('contract360-action-hidden', contract360Editing);
+    if (saveButton) saveButton.classList.toggle('contract360-action-hidden', !contract360Editing);
+    if (cancelButton) cancelButton.classList.toggle('contract360-action-hidden', !contract360Editing);
+}
+
+window.editContract360Card = function() {
+    contract360Editing = true;
+    applyContract360EditMode();
+    document.getElementById('contractCardNumber')?.focus();
+};
+
+window.cancelContract360Edit = function() {
+    contract360Editing = false;
+    fillContractMasterForm();
+};
+
+window.showContract360Registry = function() {
+    contract360Editing = false;
+    switchContract360Tab('registry');
+};
 
 window.syncCurrentContractCard = async function() {
     if (!contract360DB?.contract?.project_id) {
@@ -602,6 +628,7 @@ window.saveContractMasterCard = async function() {
     if (!res || res.error) {
         return customAlert('Не удалось сохранить справочник договора.');
     }
+    contract360Editing = false;
     await loadContractRegistry();
     await loadContractCard(contract.id);
     await renderContract360();
@@ -729,11 +756,27 @@ window.createContractReminder = async function(contractId) {
 window.openContractDocuments = function(contractId) {
     const row = findContractRegistryRow(contractId);
     navigateTo('documents');
-    const search = document.getElementById('searchInput');
+    const search = document.getElementById('documentRegistrySearch');
     if (search && row) {
         search.value = row.contract_number || row.title || '';
     }
     if (typeof renderDocuments === 'function') renderDocuments();
+};
+
+window.openContractFinance = function(contractId) {
+    const row = findContractRegistryRow(contractId);
+    navigateTo('finance');
+    const search = document.getElementById('financeRegistrySearch');
+    if (search && row) search.value = row.contract_number || row.title || '';
+    if (typeof renderFinancePayments === 'function') renderFinancePayments();
+};
+
+window.openContractApprovals = function(contractId) {
+    const row = findContractRegistryRow(contractId);
+    navigateTo('approvals');
+    if (typeof showToast === 'function' && row) {
+        showToast('Согласования', `Открыты согласования по договору ${row.contract_number || row.title || ''}`);
+    }
 };
 
 window.openContractCard = async function(contractId) {
@@ -742,6 +785,8 @@ window.openContractCard = async function(contractId) {
     if (!data) {
         return customAlert('Не удалось открыть карточку договора.');
     }
+    contract360Editing = false;
+    currentContract360Tab = 'overview';
     navigateTo('contract360');
 };
 
@@ -760,6 +805,8 @@ window.openContractCardForProject = async function(projectId) {
     if (!data) {
         return customAlert('Не удалось открыть карточку договора.');
     }
+    contract360Editing = false;
+    currentContract360Tab = 'overview';
     navigateTo('contract360');
 };
 
@@ -798,6 +845,7 @@ window.applyContractRegistryPreset = function(name) {
     if (!preset) return;
     contractRegistryFilters = {
         search: preset.search || '',
+        status: preset.status || '',
         folder: preset.folder || '',
         type: preset.type || '',
         vat: preset.vat || '',
@@ -805,12 +853,14 @@ window.applyContractRegistryPreset = function(name) {
         overdue: Boolean(preset.overdue),
         sort: preset.sort || 'end_date_asc',
     };
+    fillContractRegistryFiltersFromState();
     renderContractRegistry();
 };
 
 window.resetContractRegistryFilters = function() {
     contractRegistryFilters = {
         search: '',
+        status: '',
         folder: '',
         type: '',
         vat: '',
@@ -820,6 +870,7 @@ window.resetContractRegistryFilters = function() {
     };
     const select = document.getElementById('contractRegistryPreset');
     if (select) select.value = '';
+    fillContractRegistryFiltersFromState();
     renderContractRegistry();
 };
 

@@ -1,8 +1,9 @@
 let currentUsersTab = 'active';
 let currentRoleFilter = ''; // Для фильтрации по отделам
+let currentProfileUserSearch = '';
 let currentAuditFilter = 'all';
 let currentAuditSearch = '';
-let currentDirectorProfileTab = 'security';
+let currentDirectorProfileTab = 'users';
 let systemErrorsDB = [];
 let systemBackupsDB = [];
 let systemHealthDB = null;
@@ -45,11 +46,17 @@ window.collapseDirectorProfilePanels = function() {
 };
 
 function filterUsersByRole(role) {
-    currentRoleFilter = role;
-    document.querySelectorAll('.user-filter-btn').forEach(b => b.classList.remove('active'));
-    if (event && event.target) event.target.classList.add('active');
+    currentRoleFilter = String(role || '');
+    const select = document.getElementById('profileUserRoleFilter');
+    if (select && select.value !== currentRoleFilter) select.value = currentRoleFilter;
     renderProfile();
 }
+
+function filterProfileUsers(value) {
+    currentProfileUserSearch = String(value || '').trim().toLocaleLowerCase('ru');
+    renderProfile();
+}
+window.filterProfileUsers = filterProfileUsers;
 
 function bindDirectorProfileTabs() {
     const tabs = [
@@ -120,7 +127,7 @@ function applyDirectorProfileTabState() {
     if (usersBlock) usersBlock.style.display = currentDirectorProfileTab === 'users' ? 'block' : 'none';
     if (auditGrid) auditGrid.style.display = ['audit', 'field-security'].includes(currentDirectorProfileTab) ? 'grid' : 'none';
     if (systemBlock) systemBlock.style.display = currentDirectorProfileTab === 'system' ? 'block' : 'none';
-    if (securityPlusMount) securityPlusMount.style.display = currentDirectorProfileTab === 'security' ? 'block' : 'none';
+    if (securityPlusMount) securityPlusMount.style.display = 'none';
 
     if (securityBlock) securityBlock.style.display = currentDirectorProfileTab === 'security' ? 'block' : 'none';
     if (auditBlock) auditBlock.style.display = currentDirectorProfileTab === 'audit' ? 'block' : 'none';
@@ -130,7 +137,7 @@ function applyDirectorProfileTabState() {
     if (auditBlock) auditBlock.hidden = currentDirectorProfileTab !== 'audit';
     if (fieldSecurityBlock) fieldSecurityBlock.hidden = currentDirectorProfileTab !== 'field-security';
     if (systemBlock) systemBlock.hidden = currentDirectorProfileTab !== 'system';
-    if (securityPlusMount) securityPlusMount.hidden = currentDirectorProfileTab !== 'security';
+    if (securityPlusMount) securityPlusMount.hidden = true;
 
     [auditBlock, fieldSecurityBlock].forEach(section => {
         if (!section) return;
@@ -169,14 +176,14 @@ async function loadSecurityOps() {
         fieldSecurityRulesDB = [];
         return;
     }
-    const [sessions, fieldChanges, fieldRules] = await Promise.all([
+    const [sessions, fieldChanges] = await Promise.all([
         apiCall('/users/sessions?limit=80'),
         apiCall('/audit/field_changes?limit=80'),
-        apiCall('/users/field_rules'),
+        ensureFinanceScopeMeta(),
     ]);
     userSessionsDB = Array.isArray(sessions) ? sessions : [];
     fieldChangesDB = Array.isArray(fieldChanges) ? fieldChanges : [];
-    fieldSecurityRulesDB = Array.isArray(fieldRules) ? fieldRules : [];
+    fieldSecurityRulesDB = [];
 }
 
 async function reloadSecurityOps() {
@@ -220,11 +227,21 @@ function renderCurrentUser2FA() {
     const stateBlock = document.getElementById('currentUser2faState');
     const secretBlock = document.getElementById('currentUser2faSecret');
     if (!stateBlock || !secretBlock || !currentUser) return;
+    const isEnabled = Number(currentUser.two_factor_enabled || 0) === 1;
+    const hasPreparedSecret = Boolean(currentUser2faDB?.secret);
+    const prepareButton = document.getElementById('profile2faPrepareBtn');
+    const enableButton = document.getElementById('profile2faEnableBtn');
+    const disableButton = document.getElementById('profile2faDisableBtn');
+    const setupPanel = document.getElementById('profile2faSetupPanel');
+    if (prepareButton) prepareButton.hidden = isEnabled;
+    if (enableButton) enableButton.hidden = isEnabled || !hasPreparedSecret;
+    if (disableButton) disableButton.hidden = !isEnabled;
+    if (setupPanel) setupPanel.style.display = isEnabled || hasPreparedSecret ? 'grid' : 'none';
     stateBlock.innerHTML = `
         <div class="audit-log-item">
             <div class="audit-log-main">
                 <div class="audit-log-title">${currentUser.name || currentUser.email}</div>
-            <div class="audit-log-meta">${currentUser.two_factor_enabled ? 'Двухфакторная защита включена' : 'Двухфакторная защита пока выключена'}</div>
+            <div class="audit-log-meta">${isEnabled ? 'Двухфакторная защита включена' : 'Двухфакторная защита пока выключена'}</div>
             </div>
             <div class="audit-log-time">${currentUser.email || ''}</div>
         </div>
@@ -235,7 +252,7 @@ function renderCurrentUser2FA() {
             <div style="margin-top:8px; color:var(--secondary); font-size:12px;">Добавь этот секрет в приложение-аутентификатор, менеджер паролей или другое приложение одноразовых кодов под именем ${currentUser2faDB.manual_entry || 'Korda CRM'}.</div>
         `;
     } else {
-        secretBlock.innerHTML = 'Сначала нажми «Подготовить двухфакторную защиту», затем введи код из приложения-аутентификатора.';
+        secretBlock.innerHTML = 'Сначала нажмите «Начать настройку», затем введите код из приложения-аутентификатора.';
     }
 }
 
@@ -395,6 +412,158 @@ function renderSystemOpsPanel() {
     `).join('') : '<div class="empty-state">Резервные копии ещё не создавались.</div>';
 }
 
+const PROFILE_FIELD_LABELS = {
+    role: 'Роль сотрудника',
+    status: 'Статус доступа',
+    name: 'ФИО',
+    username: 'Логин',
+    is_head: 'Права руководителя',
+    two_factor_enabled: 'Двухфакторная защита',
+    allowed_legal_entities: 'Доступные компании',
+    allowed_business_units: 'Доступные подразделения',
+    abs_type: 'Тип отсутствия',
+    abs_start: 'Начало отсутствия',
+    abs_end: 'Окончание отсутствия',
+    abs_reason: 'Причина отсутствия',
+    deputy: 'Заместитель',
+};
+
+const PROFILE_ACTION_LABELS = {
+    login_success: 'Успешный вход в систему',
+    login_failed: 'Неудачная попытка входа',
+    logout: 'Выход из системы',
+    user_approved: 'Сотруднику предоставлен доступ',
+    user_role_changed: 'Изменена роль сотрудника',
+    user_access_scope_changed: 'Изменена область доступа',
+    user_blocked: 'Доступ сотрудника заблокирован',
+    user_restored: 'Доступ сотрудника восстановлен',
+    user_invited: 'Создана учётная запись сотрудника',
+    password_changed: 'Изменён пароль',
+    password_reset: 'Сброшен пароль',
+    session_revoked: 'Завершена сессия пользователя',
+    backup_created: 'Создана резервная копия',
+};
+
+const PROFILE_STATUS_LABELS = {
+    approved: 'Активен',
+    pending: 'Ожидает подтверждения',
+    banned: 'Заблокирован',
+    active: 'Активен',
+    inactive: 'Неактивен',
+};
+
+function profileHistoryUser(email) {
+    const normalized = String(email || '').trim().toLowerCase();
+    const user = (allUsersDB || []).find(item => String(item.email || '').trim().toLowerCase() === normalized);
+    return {
+        name: user?.name || '',
+        email: String(email || ''),
+    };
+}
+
+function profileIsTestIdentity(...values) {
+    const text = values.map(value => String(value || '')).join(' ').toLowerCase();
+    return text.includes('@example.com')
+        || text.includes('smoke director')
+        || text.includes('role-ui-test')
+        || text.includes('test_');
+}
+
+function profileHistoryList(value) {
+    if (Array.isArray(value)) return value;
+    const text = String(value ?? '').trim();
+    if (!text) return [];
+    try {
+        const parsed = JSON.parse(text);
+        return Array.isArray(parsed) ? parsed : [parsed];
+    } catch (_) {
+        return text.split(',').map(item => item.trim()).filter(Boolean);
+    }
+}
+
+function profileFormatHistoryValue(fieldName, value) {
+    const raw = String(value ?? '').trim();
+    if (fieldName === 'allowed_legal_entities' || fieldName === 'allowed_business_units') {
+        const ids = profileHistoryList(value).map(item => Number(item)).filter(Number.isFinite);
+        if (!ids.length) return fieldName === 'allowed_legal_entities' ? 'Все компании' : 'Все подразделения';
+        const source = fieldName === 'allowed_legal_entities'
+            ? (financeScopeMetaDB.legal_entities || [])
+            : (financeScopeMetaDB.business_units || []);
+        return ids.map(id => {
+            const match = source.find(item => Number(item.id || 0) === id);
+            return match?.short_name || match?.name || `№ ${id}`;
+        }).join(', ');
+    }
+    if (fieldName === 'status') return PROFILE_STATUS_LABELS[raw] || raw || 'Не указан';
+    if (fieldName === 'is_head') return Number(raw || 0) ? 'Назначен руководителем' : 'Обычный сотрудник';
+    if (fieldName === 'two_factor_enabled') return Number(raw || 0) ? 'Включена' : 'Выключена';
+    if (!raw || raw === 'null' || raw === '[]') return 'Не указано';
+    return raw;
+}
+
+function profileFieldChangeTitle(fieldName) {
+    const label = PROFILE_FIELD_LABELS[fieldName] || String(fieldName || 'Данные сотрудника').replace(/_/g, ' ');
+    const completed = {
+        role: 'Изменена роль сотрудника',
+        status: 'Изменён статус доступа',
+        allowed_legal_entities: 'Изменён доступ к компаниям',
+        allowed_business_units: 'Изменён доступ к подразделениям',
+        is_head: 'Изменены права руководителя',
+        two_factor_enabled: 'Изменена защита входа',
+        deputy: 'Изменён заместитель',
+    };
+    return completed[fieldName] || `Изменено поле «${label}»`;
+}
+
+function profileAuditActionLabel(action) {
+    const key = String(action || '').trim();
+    return PROFILE_ACTION_LABELS[key] || key.replace(/_/g, ' ').replace(/^./, char => char.toUpperCase()) || 'Системное действие';
+}
+
+function profileAuditEntityLabel(type, id) {
+    const labels = {
+        user: 'Сотрудник',
+        project: 'Проект',
+        document: 'Документ',
+        task: 'Поручение',
+        approval: 'Согласование',
+        session: 'Сессия',
+        system: 'Система',
+    };
+    const label = labels[String(type || '').toLowerCase()] || 'Объект';
+    return id ? `${label}: ${id}` : label;
+}
+
+function profileAuditDetails(details) {
+    const labelMap = {
+        role: 'роль',
+        status: 'статус',
+        email: 'эл. почта',
+        user_email: 'сотрудник',
+        reason: 'причина',
+        module: 'раздел',
+        field_name: 'поле',
+        old_value: 'было',
+        new_value: 'стало',
+    };
+    return Object.entries(details || {}).slice(0, 6).map(([key, value]) => {
+        const shown = Array.isArray(value) ? value.join(', ') : (typeof value === 'object' && value !== null ? JSON.stringify(value) : value);
+        return `${labelMap[key] || key.replace(/_/g, ' ')}: ${shown || '—'}`;
+    }).join(' • ');
+}
+
+function profileSessionDevice(userAgent) {
+    const value = String(userAgent || '');
+    if (!value) return 'Устройство не определено';
+    if (/YaBrowser/i.test(value)) return 'Яндекс Браузер';
+    if (/Edg\//i.test(value)) return 'Microsoft Edge';
+    if (/Chrome\//i.test(value)) return 'Google Chrome';
+    if (/Firefox\//i.test(value)) return 'Mozilla Firefox';
+    if (/Safari\//i.test(value)) return 'Safari';
+    if (/python|testclient|curl/i.test(value)) return 'Системное подключение';
+    return value.length > 70 ? `${value.slice(0, 67)}…` : value;
+}
+
 function renderAuditPanel() {
     const block = document.getElementById('directorAuditBlock');
     const list = document.getElementById('auditLogList');
@@ -406,6 +575,7 @@ function renderAuditPanel() {
 
     block.style.display = currentDirectorProfileTab === 'audit' ? 'block' : 'none';
     const filtered = (auditLogsDB || []).filter(log => {
+        if (profileIsTestIdentity(log.actor_name, log.actor_email, log.entity_id)) return false;
         if (currentAuditFilter === 'auth' && !String(log.action || '').includes('login') && !String(log.action || '').includes('register') && !String(log.action || '').includes('recover')) {
             return false;
         }
@@ -431,19 +601,18 @@ function renderAuditPanel() {
 
     list.innerHTML = filtered.slice(0, 120).map(log => {
         const details = log.details && Object.keys(log.details).length
-            ? `<div class="audit-log-meta">Детали: ${Object.entries(log.details).map(([key, value]) => `${key}: ${value}`).join(' • ')}</div>`
+            ? `<div class="profile-audit-details">${profileEscape(profileAuditDetails(log.details))}</div>`
             : '';
         return `
-            <div class="audit-log-item">
+            <article class="profile-audit-card">
                 <div class="audit-log-main">
-                    <div class="audit-log-title">${log.action}</div>
-                    <div class="audit-log-meta">
-                        ${log.actor_name || 'Система'} · ${log.actor_email || 'без почты'} · ${log.entity_type || 'сущность'} / ${log.entity_id || 'нет'}
-                    </div>
+                    <div class="profile-audit-card__top"><span class="profile-history-badge">Действие</span><time>${new Date((log.created_at || 0) * 1000).toLocaleString('ru-RU')}</time></div>
+                    <div class="audit-log-title">${profileEscape(profileAuditActionLabel(log.action))}</div>
+                    <div class="audit-log-meta">${profileEscape(profileAuditEntityLabel(log.entity_type, log.entity_id))}</div>
                     ${details}
+                    <div class="profile-audit-actor">Выполнил: <strong>${profileEscape(log.actor_name || 'Система')}</strong>${log.actor_email ? ` · ${profileEscape(log.actor_email)}` : ''}</div>
                 </div>
-                <div class="audit-log-time">${new Date((log.created_at || 0) * 1000).toLocaleString('ru-RU')}</div>
-            </div>
+            </article>
         `;
     }).join('');
 }
@@ -459,32 +628,41 @@ function renderSecurityOpsPanel() {
     }
     block.style.display = currentDirectorProfileTab === 'security' ? 'block' : 'none';
 
-    sessionsList.innerHTML = userSessionsDB.length ? userSessionsDB.slice(0, 60).map(item => `
-        <div class="audit-log-item">
+    const visibleSessions = userSessionsDB.filter(item => !profileIsTestIdentity(item.user_name, item.user_email));
+    sessionsList.innerHTML = visibleSessions.length ? visibleSessions.slice(0, 60).map(item => `
+        <article class="profile-session-card">
             <div class="audit-log-main">
-                <div class="audit-log-title">${item.user_name || item.user_email || 'Пользователь'}${item.is_current ? ' · текущая сессия' : ''}</div>
-                <div class="audit-log-meta">${item.user_role || 'роль не указана'} · ${item.user_email || ''}</div>
-                <div class="audit-log-meta">${item.ip_address || 'IP не указан'} · ${item.user_agent || 'клиент не указан'} </div>
+                <div class="profile-session-card__top"><span class="profile-history-badge ${item.is_current ? 'is-current' : ''}">${item.is_current ? 'Текущая сессия' : 'Активна'}</span><time>${new Date((item.last_seen_at || item.created_at || 0) * 1000).toLocaleString('ru-RU')}</time></div>
+                <div class="audit-log-title">${profileEscape(item.user_name || item.user_email || 'Пользователь')}</div>
+                <div class="audit-log-meta">${profileEscape(item.user_role || 'Роль не указана')} · ${profileEscape(item.user_email || '')}</div>
+                <div class="profile-session-device">${profileEscape(profileSessionDevice(item.user_agent))}${item.ip_address ? ` · IP ${profileEscape(item.ip_address)}` : ''}</div>
             </div>
-            <div class="system-backup-meta">
-                <div class="audit-log-time">${new Date((item.last_seen_at || item.created_at || 0) * 1000).toLocaleString('ru-RU')}</div>
-                <div class="system-backup-actions">
-                    ${item.is_current ? '<span class="btn-secondary" style="pointer-events:none;opacity:.7;">Активна</span>' : `<button class="btn-danger" onclick="revokeUserSession('${item.session_id}', '${item.user_email || ''}')">Завершить</button>`}
-                </div>
+            <div class="system-backup-actions">
+                ${item.is_current ? '' : `<button class="btn-secondary krd-btn-danger-outline" onclick="revokeUserSession('${item.session_id}', '${item.user_email || ''}')">Завершить сессию</button>`}
             </div>
-        </div>
+        </article>
     `).join('') : '<div class="empty-state">Активных сессий пока нет.</div>';
 
-    fieldChangesList.innerHTML = fieldChangesDB.length ? fieldChangesDB.slice(0, 80).map(item => `
-        <div class="audit-log-item">
-            <div class="audit-log-main">
-                <div class="audit-log-title">${item.entity_type || 'entity'} / ${item.entity_id || 'n/a'} · ${item.field_name || 'field'}</div>
-    <div class="audit-log-meta">${item.actor_name || 'Система'} · ${item.actor_email || 'без почты'}</div>
-                <div class="audit-log-meta">Было: ${item.old_value || '—'} · Стало: ${item.new_value || '—'}</div>
+    const visibleChanges = fieldChangesDB.filter(item => !profileIsTestIdentity(item.entity_id, item.actor_name, item.actor_email));
+    fieldChangesList.innerHTML = visibleChanges.length ? visibleChanges.slice(0, 80).map(item => {
+        const subject = profileHistoryUser(item.entity_id);
+        const fieldLabel = PROFILE_FIELD_LABELS[item.field_name] || String(item.field_name || 'Данные').replace(/_/g, ' ');
+        return `
+        <article class="profile-change-card">
+            <div class="profile-change-card__top">
+                <span class="profile-history-badge">${profileEscape(fieldLabel)}</span>
+                <time>${new Date((item.created_at || 0) * 1000).toLocaleString('ru-RU')}</time>
             </div>
-            <div class="audit-log-time">${new Date((item.created_at || 0) * 1000).toLocaleString('ru-RU')}</div>
-        </div>
-    `).join('') : '<div class="empty-state">Изменений полей пока нет.</div>';
+            <div class="audit-log-title">${profileEscape(profileFieldChangeTitle(item.field_name))}</div>
+            <div class="profile-change-subject"><strong>${profileEscape(subject.name || 'Сотрудник')}</strong><span>${profileEscape(subject.email)}</span></div>
+            <div class="profile-change-values">
+                <div><small>Было</small><strong>${profileEscape(profileFormatHistoryValue(item.field_name, item.old_value))}</strong></div>
+                <span class="profile-change-arrow">→</span>
+                <div><small>Стало</small><strong>${profileEscape(profileFormatHistoryValue(item.field_name, item.new_value))}</strong></div>
+            </div>
+            <div class="profile-audit-actor">Изменил: <strong>${profileEscape(item.actor_name || 'Система')}</strong>${item.actor_email ? ` · ${profileEscape(item.actor_email)}` : ''}</div>
+        </article>`;
+    }).join('') : '<div class="empty-state">Понятных рабочих изменений пока нет. Технические записи тестов скрыты.</div>';
 }
 
 function renderFieldSecurityRulesPanel() {
@@ -717,87 +895,86 @@ function renderProfile() {
             dBlock.style.display = currentDirectorProfileTab === 'users' ? 'block' : 'none';
             document.getElementById('totalUsersCount').innerText = allUsersDB.length;
             
-            let uHtml = '';
             let filteredUsers = allUsersDB.filter(u => currentUsersTab === 'active' ? u.status !== 'banned' : u.status === 'banned');
-            
-            // ПРИМЕНЕНИЕ ФИЛЬТРА ПО ОТДЕЛАМ
-            if (currentRoleFilter) {
-                filteredUsers = filteredUsers.filter(u => u.role === currentRoleFilter);
+            if (currentRoleFilter) filteredUsers = filteredUsers.filter(u => u.role === currentRoleFilter);
+            if (currentProfileUserSearch) {
+                filteredUsers = filteredUsers.filter(u => [u.name, u.email, u.role].some(value => String(value || '').toLocaleLowerCase('ru').includes(currentProfileUserSearch)));
             }
-            
-            filteredUsers.forEach(u => {
-                let statusBadge = '';
-                if(u.status === 'approved') statusBadge = '<span class="status-badge" style="background: rgba(16, 185, 129, 0.1); color: var(--success);">Активен</span>';
-                else if(u.status === 'pending') statusBadge = '<span class="status-badge" style="background: var(--bg); color: var(--secondary);">Ожидает</span>';
-                else if(u.status === 'banned') statusBadge = '<span class="status-badge" style="background: rgba(239, 68, 68, 0.1); color: var(--danger);">Заблокирован</span>';
-                
-                let actionBtn = '';
-                if(u.email === currentUser.email) actionBtn = '<span style="color:var(--secondary); font-size:12px;">Это вы</span>';
-                else if (u.status === 'banned') actionBtn = `<button class="btn-success" style="padding: 6px 12px; font-size:12px; background:var(--success); color:white; border:none;" onclick="restoreUser('${u.email}')">Разблокировать</button>`;
-                else {
-                    const headBtnText = u.is_head === 1 ? "Снять права Рук." : "Сделать Рук-лем";
-                    const scopeSummary = `Юрлица: ${(u.allowed_legal_entities || []).join(', ') || 'все'} · Подразделения: ${(u.allowed_business_units || []).join(', ') || 'все'}${u.two_factor_enabled ? ' · двухфакторная защита' : ''}`;
-                    actionBtn = `<div style="display:flex; gap:6px; flex-wrap:wrap;">
-                        <button class="btn-secondary" style="padding: 4px 8px; font-size:11px;" onclick="changeUserRole('${u.email}', '${u.role}')">Сменить отдел</button>
-                        <button class="btn-secondary" style="padding: 4px 8px; font-size:11px;" onclick="changeUserAccessScope('${u.email}')">Область доступа</button>
-                        <button class="btn-secondary" style="padding: 4px 8px; font-size:11px;" onclick="toggleHeadStatus('${u.email}', ${u.is_head === 1 ? 0 : 1})">${headBtnText}</button>
-                        <button class="btn-danger" style="padding: 4px 8px; font-size:11px; background:var(--danger); color:white; border:none;" onclick="removeUser('${u.email}')">Заблокировать</button>
-                        <span style="width:100%; font-size:11px; color:var(--secondary);">${scopeSummary}</span>
-                    </div>`;
+
+            const searchInput = document.getElementById('profileUserSearch');
+            if (searchInput && searchInput.value !== currentProfileUserSearch) searchInput.value = currentProfileUserSearch;
+            const roleSelect = document.getElementById('profileUserRoleFilter');
+            if (roleSelect && roleSelect.value !== currentRoleFilter) roleSelect.value = currentRoleFilter;
+
+            const uHtml = filteredUsers.map(u => {
+                const emailJs = String(u.email || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                const roleJs = String(u.role || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                const initials = String(u.name || u.email || '?').split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase();
+                const statusLabel = u.status === 'approved' ? 'Активен' : u.status === 'banned' ? 'Заблокирован' : 'Ожидает подтверждения';
+                const statusClass = u.status === 'approved' ? 'status-completed' : u.status === 'banned' ? 'status-overdue' : 'status-active';
+                const roleLabel = u.role || 'Роль не назначена';
+                const headBadge = Number(u.is_head || 0) === 1 && u.role !== 'Директор' ? '<span class="profile-team-tag">Руководитель</span>' : '';
+                const securityLabel = `${u.has_password ? 'Пароль задан' : 'Пароль не задан'}${Number(u.two_factor_enabled || 0) === 1 ? ' · 2FA включена' : ''}`;
+                const companies = (u.allowed_legal_entities || []).length ? `выбрано ${(u.allowed_legal_entities || []).length}` : 'все';
+                const units = (u.allowed_business_units || []).length ? `выбрано ${(u.allowed_business_units || []).length}` : 'все';
+                const scopeSummary = `Компании: ${companies} · Подразделения: ${units}`;
+                const absence = isUserAbsentOrUpcoming(u)
+                    ? `<div class="profile-team-absence">${profileEscape(u.abs_type || 'Отсутствие')} · до ${profileEscape(u.abs_end || '')}${u.deputy ? ` · замещает ${profileEscape(u.deputy)}` : ''}</div>`
+                    : '';
+
+                let actions = '<span class="profile-team-self">Ваш аккаунт</span>';
+                if (u.email !== currentUser.email && u.status === 'banned') {
+                    actions = `<button class="btn-primary" onclick="restoreUser('${emailJs}')">Вернуть доступ</button>`;
+                } else if (u.email !== currentUser.email) {
+                    actions = `
+                        <button class="btn-secondary" onclick="changeUserRole('${emailJs}', '${roleJs}')">Изменить роль</button>
+                        <button class="btn-secondary" onclick="changeUserAccessScope('${emailJs}')">Настроить доступ</button>
+                        <details class="profile-team-more">
+                            <summary>Ещё</summary>
+                            <div class="profile-team-more__menu">
+                                <button type="button" onclick="toggleHeadStatus('${emailJs}', ${Number(u.is_head || 0) === 1 ? 0 : 1})">${Number(u.is_head || 0) === 1 ? 'Снять права руководителя' : 'Назначить руководителем'}</button>
+                                <button type="button" class="is-danger" onclick="removeUser('${emailJs}')">Заблокировать доступ</button>
+                            </div>
+                        </details>`;
                 }
 
-                const pwdHtml = u.has_password
-                    ? `<span style="font-size:12px; color:var(--success); font-weight:600;">Защищен</span>`
-                    : `<span style="font-size:12px; color:var(--secondary);">Не задан</span>`;
-                
-                let vacHtml = '';
-                if (isUserAbsentOrUpcoming(u)) {
-                    let userAbsType = u.abs_type ? u.abs_type.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '').replace(/❓/g, '').replace(/✈️/g, '').trim() : 'Отпуск';
-                    
-                    let icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
-                    if (userAbsType === 'Больничный') icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>';
-                    if (userAbsType === 'Командировка') icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><path d="M22 2L11 13"></path><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
-                    if (userAbsType === 'Другое') icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
-                    
-                    const reasonText = u.abs_reason ? `Причина: ${u.abs_reason}.` : '';
-                    const depText = u.deputy ? `Замещает: ${u.deputy}` : 'Без заместителя';
-                    
-                    let prefixText = 'до';
-                    const pStart = u.abs_start ? u.abs_start.split('.') : [];
-                    if (pStart.length === 3) {
-                        const dStart = new Date(pStart[2], pStart[1]-1, pStart[0]);
-                        if (dStart > today) prefixText = `с ${u.abs_start} по`;
-                    }
-                    
-                    vacHtml = `<div style="font-size: 11px; margin-top: 4px; background: rgba(0,0,0,0.04); padding: 4px 8px; border-radius: 6px; display: inline-block;">
-                        ${icon} <b>${userAbsType}</b> ${prefixText} ${u.abs_end}. <span style="color:var(--secondary)">${reasonText} ${depText}</span>
-                    </div>`;
-                }
-                
-                const roleText = u.is_head === 1 && u.role !== 'Директор' ? `<b>${u.role} (Руководитель)</b>` : (u.role || '-');
-
-                uHtml += `<tr>
-                    <td><b>${u.name}</b><br>${vacHtml}</td>
-                    <td>${u.email}</td><td>${pwdHtml}</td><td>${roleText}</td><td>${statusBadge}</td><td>${actionBtn}</td>
-                </tr>`;
-            });
-            const tBody = document.getElementById('allUsersListTable'); if(tBody) tBody.innerHTML = uHtml;
+                return `
+                    <article class="profile-team-card">
+                        <div class="profile-team-person">
+                            <span class="profile-team-avatar">${profileEscape(initials)}</span>
+                            <span class="profile-team-person__copy">
+                                <strong>${profileEscape(u.name || 'Без имени')}</strong>
+                                <small>${profileEscape(u.email || '')}</small>
+                                ${absence}
+                            </span>
+                        </div>
+                        <div class="profile-team-role">
+                            <span class="profile-team-label">Роль</span>
+                            <strong>${profileEscape(roleLabel)}</strong>
+                            ${headBadge}
+                        </div>
+                        <div class="profile-team-state">
+                            <span class="status-badge ${statusClass}">${statusLabel}</span>
+                            <small>${profileEscape(securityLabel)}</small>
+                            <small>${profileEscape(scopeSummary)}</small>
+                        </div>
+                        <div class="profile-team-actions">${actions}</div>
+                    </article>`;
+            }).join('');
+            const tBody = document.getElementById('allUsersListTable');
+            if (tBody) tBody.innerHTML = uHtml || '<div class="empty-state">Сотрудники по выбранным условиям не найдены.</div>';
         } else {
             dBlock.style.display = 'none';
         }
     }
-    renderAuditPanel();
     renderSecurityOpsPanel();
-    renderFieldSecurityRulesPanel();
     renderCurrentUser2FA();
     renderEmployeeSelfServicePanel();
-    renderWorkspacePreferencePanel();
+    const selfServiceBlock = document.getElementById('profileSelfServiceBlock');
+    if (selfServiceBlock) selfServiceBlock.style.display = canShowEmployeeSelfService() ? 'block' : 'none';
     if (hasDirectorWorkbenchAccess()) {
         loadSecurityOps().then(() => renderSecurityOpsPanel());
-        loadSystemOps().then(() => renderSystemOpsPanel());
-        loadSecurityOps().then(() => renderFieldSecurityRulesPanel());
     }
-    renderSystemOpsPanel();
     applyDirectorProfileTabState();
     } catch (error) {
         console.error('renderProfile error', error);
@@ -1059,7 +1236,7 @@ function renderEmployeeSelfServicePanel() {
             <section class="surface-card surface-card--padded">
                 <div class="section-header">
                     <div>
-                        <h3 class="section-title">Self-service кабинет</h3>
+                        <h3 class="section-title">Личные обращения</h3>
                         <p class="section-subtitle">Загружаю отпуск, табель, оснащение, замещения и командировки.</p>
                     </div>
                 </div>
@@ -1084,9 +1261,9 @@ function renderEmployeeSelfServicePanel() {
     mount.innerHTML = `
         <section class="surface-card surface-card--padded role-workbench role-workbench--compact" style="margin-bottom:16px;">
             <div class="role-workbench-copy">
-                <div class="view-eyebrow">Self-service</div>
-                <h3 class="section-title">Личный HR-контур сотрудника</h3>
-                <p class="section-subtitle">Отпуск, табель, оснащение, замещения и командировки теперь живут в одном кабинете без прыжков по разделам.</p>
+                <div class="view-eyebrow">Личные обращения</div>
+                <h3 class="section-title">Кадровые и рабочие заявки</h3>
+                <p class="section-subtitle">Отпуск, рабочие часы, оснащение, замещение и командировки.</p>
             </div>
             <div class="role-workbench-actions">
                 <button class="btn-primary" onclick="document.getElementById('ssTimesheetDate')?.focus()">Табель</button>
@@ -1104,8 +1281,8 @@ function renderEmployeeSelfServicePanel() {
             <section class="surface-card surface-card--padded ops-form-card">
                 <div class="section-header">
                     <div>
-                        <h3 class="section-title">Новые обращения</h3>
-                        <p class="section-subtitle">Заполняй типовой self-service без свободных писем и ручных переписок.</p>
+                        <h3 class="section-title">Новое обращение</h3>
+                        <p class="section-subtitle">Выберите нужный вид заявки и заполните только основные данные.</p>
                     </div>
                 </div>
 
@@ -1192,8 +1369,8 @@ function renderEmployeeSelfServicePanel() {
             <section class="surface-card surface-card--padded ops-list-card">
                 <div class="section-header">
                     <div>
-                        <h3 class="section-title">Мой self-service реестр</h3>
-                        <p class="section-subtitle">Последние записи по HR-контуру и оснащению с текущими статусами.</p>
+                        <h3 class="section-title">Мои обращения</h3>
+                        <p class="section-subtitle">Последние заявки и их текущий статус.</p>
                     </div>
                 </div>
 
@@ -1428,15 +1605,64 @@ async function toggleHeadStatus(email, status) {
 
 // НОВАЯ ФУНКЦИЯ ДЛЯ СМЕНЫ ОТДЕЛА
 async function changeUserRole(email, currentRole) {
-    const newRole = await customPrompt(`Введите новую роль/отдел для ${email} (сейчас: ${currentRole}):`, currentRole);
-    if (!newRole || newRole === currentRole) return;
-    
-    await apiCall(`/users/role`, 'PUT', { email: email, role: newRole });
-    showToast('Пользователи', 'Роль сотрудника обновлена');
-    if (typeof loadAllUsers === 'function') await loadAllUsers();
-    if (typeof loadAuditLogs === 'function') await loadAuditLogs();
-    renderProfile();     
+    const modal = document.getElementById('changeUserRoleModal');
+    const emailInput = document.getElementById('changeUserRoleEmail');
+    const select = document.getElementById('changeUserRoleSelect');
+    const description = document.getElementById('changeUserRoleDescription');
+    const user = (allUsersDB || []).find(item => item.email === email);
+    if (!modal || !emailInput || !select) return;
+
+    const roles = availableRoles.filter(role => role !== 'Директор');
+    select.innerHTML = roles.map(role => `<option value="${profileUiEscape(role)}" ${role === currentRole ? 'selected' : ''}>${profileUiEscape(role)}</option>`).join('');
+    emailInput.value = email;
+    select.dataset.currentRole = currentRole || '';
+    if (description) description.textContent = `${user?.name || email} · текущая роль: ${currentRole || 'не назначена'}`;
+    const error = document.getElementById('changeUserRoleError');
+    if (error) { error.textContent = ''; error.classList.add('krd-is-hidden'); }
+    modal.style.display = 'flex';
+    setTimeout(() => select.focus(), 50);
 }
+
+function closeUserRoleModal() {
+    const modal = document.getElementById('changeUserRoleModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function saveUserRoleChange(event) {
+    event?.preventDefault();
+    const email = document.getElementById('changeUserRoleEmail')?.value || '';
+    const select = document.getElementById('changeUserRoleSelect');
+    const role = select?.value || '';
+    const currentRole = select?.dataset.currentRole || '';
+    const submit = document.getElementById('changeUserRoleSubmit');
+    const error = document.getElementById('changeUserRoleError');
+    if (!email || !role) return;
+    if (role === currentRole) {
+        closeUserRoleModal();
+        return;
+    }
+    if (submit) submit.disabled = true;
+    if (error) { error.textContent = ''; error.classList.add('krd-is-hidden'); }
+    try {
+        const result = await apiCall('/users/role', 'PUT', { email, role });
+        if (!result || result.error) throw new Error(result?.error || 'Не удалось сохранить роль.');
+        closeUserRoleModal();
+        showToast('Пользователи', `Роль изменена на «${role}»`);
+        if (typeof loadAllUsers === 'function') await loadAllUsers();
+        if (typeof loadAuditLogs === 'function') await loadAuditLogs();
+        renderProfile();
+    } catch (err) {
+        if (error) {
+            error.textContent = err?.message || 'Не удалось сохранить роль.';
+            error.classList.remove('krd-is-hidden');
+        }
+    } finally {
+        if (submit) submit.disabled = false;
+    }
+}
+
+window.closeUserRoleModal = closeUserRoleModal;
+window.saveUserRoleChange = saveUserRoleChange;
 
 async function changeUserAccessScope(email) {
     const user = (allUsersDB || []).find(item => item.email === email);
@@ -1555,6 +1781,8 @@ function renderNotifications() {
     if (notifications.length === 0) html = '<div class="notif-empty">Пока нет серверных уведомлений</div>';
     const list = document.getElementById('notifList'); if(list) list.innerHTML = html;
     const badge = document.getElementById('notifBadge');
+    const clearButton = document.getElementById('clearNotificationsBtn');
+    if (clearButton) clearButton.disabled = notifications.length === 0;
     if (meta) {
         meta.innerText = unread > 0
             ? `${unread} непрочитанных ${unread === 1 ? 'событие' : unread < 5 ? 'события' : 'событий'}`
@@ -1637,6 +1865,28 @@ async function markAllNotificationsRead() {
     if (typeof loadNotifications === 'function') await loadNotifications();
     renderNotifications();
 }
+
+async function clearNotifications() {
+    const notifications = notificationsDB || [];
+    if (!notifications.length) return;
+    const confirmed = await customConfirm('Очистить весь список уведомлений? Новые события продолжат появляться.');
+    if (!confirmed) return;
+    const button = document.getElementById('clearNotificationsBtn');
+    if (button) button.disabled = true;
+    try {
+        const result = await apiCall('/notifications', 'DELETE');
+        if (!result || result.error) throw new Error(result?.error || 'Не удалось очистить уведомления.');
+        if (typeof loadNotifications === 'function') await loadNotifications();
+        renderNotifications();
+        showToast('Уведомления', 'Список очищен');
+    } catch (err) {
+        await customAlert(err?.message || 'Не удалось очистить уведомления.');
+    } finally {
+        if (button) button.disabled = !(notificationsDB || []).length;
+    }
+}
+
+window.clearNotifications = clearNotifications;
 
 window.openNotificationItem = async function(entityType, entityId, notificationId, synthetic = 0) {
     const type = String(entityType || '').toLowerCase();
@@ -1834,6 +2084,13 @@ async function importClientsFile() {
     const formData = new FormData();
     formData.append('upload', file);
     const res = await apiCall('/clients/import', 'POST', formData);
+    const importError = res?.message || res?.error || res?.detail;
+    if (!res || res.error || res.detail) {
+        const detailMap = {
+            unsupported_import_format: 'Поддерживаются CSV, TXT, JSON, XLSX и XLSM.',
+        };
+        return customAlert(detailMap[importError] || importError || 'Не удалось импортировать контрагентов.');
+    }
     if (!res || res.error) return customAlert(res?.error || 'Не удалось импортировать контрагентов.');
     if (fileInput) fileInput.value = '';
     await loadClients();

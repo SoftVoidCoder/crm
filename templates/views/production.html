@@ -1,430 +1,85 @@
-<div id="productionView" class="view-page" style="display: none;">
-    <div class="view-header">
-        <div class="view-heading">
-            <span class="view-eyebrow">Производство</span>
-            <h1 class="view-title">Производственные заказы</h1>
-            <p class="view-subtitle">Отдельный производственный контур между проектом и чек-листом: очередь, исполнение, приоритет и прогресс.</p>
+<div id="productionView" class="view-page" style="display:none;">
+    <div class="surface-card surface-card--padded production-simple-shell">
+        <div class="view-header">
+            <div class="view-heading">
+                <span class="view-eyebrow">Производство</span>
+                <h1 class="view-title">Производственные заказы</h1>
+                <p class="view-subtitle">От подготовки заказа и материалов до проверки ОТК и готовности.</p>
+            </div>
+            <div class="view-actions"><button class="btn-primary" type="button" onclick="openSimpleProductionEditor()">+ Новый заказ</button></div>
         </div>
-    </div>
-    <div class="ops-overview-card ops-overview-card--compact">
-        <div>
-            <div class="ops-overview-title">Производственный контур</div>
-            <div class="ops-overview-text">Очередь заказов, прогресс, сроки и контроль цеховых операций в одном месте.</div>
-        </div>
-    </div>
-    <div class="workbench-strip">
-        <div class="workbench-card">
-            <div class="workbench-card-title">Основной сценарий</div>
-            <div class="workbench-card-text">Открой заказ, посмотри очередь и обнови операцию. Это главный ежедневный маршрут цеха.</div>
-        </div>
-        <div class="workbench-card">
-            <div class="workbench-card-title">Контроль</div>
-      <div class="workbench-card-text">Незавершённое производство, загрузка центров и журнал изменений нужны как контроль, но не должны мешать самому заказу.</div>
-        </div>
-        <div class="workbench-card">
-            <div class="workbench-card-title">Быстро</div>
-            <div class="workbench-card-actions">
-                <button class="btn-primary" onclick="presetProductionFlow('order')">Новый заказ</button>
-                <button class="btn-secondary" onclick="focusProductionQueue()">Очередь</button>
-                <button class="btn-secondary" onclick="focusProductionOperations()">Операции</button>
-            </div>
-        </div>
-    </div>
-    <div id="productionRoleWorkbenchMount"></div>
-    <div id="productionMetricsGrid" class="metrics-grid metrics-grid--info-rail"></div>
-    <div id="productionCockpitMount" class="erp-cockpit-grid" style="margin-bottom:20px;"></div>
-    <div id="orderExecutionDashboardMount" style="margin-bottom:24px;"></div>
-    <div class="client360-grid secondary-zone" style="margin-bottom:24px;">
-        <section class="surface-card surface-card--padded">
-            <div class="section-header">
-        <div><h3 class="section-title">Незавершённое производство и маршрутный фокус</h3></div>
-                <div class="view-actions"><button class="btn-secondary" onclick="selectFirstProductionOrder()">Выбрать заказ</button></div>
-            </div>
-            <div id="productionWipBoardMount"></div>
-        </section>
-        <section class="surface-card surface-card--padded">
-            <div class="section-header">
-                <div><h3 class="section-title">Смены и загрузка центров</h3></div>
-        <div class="view-actions"><button class="btn-secondary" onclick="focusProductionDeepSection()">Глубокий контур</button></div>
-            </div>
-            <div id="productionShiftBoardMount"></div>
-        </section>
-    </div>
-    <div class="client360-grid secondary-zone" style="margin-bottom:24px;">
-        <section class="surface-card surface-card--padded">
-            <div class="section-header">
-        <div><h3 class="section-title">Норматив и факт</h3></div>
-                <div class="view-actions"><button class="btn-secondary" onclick="focusProductionOperations()">Открыть операции</button></div>
-            </div>
-            <div id="productionNormFactMount"></div>
-        </section>
-        <section class="surface-card surface-card--padded">
-            <div class="section-header">
-                <div><h3 class="section-title">Журнал изменений заказа</h3></div>
-                <div class="view-actions"><button class="btn-secondary" onclick="selectFirstProductionOrder()">Выбрать заказ</button></div>
-            </div>
-            <div id="productionChangeLogMount"></div>
-        </section>
-    </div>
-    <div class="client360-grid secondary-zone" style="margin-bottom:24px;">
-        <section class="surface-card surface-card--padded">
-            <div class="section-header">
-                <div><h3 class="section-title">Узкие места производства</h3></div>
-                <div class="view-actions"><button class="btn-secondary" onclick="focusProductionQueue()">Очередь</button></div>
-            </div>
-            <div id="productionBottlenecksList" class="client360-list"></div>
-        </section>
-        <section class="surface-card surface-card--padded">
-            <div class="section-header">
-                <div><h3 class="section-title">Материальные риски и расхождения</h3></div>
-                <div class="view-actions"><button class="btn-secondary" onclick="openSupplyFromProduction()">Склад</button></div>
-            </div>
-            <div id="productionDiscrepanciesList" class="client360-list"></div>
-        </section>
-    </div>
-    <div class="finance-layout">
-        <section class="surface-card surface-card--padded ops-form-card">
-            <div class="section-header">
-                <div>
-                    <h3 class="section-title">Новый производственный заказ</h3>
-                    <p class="section-subtitle">Привязывай заказ к проекту, назначай ответственного, стадию и контрольные даты.</p>
-                </div>
-      <span class="ops-section-chip">Рабочее место цеха</span>
-            </div>
-            <div id="productionPolicyBanner" class="form-policy-banner" style="display:none;"></div>
-            <div id="productionOrderForm" class="finance-form-grid form-grid-standard">
-                <label class="form-field">
-                    <span class="form-label">Проект</span>
-                    <select id="productionProjectId" data-field="productionProjectId" class="auth-input"><option value="0">Без проекта</option></select>
-                    <span class="form-error" data-error-for="productionProjectId"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Контрагент</span>
-                    <select id="productionClientId" data-field="productionClientId" class="auth-input"><option value="0">Без контрагента</option></select>
-                    <span class="form-error" data-error-for="productionClientId"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Юрлицо</span>
-                    <select id="productionLegalEntityId" data-field="productionLegalEntityId" class="auth-input"><option value="0">Выберите юрлицо</option></select>
-                    <span class="form-error" data-error-for="productionLegalEntityId"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Подразделение</span>
-                    <select id="productionBusinessUnitId" data-field="productionBusinessUnitId" class="auth-input"><option value="0">Выберите подразделение</option></select>
-                    <span class="form-error" data-error-for="productionBusinessUnitId"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Название заказа <span class="form-required">*</span></span>
-                    <input id="productionOrderName" data-field="productionOrderName" class="auth-input" placeholder="Например, партия корпусов 250 шт">
-                    <span class="form-error" data-error-for="productionOrderName"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Ответственный <span class="form-required">*</span></span>
-                    <input id="productionResponsible" data-field="productionResponsible" class="auth-input" placeholder="ФИО или роль ответственного">
-                    <span class="form-error" data-error-for="productionResponsible"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Маршрут / техкарта</span>
-                    <input id="productionRouteName" data-field="productionRouteName" class="auth-input" placeholder="Например, мехобработка + ОТК">
-                    <span class="form-error" data-error-for="productionRouteName"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Стадия</span>
-                    <select id="productionStage" data-field="productionStage" class="auth-input">
-                        <option value="queue">Очередь</option>
-                        <option value="in_work">В работе</option>
-                        <option value="otk">ОТК</option>
-                        <option value="done">Готово</option>
-                    </select>
-                    <span class="form-error" data-error-for="productionStage"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Приоритет</span>
-                    <select id="productionPriority" data-field="productionPriority" class="auth-input">
-                        <option value="normal">Обычный</option>
-                        <option value="high">Высокий</option>
-                        <option value="critical">Критичный</option>
-                    </select>
-                    <span class="form-error" data-error-for="productionPriority"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Плановый старт</span>
-                    <input id="productionPlanStart" data-field="productionPlanStart" class="auth-input" placeholder="дд.мм.гггг">
-                    <span class="form-error" data-error-for="productionPlanStart"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Плановый финиш</span>
-                    <input id="productionPlanFinish" data-field="productionPlanFinish" class="auth-input" placeholder="дд.мм.гггг">
-                    <span class="form-error" data-error-for="productionPlanFinish"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Факт завершения</span>
-                    <input id="productionActualFinish" data-field="productionActualFinish" class="auth-input" placeholder="дд.мм.гггг">
-                    <span class="form-error" data-error-for="productionActualFinish"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">План, шт</span>
-                    <input id="productionPlannedQty" data-field="productionPlannedQty" class="auth-input" placeholder="Например, 250">
-                    <span class="form-error" data-error-for="productionPlannedQty"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Выпуск, шт</span>
-                    <input id="productionProducedQty" data-field="productionProducedQty" class="auth-input" placeholder="Например, 120">
-                    <span class="form-error" data-error-for="productionProducedQty"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Брак, шт</span>
-                    <input id="productionScrapQty" data-field="productionScrapQty" class="auth-input" placeholder="Например, 2">
-                    <span class="form-error" data-error-for="productionScrapQty"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Плановая себестоимость</span>
-                    <input id="productionPlannedCost" data-field="productionPlannedCost" class="auth-input" placeholder="Например, 540000">
-                    <span class="form-error" data-error-for="productionPlannedCost"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Фактическая себестоимость</span>
-                    <input id="productionActualCost" data-field="productionActualCost" class="auth-input" placeholder="Например, 498000">
-                    <span class="form-error" data-error-for="productionActualCost"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Трудозатраты план, ч</span>
-                    <input id="productionLaborHoursPlan" data-field="productionLaborHoursPlan" class="auth-input" placeholder="Например, 86">
-                    <span class="form-error" data-error-for="productionLaborHoursPlan"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Трудозатраты факт, ч</span>
-                    <input id="productionLaborHoursFact" data-field="productionLaborHoursFact" class="auth-input" placeholder="Например, 74">
-                    <span class="form-error" data-error-for="productionLaborHoursFact"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Прогресс, %</span>
-                    <input id="productionProgress" data-field="productionProgress" class="auth-input" placeholder="Например, 45">
-                    <span class="form-error" data-error-for="productionProgress"></span>
-                </label>
-                <label class="form-field form-field--full">
-                    <span class="form-label">Комментарий</span>
-                    <textarea id="productionComment" data-field="productionComment" class="auth-input" style="min-height:96px;" placeholder="Коротко: узкое место, этап, комментарий мастера"></textarea>
-                    <span class="form-error" data-error-for="productionComment"></span>
-                </label>
-            </div>
-            <div class="finance-actions-row form-actions">
-                <button class="btn-secondary" onclick="resetProductionForm()">Отмена</button>
-                <button class="btn-primary" onclick="saveProductionOrder()">Сохранить</button>
-            </div>
-        </section>
-        <section class="surface-card surface-card--padded ops-list-card">
-            <div class="section-header">
-                <div>
-                    <h3 class="section-title">Очередь производства</h3>
-                    <p class="section-subtitle">Живой реестр производственных заказов по очереди, срокам и степени готовности.</p>
-                </div>
-                <div id="productionSavedFiltersMount" class="view-actions"></div>
-            </div>
-            <div id="productionBulkActionsMount"></div>
-            <div class="table-shell">
-                <table class="admin-table">
-                    <thead><tr><th class="bulk-select-col">✓</th><th>Заказ</th><th>Проект / Контрагент</th><th>Ответственный</th><th>Срок</th><th>Статус</th><th>Прогресс</th><th>Действия</th></tr></thead>
-                    <tbody id="productionOrdersTable"></tbody>
-                </table>
-            </div>
-        </section>
-    </div>
 
-    <div class="finance-layout">
-        <section class="surface-card surface-card--padded ops-form-card">
-            <div class="section-header">
-                <div>
-                    <h3 class="section-title">Операции и факт по заказу</h3>
-                    <p class="section-subtitle">Выбери заказ, веди маршрут по операциям, фиксируй трудозатраты, выпуск, брак и фактическую себестоимость.</p>
-                </div>
-                <span id="productionOperationsCaption" class="ops-section-chip">Заказ не выбран</span>
+        <div class="production-simple-guide" aria-label="Как работать с производственным заказом">
+            <div><span>1</span><strong>Откройте заказ</strong><small>Проверьте изделие, количество, срок и ответственного.</small></div>
+            <div><span>2</span><strong>Подготовьте производство</strong><small>Добавьте операции и необходимые материалы.</small></div>
+            <div><span>3</span><strong>Приложите документы</strong><small>Свяжите чертежи, ТЗ и спецификации.</small></div>
+            <div><span>4</span><strong>Передайте в ОТК</strong><small>Зафиксируйте готовность, брак и завершите заказ.</small></div>
+        </div>
+
+        <div id="productionSimpleMetrics" class="production-simple-metrics"></div>
+        <div class="production-simple-toolbar">
+            <input id="productionSimpleSearch" class="auth-input" type="search" placeholder="Найти заказ, проект или клиента" oninput="setSimpleProductionSearch(this.value)">
+            <select id="productionSimpleStage" class="auth-input" onchange="setSimpleProductionStage(this.value)">
+                <option value="">Все этапы</option><option value="queue">Очередь</option><option value="in_work">В работе</option><option value="otk">ОТК</option><option value="done">Готово</option>
+            </select>
+            <button class="btn-secondary" type="button" onclick="resetSimpleProductionFilters()">Сбросить</button>
+        </div>
+
+        <div id="productionSimpleList" class="production-simple-list"></div>
+        <div id="productionSimpleWorkspace" class="production-simple-workspace"></div>
+
+        <section id="productionSimpleEditor" class="production-simple-editor" hidden>
+            <div class="production-simple-editor__head">
+                <div><span class="view-eyebrow">Карточка заказа</span><h2 id="productionSimpleEditorTitle">Новый заказ</h2><p>Заполните основные данные. Операции, материалы и документы добавляются после сохранения.</p></div>
+                <button class="btn-secondary" type="button" onclick="closeSimpleProductionEditor()">Закрыть</button>
             </div>
-            <div id="productionOperationForm" class="finance-form-grid form-grid-standard">
-                <label class="form-field">
-                    <span class="form-label">№ операции</span>
-                    <input id="productionOperationSequence" data-field="productionOperationSequence" class="auth-input" placeholder="Например, 10">
-                    <span class="form-error" data-error-for="productionOperationSequence"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Операция <span class="form-required">*</span></span>
-                    <input id="productionOperationName" data-field="productionOperationName" class="auth-input" placeholder="Например, сварка корпуса">
-                    <span class="form-error" data-error-for="productionOperationName"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Участок / рабочий центр <span class="form-required">*</span></span>
-                    <input id="productionOperationWorkCenter" data-field="productionOperationWorkCenter" class="auth-input" placeholder="Например, пост №3">
-                    <span class="form-error" data-error-for="productionOperationWorkCenter"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Статус</span>
-                    <select id="productionOperationStatus" data-field="productionOperationStatus" class="auth-input">
-                        <option value="planned">План</option>
-                        <option value="in_progress">В работе</option>
-                        <option value="otk">ОТК</option>
-                        <option value="done">Готово</option>
-                    </select>
-                    <span class="form-error" data-error-for="productionOperationStatus"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">План, ч</span>
-                    <input id="productionOperationPlannedHours" data-field="productionOperationPlannedHours" class="auth-input" placeholder="Например, 8">
-                    <span class="form-error" data-error-for="productionOperationPlannedHours"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Факт, ч</span>
-                    <input id="productionOperationActualHours" data-field="productionOperationActualHours" class="auth-input" placeholder="Например, 6.5">
-                    <span class="form-error" data-error-for="productionOperationActualHours"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Плановый выпуск</span>
-                    <input id="productionOperationPlannedQty" data-field="productionOperationPlannedQty" class="auth-input" placeholder="Например, 250">
-                    <span class="form-error" data-error-for="productionOperationPlannedQty"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Выпущено</span>
-                    <input id="productionOperationCompletedQty" data-field="productionOperationCompletedQty" class="auth-input" placeholder="Например, 210">
-                    <span class="form-error" data-error-for="productionOperationCompletedQty"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Брак</span>
-                    <input id="productionOperationScrapQty" data-field="productionOperationScrapQty" class="auth-input" placeholder="Например, 3">
-                    <span class="form-error" data-error-for="productionOperationScrapQty"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Ставка труда / ч</span>
-                    <input id="productionOperationLaborRate" data-field="productionOperationLaborRate" class="auth-input" placeholder="Например, 900">
-                    <span class="form-error" data-error-for="productionOperationLaborRate"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Материалы</span>
-                    <input id="productionOperationMaterialCost" data-field="productionOperationMaterialCost" class="auth-input" placeholder="Например, 12000">
-                    <span class="form-error" data-error-for="productionOperationMaterialCost"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Накладные</span>
-                    <input id="productionOperationOverheadCost" data-field="productionOperationOverheadCost" class="auth-input" placeholder="Например, 3500">
-                    <span class="form-error" data-error-for="productionOperationOverheadCost"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Старт операции</span>
-                    <input id="productionOperationStartedAt" data-field="productionOperationStartedAt" class="auth-input" placeholder="дд.мм.гггг">
-                    <span class="form-error" data-error-for="productionOperationStartedAt"></span>
-                </label>
-                <label class="form-field">
-                    <span class="form-label">Финиш операции</span>
-                    <input id="productionOperationFinishedAt" data-field="productionOperationFinishedAt" class="auth-input" placeholder="дд.мм.гггг">
-                    <span class="form-error" data-error-for="productionOperationFinishedAt"></span>
-                </label>
-                <label class="form-field form-field--full">
-                    <span class="form-label">Примечание</span>
-                    <textarea id="productionOperationNote" data-field="productionOperationNote" class="auth-input" style="min-height:96px;" placeholder="Причина отклонения, замечание мастера, комментарий по браку"></textarea>
-                    <span class="form-error" data-error-for="productionOperationNote"></span>
-                </label>
+            <div class="production-simple-editor__steps">
+                <section><div class="production-simple-step-head"><span>1</span><div><h3>Что производим</h3><p>Название, проект и клиент.</p></div></div><div class="production-simple-form-grid">
+                    <label><span>Название заказа *</span><input id="simpleProductionName" class="auth-input" placeholder="Например, партия шумозащитных кожухов"></label>
+                    <label><span>Проект</span><select id="simpleProductionProject" class="auth-input"><option value="0">Без проекта</option></select></label>
+                    <label class="is-wide"><span>Клиент / контрагент</span><input id="simpleProductionClient" class="auth-input" placeholder="Название компании"></label>
+                </div></section>
+                <section><div class="production-simple-step-head"><span>2</span><div><h3>Кто и когда</h3><p>Ответственный, этап и срок.</p></div></div><div class="production-simple-form-grid">
+                    <label><span>Ответственный</span><input id="simpleProductionResponsible" class="auth-input" placeholder="ФИО сотрудника"></label>
+                    <label><span>Текущий этап</span><select id="simpleProductionStatus" class="auth-input"><option value="queue">Очередь</option><option value="in_work">В работе</option><option value="otk">ОТК</option><option value="done">Готово</option></select></label>
+                    <label><span>Плановый старт</span><input id="simpleProductionStart" class="auth-input date-picker" placeholder="дд.мм.гггг"></label>
+                    <label><span>Завершить до</span><input id="simpleProductionFinish" class="auth-input date-picker" placeholder="дд.мм.гггг"></label>
+                </div></section>
+                <section><div class="production-simple-step-head"><span>3</span><div><h3>Количество и результат</h3><p>Для партий укажите план, готовое количество и брак.</p></div></div><div class="production-simple-form-grid">
+                    <label><span>Нужно изготовить</span><input id="simpleProductionPlanQty" class="auth-input" type="number" min="0" placeholder="0"></label>
+                    <label><span>Уже готово</span><input id="simpleProductionDoneQty" class="auth-input" type="number" min="0" placeholder="0"></label>
+                    <label><span>Брак / переделка</span><input id="simpleProductionScrapQty" class="auth-input" type="number" min="0" placeholder="0"></label>
+                    <label><span>Приоритет</span><select id="simpleProductionPriority" class="auth-input"><option value="normal">Обычный</option><option value="high">Высокий</option><option value="critical">Критичный</option></select></label>
+                    <label class="is-wide"><span>Комментарий</span><textarea id="simpleProductionComment" class="auth-input" rows="3" placeholder="Что важно учесть при выполнении заказа"></textarea></label>
+                </div></section>
             </div>
-            <div class="finance-actions-row form-actions">
-                <button class="btn-secondary" onclick="resetProductionOperationForm()">Отмена</button>
-                <button class="btn-primary" onclick="saveProductionOperation()">Сохранить</button>
-            </div>
+            <div class="production-simple-editor__actions"><button class="btn-secondary" onclick="closeSimpleProductionEditor()">Отмена</button><button class="btn-primary" onclick="saveSimpleProductionOrder()">Сохранить заказ</button></div>
         </section>
 
-        <section class="surface-card surface-card--padded ops-list-card">
-            <div class="section-header">
-                <div>
-                    <h3 class="section-title">Маршрут и исполнение</h3>
-                    <p class="section-subtitle">Реестр операций выбранного заказа: последовательность, часы, выпуск и себестоимость по шагам.</p>
-                </div>
+        <section id="productionSimpleOperationForm" class="production-simple-subform" hidden>
+            <div class="production-simple-editor__head"><div><h2>Операция производства</h2><p>Добавьте один понятный шаг изготовления.</p></div><button class="btn-secondary" onclick="closeSimpleProductionSubforms()">Закрыть</button></div>
+            <div class="production-simple-form-grid">
+                <label><span>Название операции *</span><input id="simpleOperationName" class="auth-input" placeholder="Например, резка металла"></label>
+                <label><span>Участок / цех</span><input id="simpleOperationCenter" class="auth-input" placeholder="Сварочный участок"></label>
+                <label><span>Статус</span><select id="simpleOperationStatus" class="auth-input"><option value="planned">Запланировано</option><option value="in_progress">В работе</option><option value="done">Готово</option><option value="quality_hold">На проверке ОТК</option></select></label>
+                <label><span>План, часов</span><input id="simpleOperationHours" class="auth-input" type="number" min="0" step="0.1"></label>
+                <label><span>План выпуска</span><input id="simpleOperationQty" class="auth-input" type="number" min="0"></label>
+                <label class="is-wide"><span>Комментарий</span><textarea id="simpleOperationComment" class="auth-input" rows="3"></textarea></label>
             </div>
-            <div class="table-shell">
-                <table class="admin-table">
-                    <thead><tr><th>Операция</th><th>Участок</th><th>План / факт</th><th>Выпуск</th><th>Статус</th><th>Себестоимость</th><th>Действия</th></tr></thead>
-                    <tbody id="productionOperationsTable"></tbody>
-                </table>
+            <div class="production-simple-editor__actions"><button class="btn-secondary" onclick="closeSimpleProductionSubforms()">Отмена</button><button class="btn-primary" onclick="saveSimpleProductionOperation()">Сохранить операцию</button></div>
+        </section>
+
+        <section id="productionSimpleMaterialForm" class="production-simple-subform" hidden>
+            <div class="production-simple-editor__head"><div><h2>Материал</h2><p>Укажите материал и необходимое количество.</p></div><button class="btn-secondary" onclick="closeSimpleProductionSubforms()">Закрыть</button></div>
+            <div class="production-simple-form-grid">
+                <label><span>Материал *</span><input id="simpleMaterialName" class="auth-input" placeholder="Например, листовая сталь 2 мм"></label>
+                <label><span>Артикул</span><input id="simpleMaterialArticle" class="auth-input"></label>
+                <label><span>Количество</span><input id="simpleMaterialQty" class="auth-input" type="number" min="0" step="0.01"></label>
+                <label><span>Единица</span><input id="simpleMaterialUnit" class="auth-input" value="шт"></label>
+                <label><span>Склад</span><input id="simpleMaterialWarehouse" class="auth-input"></label>
+                <label class="is-wide"><span>Комментарий</span><textarea id="simpleMaterialComment" class="auth-input" rows="3"></textarea></label>
             </div>
+            <div class="production-simple-editor__actions"><button class="btn-secondary" onclick="closeSimpleProductionSubforms()">Отмена</button><button class="btn-primary" onclick="saveSimpleProductionMaterial()">Сохранить материал</button></div>
         </section>
     </div>
-
-    <div class="finance-layout">
-        <section class="surface-card surface-card--padded ops-form-card">
-            <div class="section-header">
-                <div>
-    <h3 class="section-title">Спецификация и материалы заказа</h3>
-                    <p class="section-subtitle">Веди состав изделия, норму на единицу, план/факт расхода и склад-источник материалов.</p>
-                </div>
-                <span id="productionBomCaption" class="ops-section-chip">Заказ не выбран</span>
-            </div>
-            <div class="finance-form-grid">
-                <input id="productionBomArticle" class="auth-input" placeholder="Артикул">
-                <input id="productionBomName" class="auth-input" placeholder="Материал / позиция">
-                <input id="productionBomUnit" class="auth-input" placeholder="Ед. изм.">
-                <input id="productionBomQtyPerUnit" class="auth-input" placeholder="Норма на единицу">
-                <input id="productionBomPlannedQty" class="auth-input" placeholder="План расхода">
-                <input id="productionBomActualQty" class="auth-input" placeholder="Факт расхода">
-                <input id="productionBomUnitCost" class="auth-input" placeholder="Цена за единицу">
-                <input id="productionBomWarehouse" class="auth-input" placeholder="Склад">
-                <input id="productionBomBin" class="auth-input" placeholder="Ячейка">
-                <textarea id="productionBomNote" class="auth-input" style="margin:0; min-height:96px; grid-column:1 / -1;" placeholder="Комментарий по материалу, замена, ограничение, источник..."></textarea>
-            </div>
-            <div class="finance-actions-row">
-                <button class="btn-secondary" onclick="resetProductionBomForm()">Очистить</button>
-    <button class="btn-primary" onclick="saveProductionBomItem()">Сохранить спецификацию</button>
-            </div>
-        </section>
-        <section class="surface-card surface-card--padded ops-list-card">
-            <div class="section-header">
-                <div>
-                    <h3 class="section-title">Состав изделия</h3>
-                    <p class="section-subtitle">Список материалов выбранного заказа и их план-факт по стоимости и расходу.</p>
-                </div>
-            </div>
-            <div class="table-shell">
-                <table class="admin-table">
-                    <thead><tr><th>Материал</th><th>Норма / план / факт</th><th>Склад</th><th>Стоимость</th><th>Действия</th></tr></thead>
-                    <tbody id="productionBomTable"></tbody>
-                </table>
-            </div>
-        </section>
-    </div>
-
-    <div class="finance-layout">
-        <section class="surface-card surface-card--padded ops-form-card">
-            <div class="section-header">
-                <div>
-                    <h3 class="section-title">Шаблон маршрута</h3>
-                    <p class="section-subtitle">Задай эталонный маршрут операций и потом разверни его в рабочие операции по одному клику.</p>
-                </div>
-                <span id="productionRouteCaption" class="ops-section-chip">Заказ не выбран</span>
-            </div>
-            <div class="finance-form-grid">
-                <input id="productionRouteSequence" class="auth-input" placeholder="№ этапа">
-                <input id="productionRouteOperation" class="auth-input" placeholder="Операция">
-                <input id="productionRouteWorkCenter" class="auth-input" placeholder="Участок / центр">
-                <input id="productionRoutePlannedHours" class="auth-input" placeholder="План, ч">
-                <input id="productionRoutePlannedQty" class="auth-input" placeholder="План выпуска">
-                <input id="productionRouteLaborRate" class="auth-input" placeholder="Ставка труда">
-                <textarea id="productionRouteNote" class="auth-input" style="margin:0; min-height:96px; grid-column:1 / -1;" placeholder="Комментарий к шаблону маршрута"></textarea>
-            </div>
-            <div class="finance-actions-row">
-                <button class="btn-secondary" onclick="resetProductionRouteForm()">Очистить</button>
-                <button class="btn-secondary" onclick="applyProductionRouteTemplates()">Развернуть в операции</button>
-                <button class="btn-primary" onclick="saveProductionRouteItem()">Сохранить шаблон</button>
-            </div>
-        </section>
-        <section class="surface-card surface-card--padded ops-list-card">
-            <div class="section-header">
-                <div>
-                    <h3 class="section-title">Маршрутный шаблон</h3>
-                    <p class="section-subtitle">Очередность операций, по которой заказ разворачивается в производство.</p>
-                </div>
-            </div>
-            <div class="table-shell">
-                <table class="admin-table">
-                    <thead><tr><th>Этап</th><th>Участок</th><th>План</th><th>Стоимость</th><th>Действия</th></tr></thead>
-                    <tbody id="productionRoutesTable"></tbody>
-                </table>
-            </div>
-        </section>
-    </div>
-
-    <div id="productionDeepMount" class="secondary-zone"></div>
 </div>

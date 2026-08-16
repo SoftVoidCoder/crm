@@ -12,6 +12,96 @@ function workflowEscape(value) {
     return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
 
+function isDesignOfficeApprovalRole() {
+    const role = String(currentUser?.role || '').trim().toLowerCase();
+    return role === 'конструкторское бюро' || role.includes('конструктор');
+}
+
+function approvalTextBlob(item = {}) {
+    return [
+        item.title,
+        item.item_link,
+        item.author,
+        item.active_stage?.stage_name,
+        ...(Array.isArray(item.route) ? item.route : []),
+        ...(Array.isArray(item.current_assignees) ? item.current_assignees : []),
+    ].join(' ').toLowerCase();
+}
+
+function isTechnicalApprovalNoise(item = {}) {
+    const text = approvalTextBlob(item);
+    return (
+        text.includes('lifecycle director') ||
+        text.includes('erp для удаления заявки') ||
+        text.includes('/erp/process/') ||
+        text.includes('delete request') ||
+        text.includes('system workflow')
+    );
+}
+
+function approvalStatusLabel(status) {
+    const map = {
+        pending: 'Ждёт решения',
+        rework: 'На доработке',
+        completed: 'Согласовано',
+        rejected: 'Отклонено',
+    };
+    return map[String(status || '').trim()] || String(status || 'Ждёт решения');
+}
+
+function approvalHumanTitle(item = {}) {
+    const raw = String(item.title || '').trim();
+    const clean = raw.replace(/^Согласование:\s*/i, '').trim();
+    if (isTechnicalApprovalNoise(item)) return 'Системное согласование';
+    if (/черт|тз|техническ|спецификац|кб|производ/i.test(clean)) return clean || 'Техническое согласование';
+    if (clean) return clean;
+    return `Согласование #${item.id || ''}`;
+}
+
+function approvalHumanLink(item = {}) {
+    const link = String(item.item_link || '').trim();
+    if (!link) return 'Документ или заказ не указан';
+    if (link.startsWith('/erp/process/')) return 'Внутренний ERP-процесс';
+    if (link.startsWith('/documents/')) return `Документ #${link.split('/').filter(Boolean).pop() || ''}`;
+    if (link.startsWith('/production/')) return `Производственный заказ #${link.split('/').filter(Boolean).pop() || ''}`;
+    if (link.startsWith('/projects/') || link.startsWith('/project/')) return `Проект #${link.split('/').filter(Boolean).pop() || ''}`;
+    return link;
+}
+
+function cleanApprovalPersonName(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (/lifecycle director/i.test(raw)) return 'Система';
+    return raw;
+}
+
+function updateApprovalsPageForRole() {
+    const isKb = isDesignOfficeApprovalRole();
+    const title = document.querySelector('#approvalsView .view-title');
+    const subtitle = document.querySelector('#approvalsView .view-subtitle');
+    const actions = document.querySelector('#approvalsView .approvals-simple-header .view-actions');
+    if (title) title.textContent = isKb ? 'Согласования КБ' : 'Согласования';
+    if (subtitle) {
+        subtitle.textContent = isKb
+            ? 'Здесь КБ проверяет чертежи, ТЗ, спецификации и технические решения. Системные ERP-маршруты скрыты.'
+            : 'Откройте документ, проверьте его и выберите одно понятное решение.';
+    }
+    if (actions) actions.style.display = isKb ? 'none' : '';
+    if (isKb) workflowDesignerOpen = false;
+}
+
+function roleFilteredApprovalsForCurrentTab() {
+    const isKb = isDesignOfficeApprovalRole();
+    return approvalsDB.filter(item => {
+        const statusOk = currentApprTab === 'pending'
+            ? item.status === 'pending' || item.status === 'rework'
+            : item.status === 'completed' || item.status === 'rejected';
+        if (!statusOk) return false;
+        if (isKb && isTechnicalApprovalNoise(item)) return false;
+        return true;
+    });
+}
+
 async function loadWorkflowDefinitions() {
     const res = await apiCall('/workflows/definitions');
     workflowDefinitionsDB = res && Array.isArray(res.items) ? res.items : [];
@@ -26,6 +116,8 @@ function switchApprTab(tab) {
     currentApprTab = tab;
     document.getElementById('tabApprPending').classList.toggle('active', tab === 'pending');
     document.getElementById('tabApprCompleted').classList.toggle('active', tab === 'completed');
+    document.getElementById('tabApprPending').setAttribute('aria-selected', String(tab === 'pending'));
+    document.getElementById('tabApprCompleted').setAttribute('aria-selected', String(tab === 'completed'));
     renderApprovals();
 }
 
@@ -172,7 +264,32 @@ function exportApprovalBulkSelection() {
 function renderApprovalsRoleWorkbench() {
     const mount = document.getElementById('approvalsRoleWorkbenchMount');
     if (!mount || !currentUser) return;
+    updateApprovalsPageForRole();
     const role = String(currentUser.role || '').trim();
+    if (isDesignOfficeApprovalRole()) {
+        const visibleRows = roleFilteredApprovalsForCurrentTab();
+        const pendingCount = approvalsDB.filter(item => !isTechnicalApprovalNoise(item) && (item.status === 'pending' || item.status === 'rework')).length;
+        mount.innerHTML = `
+            <section class="surface-card surface-card--padded role-workbench role-workbench--compact approvals-kb-workbench">
+                <div class="role-workbench-copy">
+                    <div class="view-eyebrow">Конструкторское бюро</div>
+                    <h3 class="section-title">Что здесь делать</h3>
+                    <p class="section-subtitle">Проверяйте только технические решения: чертежи, ТЗ, спецификации, маршрут изготовления и документы по заказу. Системные ERP-согласования для КБ скрыты.</p>
+                </div>
+                <div class="role-workbench-stats">
+                    <div class="role-workbench-stat"><span>Видимых согласований</span><strong>${visibleRows.length}</strong></div>
+                    <div class="role-workbench-stat"><span>Ждут решения</span><strong>${pendingCount}</strong></div>
+                </div>
+                <div class="role-workbench-actions">
+                    <button class="btn-primary" onclick="switchApprTab('pending')">К решению</button>
+                    <button class="btn-secondary" onclick="navigateTo('production')">Производство</button>
+                    <button class="btn-secondary" onclick="navigateTo('documents')">Документы</button>
+                    <button class="btn-secondary" onclick="navigateTo('tasks')">Поручения</button>
+                </div>
+            </section>
+        `;
+        return;
+    }
     if (role === 'Юрист') {
         const pendingCount = approvalsDB.filter(item => item.status === 'pending').length;
         mount.innerHTML = `
@@ -462,6 +579,25 @@ async function processWorkflowAutomation() {
 
 // ФУНКЦИЯ ДЛЯ ОТКРЫТИЯ ПРОЕКТА ПО КЛИКУ ИЗ СОГЛАСОВАНИЙ
 async function openProjectFromLink(link) {
+    const cleanLink = String(link || '').trim();
+    const documentMatch = cleanLink.match(/^\/documents\/(\d+)\/?$/i);
+    if (documentMatch) {
+        navigateTo('documents');
+        window.setTimeout(() => {
+            if (typeof openDocumentPreview === 'function') openDocumentPreview(Number(documentMatch[1]));
+        }, 250);
+        return;
+    }
+    const productionMatch = cleanLink.match(/^\/production\/(\d+)\/?$/i);
+    if (productionMatch) {
+        navigateTo('production');
+        window.setTimeout(() => {
+            if (typeof selectSimpleProductionOrder === 'function') selectSimpleProductionOrder(Number(productionMatch[1]));
+        }, 250);
+        return;
+    }
+    const projectMatch = cleanLink.match(/^\/projects?\/(\d+)\/?$/i);
+    if (projectMatch) link = projectMatch[1];
     // Ищем проект по ID, номеру договора или названию
     const p = projectsDB.find(x => String(x.id) === String(link) || x.contract === link || x.name === link);
     
@@ -590,10 +726,43 @@ function openCreateApprovalModal(preset = {}) {
     const titleEl = document.getElementById('apprTitle');
     const linkEl = document.getElementById('apprLink');
     if (titleEl) titleEl.value = preset.title || '';
-    if (linkEl) linkEl.value = preset.item_link || '';
+    if (linkEl) {
+        const documentOptions = (Array.isArray(documentsDB) ? documentsDB : []).map(document => ({
+            value: `/documents/${Number(document.id)}`,
+            label: `${document.number || `Документ #${document.id}`} — ${document.subject || 'без темы'}`,
+        }));
+        const projectOptions = (Array.isArray(projectsDB) ? projectsDB : []).map(project => ({
+            value: String(project.id),
+            label: `Проект: ${project.contract || project.name || `#${project.id}`}`,
+        }));
+        const options = [...documentOptions, ...projectOptions];
+        const presetValue = String(preset.item_link || '');
+        if (presetValue && !options.some(option => option.value === presetValue)) options.unshift({ value: presetValue, label: presetValue });
+        linkEl.innerHTML = `<option value="">Выберите документ или проект</option>${options.map(option => `<option value="${workflowEscape(option.value)}">${workflowEscape(option.label)}</option>`).join('')}`;
+        linkEl.value = presetValue;
+        linkEl.onchange = () => {
+            if (!titleEl || titleEl.value.trim() || !linkEl.value) return;
+            titleEl.value = `Согласование: ${String(linkEl.selectedOptions?.[0]?.textContent || '').trim()}`;
+        };
+    }
+    const userSelect = document.getElementById('apprRouteUser');
+    if (userSelect) {
+        const users = (Array.isArray(allUsersDB) ? allUsersDB : []).filter(user => user.status === 'approved' && user.name);
+        userSelect.innerHTML = `<option value="">Выберите сотрудника</option>${users.map(user => `<option value="${workflowEscape(user.name)}">${workflowEscape(user.name)} · ${workflowEscape(user.role || 'Сотрудник')}</option>`).join('')}`;
+    }
     document.getElementById('createApprovalModal').style.display = 'flex';
     if (titleEl) titleEl.focus();
 }
+
+window.addApprovalRouteUser = function() {
+    const select = document.getElementById('apprRouteUser');
+    const userName = String(select?.value || '').trim();
+    if (!userName) return customAlert('Выберите сотрудника, который должен согласовать документ.');
+    if (smartRouteData.includes(userName)) return customAlert('Этот сотрудник уже добавлен в маршрут.');
+    smartRouteData.push(userName);
+    select.value = '';
+    renderSmartRoute();
+};
 
 window.addSmartRouteStep = async function() {
     const type = await customPrompt("Тип этапа: 1 - Последовательный, 2 - Параллельный (одновременно)", "1");
@@ -633,13 +802,14 @@ window.autoGenerateRoute = async function() {
 
 function renderSmartRoute() {
     const c = document.getElementById('smartRouteContainer');
-    if(smartRouteData.length === 0) { c.innerHTML = '<div style="text-align: center; color: var(--secondary); font-size: 12px; font-style: italic;">Маршрут пока пуст...</div>'; return; }
+    if (!c) return;
+    if(smartRouteData.length === 0) { c.innerHTML = '<div class="approval-create-route__empty">Согласующие пока не выбраны.</div>'; return; }
     
     c.innerHTML = smartRouteData.map((step, idx) => `
-        <div style="display:flex; align-items:center; gap:10px; background:var(--card-bg); padding:8px 12px; border-radius:8px; border:1px solid var(--border);">
-            <span style="background:var(--primary); color:white; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:bold;">${idx+1}</span>
-            <span style="flex:1; font-size:13px; font-weight:600;">${step.includes(' и ') ? '🔄 Параллельно: ' + step : '👤 ' + step}</span>
-            <button class="btn-danger" style="padding:4px 8px; font-size:10px; min-height:unset;" onclick="smartRouteData.splice(${idx},1); renderSmartRoute()">✕</button>
+        <div class="approval-create-route__item">
+            <span>${idx+1}</span>
+            <strong>${workflowEscape(step)}</strong>
+            <button class="btn-secondary" type="button" onclick="smartRouteData.splice(${idx},1); renderSmartRoute()">Удалить</button>
         </div>
     `).join('');
 }
@@ -651,6 +821,7 @@ async function submitApproval() {
     const link = document.getElementById('apprLink').value.trim();
     const errors = [];
     if (!title) errors.push({ field: 'apprTitle', message: 'Укажите название процесса или документа.' });
+    if (!link) errors.push({ field: 'apprLink', message: 'Выберите документ или проект для согласования.' });
     if (smartRouteData.length === 0) errors.push({ field: 'smartRouteContainer', message: 'Добавьте хотя бы один этап маршрута.' });
     if (errors.length) {
         if (typeof showFormErrors === 'function') showFormErrors(errors, 'createApprovalModal');
@@ -813,32 +984,36 @@ renderApprovals = function() {
     if (!container) return;
     const currentUserName = currentUser?.name || '';
     const currentUserRole = currentUser?.role || '';
+    const isKb = isDesignOfficeApprovalRole();
 
     renderApprovalsRoleWorkbench();
     renderWorkflowDesignerMount();
 
-    const filtered = approvalsDB.filter(item => {
-        if (currentApprTab === 'pending') return item.status === 'pending' || item.status === 'rework';
-        return item.status === 'completed' || item.status === 'rejected';
-    });
+    const filtered = roleFilteredApprovalsForCurrentTab();
 
     if (!filtered.length) {
         container.innerHTML = typeof renderInlineEmptyState === 'function'
             ? renderInlineEmptyState(
-                currentApprTab === 'pending' ? 'Активных согласований пока нет.' : 'Завершённых маршрутов пока нет.',
-                currentApprTab === 'pending'
+                isKb
+                    ? (currentApprTab === 'pending' ? 'Для КБ сейчас нет согласований.' : 'Истории согласований КБ пока нет.')
+                    : (currentApprTab === 'pending' ? 'Активных согласований пока нет.' : 'Завершённых маршрутов пока нет.'),
+                isKb
+                    ? 'Когда менеджер, директор или производство отправит на проверку чертёж, ТЗ, спецификацию или заказ — он появится здесь.'
+                    : (currentApprTab === 'pending'
                     ? 'Запустите первый маршрут или откройте документы, чтобы согласование появилось из реального процесса.'
-                    : 'История завершённых маршрутов будет собираться здесь автоматически.',
-                currentApprTab === 'pending'
+                    : 'История завершённых маршрутов будет собираться здесь автоматически.'),
+                isKb
+                    ? `<button class="btn-primary" onclick="navigateTo('production')">Открыть производство</button><button class="btn-secondary" onclick="navigateTo('documents')">Документы КБ</button>`
+                    : (currentApprTab === 'pending'
                     ? `<button class="btn-primary" onclick="openCreateApprovalModal({})">Новый маршрут</button><button class="btn-secondary" onclick="navigateTo('documents')">Документы</button>`
-                    : `<button class="btn-secondary" onclick="switchApprTab('pending')">На согласовании</button>`
+                    : `<button class="btn-secondary" onclick="switchApprTab('pending')">На согласовании</button>`)
             )
             : '<div class="krd-empty"><div class="krd-empty__title">Маршрутов пока нет</div></div>';
         return;
     }
 
     const renderCards = () => {
-        return renderApprovalBulkToolbar() + filtered.map(item => {
+        return (isKb ? '' : renderApprovalBulkToolbar()) + filtered.map(item => {
             const history = Array.isArray(item.history) ? item.history : [];
             const route = Array.isArray(item.route) ? item.route : [];
             const currentStep = Number(item.current_step || 0);
@@ -850,6 +1025,11 @@ renderApprovals = function() {
             const amICurrent = ((item.status === 'pending' || item.status === 'rework') && stepUsers.includes(currentUserName) && !iAlreadyApproved);
             const canAct = amICurrent || currentUserRole === 'Директор';
             const safeLink = approvalUiJsString(item.item_link || '');
+            const displayTitle = approvalHumanTitle(item);
+            const displayLink = approvalHumanLink(item);
+            const displayAuthor = cleanApprovalPersonName(item.author) || 'Не указан';
+            const displayStep = item.active_stage?.stage_name || `Этап ${currentStep + 1}`;
+            const visibleStepUsers = stepUsers.map(cleanApprovalPersonName).filter(Boolean);
 
             const routeHtml = route.map((person, idx) => {
                 let stepClass = 'krd-approval-step';
@@ -857,7 +1037,7 @@ renderApprovals = function() {
                 else if (idx === currentStep && item.status === 'rejected') stepClass += ' krd-approval-step--rejected';
                 else if (idx === currentStep && (item.status === 'pending' || item.status === 'rework')) stepClass += ' krd-approval-step--active';
                 return `
-                    <span class="${stepClass}">${workflowEscape(person)}</span>
+                    <span class="${stepClass}">${workflowEscape(cleanApprovalPersonName(person))}</span>
                     ${idx < route.length - 1 ? '<span class="krd-approval-arrow">→</span>' : ''}
                 `;
             }).join('');
@@ -865,9 +1045,9 @@ renderApprovals = function() {
             const actions = canAct ? `
                 <div class="krd-approval-actions">
                     <button class="btn-success" onclick="processApprovalStep(${Number(item.id)}, 'approve')">Согласовать</button>
-                    <button class="btn-danger" onclick="processApprovalStep(${Number(item.id)}, 'reject')">Отклонить</button>
-                    <button class="btn-secondary" onclick="processApprovalStep(${Number(item.id)}, 'return_rework')">На доработку</button>
-                    <button class="btn-secondary" onclick="processApprovalStep(${Number(item.id)}, 'delegate')">Делегировать</button>
+                    <button class="btn-secondary" onclick="processApprovalStep(${Number(item.id)}, 'return_rework')">Вернуть на исправление</button>
+                    <button class="btn-danger" onclick="processApprovalStep(${Number(item.id)}, 'reject')">Отказать</button>
+                    <button class="btn-secondary" onclick="processApprovalStep(${Number(item.id)}, 'delegate')">Передать другому</button>
                 </div>
             ` : '';
 
@@ -890,23 +1070,23 @@ renderApprovals = function() {
                         <div class="krd-approval-card__body">
                             <div class="krd-approval-card__head">
                                 <div>
-                                    <h3 class="krd-approval-card__title">${workflowEscape(item.title || `Маршрут #${item.id}`)}</h3>
+                                    <h3 class="krd-approval-card__title">${workflowEscape(displayTitle)}</h3>
                                     <div class="krd-approval-card__meta">
-                                        <span>Документ:</span>
-                                        <button class="krd-inline-link" onclick="openProjectFromLink('${safeLink}')">${workflowEscape(item.item_link || 'без ссылки')}</button>
+                                        <span>${isKb ? 'Что согласовать:' : 'Документ:'}</span>
+                                        <button class="krd-inline-link" onclick="openProjectFromLink('${safeLink}')">${workflowEscape(displayLink)}</button>
                                         <span>•</span>
-                                        <span>Автор: ${workflowEscape(item.author || 'Система')}</span>
+                                        <span>Отправил: ${workflowEscape(displayAuthor)}</span>
                                     </div>
                                     <div class="krd-approval-card__submeta">
-                                        <span>Активный этап: ${workflowEscape(item.active_stage?.stage_name || 'не определён')}</span>
+                                        <span>${isKb ? 'Текущий шаг' : 'Активный этап'}: ${workflowEscape(displayStep)}</span>
                                         <span>•</span>
-                                        <span>${workflowEscape(item.sla_status || 'стабильно')}</span>
+                                        <span>${workflowEscape(item.sla_status === 'stable' ? 'срок в норме' : item.sla_status || 'срок в норме')}</span>
                                         ${item.due_at_display ? `<span>•</span><span>до ${workflowEscape(item.due_at_display)}</span>` : ''}
                                     </div>
                                 </div>
                                 <div class="krd-approval-card__badges">
-                                    <span class="krd-approval-pill ${approvalUiStatusTone(item.status)}">${workflowEscape(item.status || 'pending')}</span>
-                                    ${stepUsers.length ? `<span class="krd-approval-pill krd-approval-pill--sla">${workflowEscape(`сейчас: ${stepUsers.join(', ')}`)}</span>` : ''}
+                                    <span class="krd-approval-pill ${approvalUiStatusTone(item.status)}">${workflowEscape(approvalStatusLabel(item.status))}</span>
+                                    ${visibleStepUsers.length ? `<span class="krd-approval-pill krd-approval-pill--sla">${workflowEscape(`сейчас: ${visibleStepUsers.join(', ')}`)}</span>` : ''}
                                 </div>
                             </div>
 
@@ -925,4 +1105,102 @@ renderApprovals = function() {
     } else {
         container.innerHTML = renderCards();
     }
+};
+
+/* Daily approvals workspace: one document, one responsible person, one decision. */
+window.__approvalSimpleSearch = window.__approvalSimpleSearch || '';
+
+window.setApprovalSimpleSearch = function(value) {
+    window.__approvalSimpleSearch = String(value || '').trim().toLowerCase();
+    renderApprovals();
+};
+
+function renderApprovalsSimpleMetrics(rows) {
+    const mount = document.getElementById('approvalsSimpleMetrics');
+    if (!mount) return;
+    const currentName = String(currentUser?.name || '');
+    const meaningful = rows.filter(item => !isTechnicalApprovalNoise(item));
+    const pending = meaningful.filter(item => item.status === 'pending');
+    const rework = meaningful.filter(item => item.status === 'rework');
+    const mine = pending.filter(item => {
+        const assignees = Array.isArray(item.current_assignees) ? item.current_assignees : [];
+        return assignees.includes(currentName) || (Array.isArray(item.route) && String(item.route[Number(item.current_step || 0)] || '').includes(currentName));
+    });
+    mount.innerHTML = `
+        <div><span>Ждут решения</span><strong>${pending.length}</strong></div>
+        <div><span>Назначено мне</span><strong>${mine.length}</strong></div>
+        <div><span>На исправлении</span><strong>${rework.length}</strong></div>
+    `;
+}
+
+renderApprovals = function() {
+    const container = document.getElementById('approvalsListContainer');
+    if (!container) return;
+    updateApprovalsPageForRole();
+    renderApprovalsSimpleMetrics(approvalsDB);
+
+    const currentUserName = String(currentUser?.name || '');
+    const currentUserRole = String(currentUser?.role || '');
+    const query = String(window.__approvalSimpleSearch || '');
+    const rows = approvalsDB.filter(item => {
+        if (isTechnicalApprovalNoise(item)) return false;
+        const statusMatches = currentApprTab === 'pending'
+            ? item.status === 'pending' || item.status === 'rework'
+            : item.status === 'completed' || item.status === 'rejected';
+        if (!statusMatches) return false;
+        return !query || approvalTextBlob(item).includes(query);
+    });
+
+    if (!rows.length) {
+        const hasQuery = Boolean(query);
+        container.innerHTML = `
+            <div class="approvals-simple-empty">
+                <strong>${hasQuery ? 'Ничего не найдено' : (currentApprTab === 'pending' ? 'Документов на согласовании нет' : 'Завершённых согласований нет')}</strong>
+                <span>${hasQuery ? 'Измените запрос или очистите поиск.' : (currentApprTab === 'pending' ? 'Создайте согласование, когда документ действительно требует решения другого сотрудника.' : 'Результаты появятся здесь после первого решения.')}</span>
+                ${hasQuery ? '<button class="btn-secondary" type="button" onclick="document.getElementById(\'approvalsSimpleSearch\').value=\'\'; setApprovalSimpleSearch(\'\')">Очистить поиск</button>' : ''}
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = rows.map(item => {
+        const history = Array.isArray(item.history) ? item.history : [];
+        const route = Array.isArray(item.route) ? item.route : [];
+        const currentStep = Number(item.current_step || 0);
+        const rawAssignees = Array.isArray(item.current_assignees) && item.current_assignees.length
+            ? item.current_assignees
+            : String(route[currentStep] || '').split(' и ').map(value => value.trim()).filter(Boolean);
+        const assignees = rawAssignees.map(cleanApprovalPersonName).filter(Boolean);
+        const alreadyApproved = history.some(entry => entry.startsWith(`✅ ${currentUserName}`) && entry.includes(`(Этап ${currentStep + 1})`));
+        const assignedToMe = (item.status === 'pending' || item.status === 'rework') && rawAssignees.includes(currentUserName) && !alreadyApproved;
+        const canAct = assignedToMe || currentUserRole === 'Директор';
+        const displayTitle = approvalHumanTitle(item);
+        const displayLink = approvalHumanLink(item);
+        const safeLink = approvalUiJsString(item.item_link || '');
+        const status = approvalStatusLabel(item.status);
+        const lastHistory = history.length ? history[history.length - 1] : '';
+        const openButton = item.item_link
+            ? `<button class="btn-secondary" type="button" onclick="openProjectFromLink('${safeLink}')">Открыть документ</button>`
+            : '<button class="btn-secondary" type="button" disabled>Документ не указан</button>';
+        const actions = currentApprTab === 'pending' && canAct ? `
+            <div class="approvals-simple-card__actions">
+                <button class="btn-success" type="button" onclick="processApprovalStep(${Number(item.id)}, 'approve')">Согласовать</button>
+                <button class="btn-secondary" type="button" onclick="processApprovalStep(${Number(item.id)}, 'return_rework')">Вернуть на исправление</button>
+                <button class="btn-danger" type="button" onclick="processApprovalStep(${Number(item.id)}, 'reject')">Отклонить</button>
+                <button class="btn-secondary" type="button" onclick="processApprovalStep(${Number(item.id)}, 'delegate')">Передать другому</button>
+            </div>` : '';
+        return `
+            <article data-approval-id="${Number(item.id)}" class="approvals-simple-card ${item.status === 'rework' ? 'is-rework' : ''}">
+                <header>
+                    <div><span class="krd-approval-pill ${approvalUiStatusTone(item.status)}">${workflowEscape(status)}</span><h3>${workflowEscape(displayTitle)}</h3><p>${workflowEscape(displayLink)}</p></div>
+                    ${openButton}
+                </header>
+                <div class="approvals-simple-card__facts">
+                    <div><span>Отправил</span><strong>${workflowEscape(cleanApprovalPersonName(item.author) || 'Не указан')}</strong></div>
+                    <div><span>Сейчас проверяет</span><strong>${workflowEscape(assignees.join(', ') || 'Не назначено')}</strong></div>
+                    <div><span>Срок решения</span><strong>${workflowEscape(item.due_at_display || 'Без срока')}</strong></div>
+                </div>
+                ${lastHistory && currentApprTab === 'completed' ? `<div class="approvals-simple-card__result"><span>Последнее решение</span><strong>${workflowEscape(lastHistory)}</strong></div>` : ''}
+                ${actions}
+            </article>`;
+    }).join('');
 };

@@ -37,6 +37,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11h6"></path><path d="M3 17h10"></path><path d="M3 5h14"></path><circle cx="18" cy="17" r="3"></circle><path d="m21 20 2 2"></path></svg>
             База развития
         </a>
+        <a class="nav-item" id="navMyProspecting" onclick="navigateTo('myProspecting')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"></circle><path d="M2 19a6 6 0 0 1 12 0"></path><path d="m16 11 2 2 4-4"></path></svg>
+            Мои клиенты
+        </a>
         <a class="nav-item" id="navBitrixImport" onclick="navigateTo('bitrixImport')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path></svg>
             Выгрузка Bitrix24
@@ -71,7 +75,7 @@
         <div class="nav-label">Документооборот</div>
         <a class="nav-item" id="navDocuments" onclick="navigateTo('documents')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-            Канцелярия
+            Документы компании
         </a>
         <a class="nav-item" id="navEmails" onclick="navigateTo('emails')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path><path d="m22 6-10 7L2 6"></path></svg>
@@ -88,10 +92,6 @@
         <a class="nav-item krd-mobile-only-nav" id="navMobileScanner" onclick="if(typeof openScanner === 'function') openScanner()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><path d="M7 7h.01"></path><path d="M17 7h.01"></path><path d="M7 17h.01"></path><path d="M17 17h.01"></path></svg>
             Сканер QR
-        </a>
-        <a class="nav-item" id="navKnowledge" onclick="navigateTo('knowledge')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-            База знаний
         </a>
     </div>
 
@@ -153,42 +153,6 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11.5 4.43"></path><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07l1.33-1.33"></path></svg>
             Интеграции
         </a>
-    </div>
-
-    <div class="nav-group" data-nav-group="analytics">
-        <div class="nav-label">Аналитика</div>
-        <a class="nav-item" id="navAnalytics" onclick="navigateTo('analytics')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-            Аналитика
-        </a>
-        <a class="nav-item krd-is-hidden" id="navKpi" onclick="navigateTo('kpi')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
-            KPI и эффективность
-        </a>
-    </div>
-
-    <div class="nav-group krd-shell-sidebar__footer">
-        <div class="nav-label">Задачи по отделам</div>
-        <div class="nav-item dept-item" onclick="filterByDepartment('Конструкторское бюро', this)">
-            <span class="dot krd-dept-dot krd-dept-dot--engineering"></span>
-            Инженерия (КБ)
-        </div>
-        <div class="nav-item dept-item" onclick="filterByDepartment('Производство и ОТК', this)">
-            <span class="dot krd-dept-dot krd-dept-dot--production"></span>
-            Производство
-        </div>
-        <div class="nav-item dept-item" onclick="filterByDepartment('Менеджер', this)">
-            <span class="dot krd-dept-dot krd-dept-dot--management"></span>
-            Менеджмент
-        </div>
-        <div class="nav-item dept-item" onclick="filterByDepartment('Бухгалтерия', this)">
-            <span class="dot krd-dept-dot krd-dept-dot--finance"></span>
-            Бухгалтерия
-        </div>
-        <div class="nav-item dept-item" onclick="filterByDepartment('Юрист', this)">
-            <span class="dot krd-dept-dot krd-dept-dot--legal"></span>
-            Юридический
-        </div>
     </div>
 
     <div class="krd-shell-sidebar__user">

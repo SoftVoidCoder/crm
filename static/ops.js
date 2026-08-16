@@ -10,6 +10,7 @@ let salesSummaryDB = null;
 let productionSummaryDB = null;
 let opsMasterDataDB = null;
 let editingPurchaseId = 0;
+let editingReservationId = 0;
 let editingSalesId = 0;
 let editingProductionId = 0;
 let editingProductionOperationId = 0;
@@ -74,6 +75,7 @@ const salesFormFieldMap = {
 const productionOrderFieldMap = {
     project_id: 'productionProjectId',
     client_id: 'productionClientId',
+    client_name: 'productionClientName',
     legal_entity_id: 'productionLegalEntityId',
     business_unit_id: 'productionBusinessUnitId',
     order_name: 'productionOrderName',
@@ -94,7 +96,7 @@ const productionOrderFieldMap = {
     progress: 'productionProgress',
     comment: 'productionComment',
 };
-const productionDraftFieldIds = ['productionProjectId', 'productionClientId', 'productionLegalEntityId', 'productionBusinessUnitId', 'productionOrderName', 'productionResponsible', 'productionRouteName', 'productionStage', 'productionPriority', 'productionPlanStart', 'productionPlanFinish', 'productionActualFinish', 'productionPlannedQty', 'productionProducedQty', 'productionScrapQty', 'productionPlannedCost', 'productionActualCost', 'productionLaborHoursPlan', 'productionLaborHoursFact', 'productionProgress', 'productionComment'];
+const productionDraftFieldIds = ['productionProjectId', 'productionClientId', 'productionClientName', 'productionLegalEntityId', 'productionBusinessUnitId', 'productionOrderName', 'productionResponsible', 'productionRouteName', 'productionStage', 'productionPriority', 'productionPlanStart', 'productionPlanFinish', 'productionActualFinish', 'productionPlannedQty', 'productionProducedQty', 'productionScrapQty', 'productionPlannedCost', 'productionActualCost', 'productionLaborHoursPlan', 'productionLaborHoursFact', 'productionProgress', 'productionComment'];
 
 function bindPurchaseDraftAutosave() {
     if (typeof bindFormDraftAutosave !== 'function') return;
@@ -842,7 +844,7 @@ function populateOpsSelects() {
         const el = document.getElementById(id);
         if (el) el.innerHTML = projectOptions;
     });
-    ['purchaseClientId', 'salesClientId', 'productionClientId'].forEach(id => {
+    ['purchaseClientId', 'salesClientId'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = clientOptions;
     });
@@ -972,7 +974,8 @@ function opsIsThisWeek(value) {
 }
 
 function opsRowMatchesQuery(item, fields) {
-    const query = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
+    const localSupplyQuery = document.getElementById('supplySearchInput')?.value || '';
+    const query = (localSupplyQuery || document.getElementById('searchInput')?.value || '').trim().toLowerCase();
     if (!query) return true;
     const haystack = fields.map(field => item[field] || '').join(' ').toLowerCase();
     return haystack.includes(query);
@@ -981,17 +984,19 @@ function opsRowMatchesQuery(item, fields) {
 function getVisiblePurchases() {
     return purchasesDB.filter(item => {
         if (!opsRowMatchesQuery(item, ['item_name', 'item_article', 'supplier', 'project_name', 'project_contract', 'client_name', 'comment', 'status'])) return false;
+        if (supplyListFilter === 'reservations') return false;
+        if (supplyListFilter === 'purchases') return true;
         if (supplyListFilter === 'this_week') return opsIsThisWeek(item.expected_date);
-        if (supplyListFilter !== 'all' && supplyListFilter !== 'reservations') return item.status === supplyListFilter;
+        if (supplyListFilter !== 'all') return item.status === supplyListFilter;
         return true;
     });
 }
 
 function getVisibleStockReservations() {
     return stockReservationsDB.filter(item => {
-        if (!opsRowMatchesQuery(item, ['nomenclature_name', 'nomenclature_article', 'warehouse', 'bin_code', 'batch_code', 'project_name', 'client_name', 'status'])) return false;
-        if (supplyListFilter === 'reservations') return !['fulfilled', 'cancelled'].includes(item.status || '');
-        return true;
+        if (!opsRowMatchesQuery(item, ['nomenclature_name', 'nomenclature_article', 'warehouse', 'bin_code', 'batch_code', 'project_name', 'project_contract', 'comment', 'created_by', 'status'])) return false;
+        if (supplyListFilter === 'reservations') return true;
+        return supplyListFilter === 'all';
     });
 }
 
@@ -1151,36 +1156,11 @@ function registerOpsSavedFilters(scope, mountId, defaultTitle, getFilter, setFil
 
 function renderSupplyRoleWorkbench(metrics = {}) {
     const mount = document.getElementById('supplyRoleWorkbenchMount');
-    if (!mount || !currentUser) return;
-    const role = String(currentUser.role || '').trim();
-    if (role === 'Склад') {
-        mount.innerHTML = `
-            <section class="surface-card surface-card--padded role-workbench role-workbench--compact">
-                <div class="role-workbench-copy">
-                    <div class="view-eyebrow">Склад</div>
-                    <h3 class="section-title">Единый экран склада</h3>
-                    <p class="section-subtitle">Закупки, приход, резервы, остатки, партии, ячейки и качество должны читаться как один поток, а не как разрозненные блоки.</p>
-                </div>
-                <div class="role-workbench-stats">
-                    <div class="role-workbench-stat"><span>Резервов</span><strong>${metrics.reserved_positions || 0}</strong></div>
-                    <div class="role-workbench-stat"><span>Дефицитов</span><strong>${metrics.shortages || 0}</strong></div>
-                </div>
-                <div class="role-workbench-actions">
-                    <button class="btn-primary" onclick="presetSupplyMode('purchase')">Закупка</button>
-                    <button class="btn-secondary" onclick="presetSupplyMode('reservation')">Резерв</button>
-                    <button class="btn-secondary" onclick="navigateTo('nomenclature')">Остатки и ячейки</button>
-                    <button class="btn-secondary" onclick="document.getElementById('stockQualityList')?.scrollIntoView({behavior:'smooth', block:'start'})">Качество</button>
-                </div>
-            </section>
-        `;
-        return;
-    }
-    mount.innerHTML = '';
+    if (mount) mount.innerHTML = '';
 }
 
 function getSupplyWorkspacePanel(tab = 'purchase') {
     if (tab === 'registry') return 'registry';
-    if (tab === 'control') return 'control';
     return 'editor';
 }
 
@@ -1188,17 +1168,17 @@ function getSupplyEditorMeta() {
     const mode = window.supplyActiveOperationMode === 'reservation' ? 'reservation' : 'purchase';
     if (mode === 'reservation') {
         return {
-            title: 'Резерв под проект',
-            subtitle: 'Выбери проект, позицию и количество. При необходимости укажи склад, ячейку и партию, чтобы закрепить материал за проектом.',
-            chip: 'Резерв',
-            note: 'Режим резерва фиксирует потребность под проект и помогает держать остатки под контролем без отдельной длинной формы.',
+            title: 'Запросить материал',
+            subtitle: 'Укажите, какой материал и в каком количестве нужен. Склад увидит запрос и закрепит материал за проектом.',
+            chip: 'Запрос',
+            note: 'Для обычного запроса достаточно проекта, материала, количества и короткого комментария.',
         };
     }
     return {
         title: Number(editingPurchaseId || 0) > 0 ? 'Редактирование закупки' : 'Новая закупка',
-        subtitle: 'Выбери проект и контрагента, затем укажи поставщика, материал, количество и срок поставки.',
+        subtitle: 'Укажите материал, количество, поставщика и ожидаемую дату поставки.',
         chip: 'Закупка',
-        note: 'Режим закупки нужен для новой поставки: здесь фиксируются поставщик, сумма, срок и привязка к проекту.',
+        note: 'Основные поля находятся сверху. Реквизиты, артикул и склад убраны в дополнительные данные.',
     };
 }
 
@@ -1219,21 +1199,46 @@ function syncSupplyEditorState() {
     const subtitle = document.getElementById('supplyEditorSubtitle');
     const chip = document.getElementById('supplyEditorChip');
     const note = document.getElementById('supplyFormModeNote');
-    const purchaseBtn = document.getElementById('supplyPurchaseActionBtn');
-    const reservationBtn = document.getElementById('supplyReservationActionBtn');
+    const primaryBtn = document.getElementById('supplyPrimaryActionBtn');
+    const commentLabel = document.getElementById('supplyCommentLabel');
+    const isReservation = window.supplyActiveOperationMode === 'reservation';
     if (title) title.textContent = meta.title;
     if (subtitle) subtitle.textContent = meta.subtitle;
     if (chip) chip.textContent = meta.chip;
     if (note) note.textContent = meta.note;
-    if (purchaseBtn) {
-        const purchasePrimary = window.supplyActiveOperationMode !== 'reservation';
-        purchaseBtn.className = purchasePrimary ? 'btn-primary' : 'btn-secondary';
-        purchaseBtn.textContent = Number(editingPurchaseId || 0) > 0 && purchasePrimary ? 'Сохранить изменения' : 'Сохранить закупку';
+    document.querySelectorAll('#supplyView .supply-purchase-only').forEach(field => {
+        field.hidden = isReservation;
+    });
+    document.querySelectorAll('#supplyView .supply-reservation-only').forEach(field => {
+        field.hidden = !isReservation;
+    });
+    if (commentLabel) commentLabel.textContent = isReservation ? 'Для чего нужен материал' : 'Комментарий';
+    if (primaryBtn) {
+        const canSave = isReservation
+            ? (hasCurrentPermission('supply', 'reserve') || hasCurrentPermission('supply', 'create'))
+            : (hasCurrentPermission('supply', 'create') || (Number(editingPurchaseId || 0) > 0 && hasCurrentPermission('supply', 'update')));
+        primaryBtn.hidden = !canSave;
+        primaryBtn.textContent = isReservation
+            ? (Number(editingReservationId || 0) > 0 ? 'Сохранить изменения' : 'Отправить запрос складу')
+            : (Number(editingPurchaseId || 0) > 0 ? 'Сохранить изменения' : 'Сохранить закупку');
     }
-    if (reservationBtn) {
-        const reservationPrimary = window.supplyActiveOperationMode === 'reservation';
-        reservationBtn.className = reservationPrimary ? 'btn-primary' : 'btn-secondary';
-        reservationBtn.textContent = 'Создать резерв';
+}
+
+window.saveSupplyCurrentAction = function() {
+    if (window.supplyActiveOperationMode === 'reservation') return saveReservation();
+    return savePurchase();
+};
+
+function configureSupplyAccess() {
+    const canReserve = hasCurrentPermission('supply', 'reserve') || hasCurrentPermission('supply', 'create');
+    const canPurchase = hasCurrentPermission('supply', 'create') || hasCurrentPermission('supply', 'update');
+    const reserveButton = document.querySelector('#supplyView [data-supply-tab-button="reservation"]');
+    const purchaseButton = document.querySelector('#supplyView [data-supply-tab-button="purchase"]');
+    if (reserveButton) reserveButton.hidden = !canReserve;
+    if (purchaseButton) purchaseButton.hidden = !canPurchase;
+    if (!canPurchase && window.supplyActiveWorkspaceTab === 'purchase') {
+        window.supplyActiveWorkspaceTab = canReserve ? 'reservation' : 'registry';
+        window.supplyActiveOperationMode = canReserve ? 'reservation' : 'purchase';
     }
 }
 
@@ -1246,7 +1251,7 @@ function setSupplyOperationMode(mode = 'purchase') {
 window.switchSupplyWorkspaceTab = function(tab = 'purchase') {
     const view = document.getElementById('supplyView');
     if (!view) return;
-    const allowed = new Set(['purchase', 'reservation', 'registry', 'control']);
+    const allowed = new Set(['purchase', 'reservation', 'registry']);
     const activeTab = allowed.has(tab) ? tab : 'purchase';
     window.supplyActiveWorkspaceTab = activeTab;
     if (activeTab === 'purchase' || activeTab === 'reservation') {
@@ -1273,8 +1278,10 @@ window.openSupplyRegistry = function(filter = '') {
     window.switchSupplyWorkspaceTab('registry');
 };
 
-window.openSupplyControl = function() {
-    window.switchSupplyWorkspaceTab('control');
+window.setSupplyListFilter = function(filter = 'all') {
+    const allowed = new Set(['all', 'reservations', 'purchases', 'in_transit', 'received']);
+    supplyListFilter = allowed.has(filter) ? filter : 'all';
+    renderSupply();
 };
 
 function renderProductionRoleWorkbench() {
@@ -1282,22 +1289,22 @@ function renderProductionRoleWorkbench() {
     const view = document.getElementById('productionView');
     if (!mount || !view || !currentUser) return;
     const role = String(currentUser.role || '').trim();
+    const isKbRole = role === 'Конструкторское бюро';
     const isProductionRole = role === 'Производство и ОТК' || role === 'Конструкторское бюро';
     view.classList.toggle('production-operational-mode', isProductionRole && !window.__productionSecondaryExpanded);
+    view.classList.toggle('production-kb-mode', isKbRole);
     if (isProductionRole) {
         mount.innerHTML = `
-            <section class="surface-card surface-card--padded role-workbench role-workbench--compact">
+            <section class="surface-card surface-card--padded role-workbench role-workbench--compact production-role-start">
                 <div class="role-workbench-copy">
-                    <div class="view-eyebrow">Цех</div>
-                    <h3 class="section-title">Первый экран мастера</h3>
-                    <p class="section-subtitle">Сначала очередь и заказ. Аналитика, norm/fact и инженерные детали должны идти ниже и только когда уже есть выбранный фокус.</p>
+                    <div class="view-eyebrow">${isKbRole ? 'Конструкторское бюро' : 'Производство'}</div>
+                    <h3 class="section-title">${isKbRole ? 'Работа КБ по заказу' : 'Работа по производственному заказу'}</h3>
+                    <p class="section-subtitle">Откройте карточку заказа и нажмите «Редактировать заказ». Основные данные, операции, материалы, маршрут и документы собраны внутри одного редактора.</p>
                 </div>
                 <div class="role-workbench-actions">
-                    <button class="btn-primary" onclick="focusProductionQueue()">Очередь цеха</button>
-                    <button class="btn-secondary" onclick="focusProductionOrderForm()">Новый заказ</button>
-                    <button class="btn-secondary" onclick="focusProductionOperations()">Операции</button>
-                    <button class="btn-secondary" onclick="openSupplyFromProduction()">Материалы</button>
-                    <button class="btn-secondary" onclick="toggleProductionSecondary()">${window.__productionSecondaryExpanded ? 'Скрыть аналитику' : 'Показать аналитику'}</button>
+                    <button class="btn-primary" onclick="focusProductionQueue()">Очередь заказов</button>
+                    <button class="btn-secondary" onclick="presetProductionFlow('order')">Новый заказ</button>
+                    <button class="btn-ghost production-extra-toggle" onclick="toggleProductionSecondary()">${window.__productionSecondaryExpanded ? 'Скрыть дополнительные данные' : 'Дополнительно'}</button>
                 </div>
             </section>
         `;
@@ -1324,6 +1331,7 @@ function projectAndClientMeta(item) {
 function resetPurchaseForm() {
     releaseOpsEditLock('purchase_order');
     editingPurchaseId = 0;
+    editingReservationId = 0;
     if (typeof bindFormFieldErrorCleanup === 'function') bindFormFieldErrorCleanup('purchaseForm');
     if (typeof clearFormErrors === 'function') clearFormErrors('purchaseForm');
     [['purchaseProjectId', '0'], ['purchaseClientId', '0'], ['purchaseLegalEntityId', '0'], ['purchaseBusinessUnitId', '0'], ['purchaseItemName', ''], ['purchaseItemArticle', ''], ['purchaseSupplier', ''], ['purchaseQty', ''], ['purchaseUnit', 'шт'], ['purchaseUnitPrice', ''], ['purchaseWarehouse', ''], ['purchaseBinCode', ''], ['purchaseBatchCode', ''], ['purchaseExpectedDate', ''], ['purchaseStatus', 'planned'], ['purchaseComment', '']].forEach(([id, value]) => {
@@ -1384,7 +1392,7 @@ function resetProductionForm() {
     editingProductionId = 0;
     if (typeof bindFormFieldErrorCleanup === 'function') bindFormFieldErrorCleanup('productionOrderForm');
     if (typeof clearFormErrors === 'function') clearFormErrors('productionOrderForm');
-    [['productionProjectId', '0'], ['productionClientId', '0'], ['productionLegalEntityId', '0'], ['productionBusinessUnitId', '0'], ['productionOrderName', ''], ['productionResponsible', ''], ['productionRouteName', ''], ['productionStage', 'queue'], ['productionPriority', 'normal'], ['productionPlanStart', ''], ['productionPlanFinish', ''], ['productionActualFinish', ''], ['productionPlannedQty', '0'], ['productionProducedQty', '0'], ['productionScrapQty', '0'], ['productionPlannedCost', '0'], ['productionActualCost', '0'], ['productionLaborHoursPlan', '0'], ['productionLaborHoursFact', '0'], ['productionProgress', '0'], ['productionComment', '']].forEach(([id, value]) => {
+    [['productionProjectId', '0'], ['productionClientId', '0'], ['productionClientName', ''], ['productionLegalEntityId', '0'], ['productionBusinessUnitId', '0'], ['productionOrderName', ''], ['productionResponsible', ''], ['productionRouteName', ''], ['productionStage', 'queue'], ['productionPriority', 'normal'], ['productionPlanStart', ''], ['productionPlanFinish', ''], ['productionActualFinish', ''], ['productionPlannedQty', '0'], ['productionProducedQty', '0'], ['productionScrapQty', '0'], ['productionPlannedCost', '0'], ['productionActualCost', '0'], ['productionLaborHoursPlan', '0'], ['productionLaborHoursFact', '0'], ['productionProgress', '0'], ['productionComment', '']].forEach(([id, value]) => {
         const el = document.getElementById(id);
         if (el) el.value = value;
     });
@@ -1452,6 +1460,29 @@ async function editPurchase(id) {
     applyOpsFieldPermissions();
     if (typeof scrollToWorkflowTarget === 'function') scrollToWorkflowTarget('#purchaseForm', { block: 'center' });
     if (typeof focusFieldById === 'function') focusFieldById('purchaseExpectedDate');
+}
+
+function editStockReservation(id) {
+    const item = stockReservationsDB.find(row => Number(row.id) === Number(id));
+    if (!item) return;
+    resetPurchaseForm();
+    editingReservationId = Number(id);
+    document.getElementById('purchaseProjectId').value = String(item.project_id || 0);
+    document.getElementById('purchaseLegalEntityId').value = String(item.legal_entity_id || 0);
+    syncOpsBusinessUnitOptions('purchaseLegalEntityId', 'purchaseBusinessUnitId', item.business_unit_id || 0);
+    document.getElementById('purchaseItemName').value = item.nomenclature_name || '';
+    document.getElementById('purchaseItemArticle').value = item.nomenclature_article || '';
+    document.getElementById('purchaseQty').value = item.qty || '';
+    document.getElementById('purchaseUnit').value = item.unit || 'шт';
+    document.getElementById('purchaseWarehouse').value = item.warehouse || '';
+    document.getElementById('purchaseBinCode').value = item.bin_code || '';
+    document.getElementById('purchaseBatchCode').value = item.batch_code || '';
+    document.getElementById('purchaseComment').value = item.comment || '';
+    setSupplyOperationMode('reservation');
+    window.switchSupplyWorkspaceTab('reservation');
+    if (typeof closeGenericModal === 'function') closeGenericModal();
+    applyOpsFieldPermissions();
+    if (typeof scrollToWorkflowTarget === 'function') scrollToWorkflowTarget('#purchaseForm', { block: 'center' });
 }
 
 function duplicatePurchase(id) {
@@ -1554,12 +1585,13 @@ function duplicateSalesDocument(id) {
 
 async function editProductionOrder(id) {
     const item = productionOrdersDB.find(row => row.id === id);
-    if (!item) return;
+    if (!item) return false;
     const lockOk = await acquireOpsEditLock('production_order', id);
-    if (!lockOk) return;
+    if (!lockOk) return false;
     editingProductionId = id;
     document.getElementById('productionProjectId').value = String(item.project_id || 0);
     document.getElementById('productionClientId').value = String(item.client_id || 0);
+    document.getElementById('productionClientName').value = item.client_name || '';
     document.getElementById('productionLegalEntityId').value = String(item.legal_entity_id || 0);
     syncOpsBusinessUnitOptions('productionLegalEntityId', 'productionBusinessUnitId', item.business_unit_id || 0);
     document.getElementById('productionOrderName').value = item.order_name || '';
@@ -1580,7 +1612,102 @@ async function editProductionOrder(id) {
     document.getElementById('productionProgress').value = item.progress || 0;
     document.getElementById('productionComment').value = item.comment || '';
     applyOpsFieldPermissions();
+    return true;
 }
+
+function syncProductionEditorTabs() {
+    const workspace = document.querySelector('#productionView > .crm-view-workspace');
+    if (!workspace) return;
+    const labels = ['1. Основа заказа', '2. Операции', '3. Материалы, если нужны', '4. Маршрут, если нужен', '5. Документы КБ'];
+    workspace.querySelectorAll(':scope > .crm-workspace__nav .crm-workspace__tab-title').forEach((node, index) => {
+        if (labels[index]) node.textContent = labels[index];
+    });
+}
+
+async function renderProductionEditorDocuments(orderId = selectedProductionOrderId) {
+    const mount = document.getElementById('productionEditorDocumentsMount');
+    const id = Number(orderId || 0);
+    if (!mount) return;
+    if (!id) {
+        mount.innerHTML = '<div class="empty-state">Сначала выберите заказ.</div>';
+        return;
+    }
+    mount.innerHTML = '<div class="empty-state">Загружаю документы...</div>';
+    const card = await apiCall(`/entity_cards/production_order/${id}`);
+    if (!card || card.error) {
+        mount.innerHTML = '<div class="empty-state">Не удалось загрузить документы заказа.</div>';
+        return;
+    }
+    const documents = Array.isArray(card.documents) ? card.documents : [];
+    const files = Array.isArray(card.files) ? card.files : [];
+    const currentFiles = new Map();
+    files.forEach(file => {
+        const documentId = Number(file.document_id || 0);
+        if (!currentFiles.has(documentId) || Number(file.is_current || 0) === 1) currentFiles.set(documentId, file);
+    });
+    mount.innerHTML = documents.length ? documents.map(document => {
+        const file = currentFiles.get(Number(document.id || 0));
+        const fileUrl = String(file?.file_url || document.file_url || '').trim();
+        return `
+            <article class="production-editor-document">
+                <div>
+                    <strong>${escapeHtml(document.number || `Документ №${document.id}`)}</strong>
+                    <span>${escapeHtml(document.subject || document.correspondent || 'Без названия')}</span>
+                </div>
+                ${fileUrl ? `<a class="btn-secondary" href="${escapeHtml(fileUrl)}" target="_blank" rel="noopener">Открыть файл</a>` : '<span class="ops-section-chip">Файл не загружен</span>'}
+            </article>
+        `;
+    }).join('') : '<div class="production-editor-documents__empty"><strong>Документов пока нет</strong><span>Зарегистрируйте чертёж, техническое задание или спецификацию в Канцелярии и свяжите документ с этим заказом.</span></div>';
+}
+
+function setProductionEditorMode(active, order = null) {
+    const view = document.getElementById('productionView');
+    const bar = document.getElementById('productionEditorBar');
+    const title = document.getElementById('productionEditorTitle');
+    if (!view || !bar) return;
+    view.classList.toggle('production-editor-mode', active);
+    bar.hidden = !active;
+    if (title) title.textContent = active ? (order?.order_name || 'Новый производственный заказ') : 'Заказ';
+    window.setTimeout(syncProductionEditorTabs, 0);
+}
+
+window.openProductionOrderEditor = async function(id) {
+    const orderId = Number(id || 0);
+    const order = productionOrdersDB.find(row => Number(row.id) === orderId);
+    if (!order) return customAlert('Производственный заказ не найден.');
+    selectProductionOrder(orderId);
+    const ready = await editProductionOrder(orderId);
+    if (!ready) return;
+    closeGenericModal();
+    setProductionEditorMode(true, order);
+    window.openProductionWorkspaceTab?.('orders');
+    await renderProductionEditorDocuments(orderId);
+    window.setTimeout(() => document.getElementById('productionEditorBar')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+};
+
+window.closeProductionOrderEditor = function(options = {}) {
+    const shouldReset = options.reset !== false;
+    if (shouldReset && typeof resetProductionForm === 'function') resetProductionForm();
+    setProductionEditorMode(false);
+    window.openProductionWorkspaceTab?.('orders');
+    window.setTimeout(() => document.getElementById('productionOrdersTable')?.closest('.surface-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+};
+
+window.openProductionDocumentsOffice = function() {
+    const order = getSelectedProductionOrder();
+    if (typeof navigateTo === 'function') navigateTo('documents');
+    window.setTimeout(() => {
+        if (typeof openDocumentModalWithPreset === 'function') {
+            openDocumentModalWithPreset({
+                type: 'internal',
+                subject: order ? `${order.order_name || 'Производственный заказ'}: документ КБ` : 'Документ КБ',
+                correspondent: order?.client_name || '',
+                client_id: Number(order?.client_id || 0),
+                production_order_id: Number(order?.id || 0),
+            });
+        }
+    }, 140);
+};
 
 function duplicateProductionOrder(id) {
     const item = productionOrdersDB.find(row => Number(row.id) === Number(id));
@@ -1588,6 +1715,7 @@ function duplicateProductionOrder(id) {
     resetProductionForm();
     document.getElementById('productionProjectId').value = String(item.project_id || 0);
     document.getElementById('productionClientId').value = String(item.client_id || 0);
+    document.getElementById('productionClientName').value = item.client_name || '';
     document.getElementById('productionLegalEntityId').value = String(item.legal_entity_id || 0);
     syncOpsBusinessUnitOptions('productionLegalEntityId', 'productionBusinessUnitId', item.business_unit_id || 0);
     document.getElementById('productionOrderName').value = `${item.order_name || 'Производственный заказ'} (копия)`;
@@ -1774,7 +1902,10 @@ async function saveReservation() {
         nomenclature_article: document.getElementById('purchaseItemArticle').value.trim(),
         nomenclature_name: document.getElementById('purchaseItemName').value.trim(),
         qty: Number((document.getElementById('purchaseQty').value || '').replace(',', '.')) || 0,
-        status: 'reserved',
+        unit: document.getElementById('purchaseUnit').value.trim() || 'шт',
+        status: editingReservationId
+            ? (stockReservationsDB.find(row => Number(row.id) === Number(editingReservationId))?.status || 'reserved')
+            : 'reserved',
         warehouse: document.getElementById('purchaseWarehouse').value.trim(),
         bin_code: document.getElementById('purchaseBinCode').value.trim(),
         batch_code: document.getElementById('purchaseBatchCode').value.trim(),
@@ -1787,15 +1918,19 @@ async function saveReservation() {
         if (typeof showFormErrors === 'function') showFormErrors(errors, 'purchaseForm');
         return;
     }
-    const res = await apiCall('/stock/reservations', 'POST', payload);
-    if (!res || res.error) return customAlert(res?.error || 'Не удалось создать резерв.');
+    const endpoint = editingReservationId ? `/stock/reservations/${editingReservationId}` : '/stock/reservations';
+    const method = editingReservationId ? 'PUT' : 'POST';
+    const wasEditing = Boolean(editingReservationId);
+    const res = await apiCall(endpoint, method, payload);
+    if (!res || res.error) return customAlert('Не удалось отправить запрос складу. Обновите страницу и попробуйте ещё раз.');
     if (typeof clearFormDraft === 'function') clearFormDraft('purchase_order');
+    resetPurchaseForm();
     supplyListFilter = 'reservations';
     await renderSupply();
     window.switchSupplyWorkspaceTab('registry');
     if (currentProjectId && typeof renderProjectOpsSummary === 'function') renderProjectOpsSummary();
-    showToast('Склад', 'Резерв создан');
-    if (typeof scrollToWorkflowTarget === 'function') scrollToWorkflowTarget('#stockReservationsList', { block: 'center' });
+    showToast('Склад', wasEditing ? 'Запрос материала обновлён' : 'Запрос отправлен сотрудникам склада');
+    if (typeof scrollToWorkflowTarget === 'function') scrollToWorkflowTarget('#supplyRegistryList', { block: 'center' });
 }
 
 window.presetSupplyMode = function(mode = 'purchase') {
@@ -1831,7 +1966,16 @@ async function fulfillReservation(id) {
         comment: `Исполнение резерва #${id}`,
     };
     const res = await apiCall(`/stock/reservations/${id}/fulfill`, 'POST', payload);
-    if (!res || res.error) return customAlert(res?.error || 'Не удалось исполнить резерв.');
+    if (!res || res.error) {
+        const messages = {
+            source_required: 'Для учётного материала не найден источник списания. Откройте карточку, нажмите «Редактировать» и укажите склад.',
+            insufficient_stock: 'На указанном складе недостаточно материала. Проверьте остаток или выберите другой склад.',
+            qty_exceeds_remaining: 'Нельзя выдать больше, чем осталось по запросу.',
+            already_closed: 'Этот запрос уже закрыт.',
+            nothing_to_fulfill: 'По этому запросу больше нечего выдавать.',
+        };
+        return customAlert(messages[res?.error] || 'Не удалось выдать материал. Проверьте данные запроса.');
+    }
     await renderSupply();
     if (typeof loadNSI === 'function') {
         await loadNSI();
@@ -1912,6 +2056,7 @@ async function saveProductionOrder() {
     const payload = {
         project_id: Number(document.getElementById('productionProjectId').value || 0),
         client_id: Number(document.getElementById('productionClientId').value || 0),
+        client_name: document.getElementById('productionClientName').value.trim(),
         legal_entity_id: Number(document.getElementById('productionLegalEntityId').value || 0),
         business_unit_id: Number(document.getElementById('productionBusinessUnitId').value || 0),
         order_name: document.getElementById('productionOrderName').value.trim(),
@@ -1934,7 +2079,6 @@ async function saveProductionOrder() {
     };
     const errors = [];
     if (!payload.order_name) errors.push({ field: 'productionOrderName', message: 'Укажите название производственного заказа.' });
-    if (!payload.responsible) errors.push({ field: 'productionResponsible', message: 'Укажите ответственного.' });
     if (errors.length) {
         if (typeof showFormErrors === 'function') showFormErrors(errors, 'productionOrderForm');
         return;
@@ -1948,19 +2092,32 @@ async function saveProductionOrder() {
     const res = await apiCall(endpoint, method, payload);
     if (editingProductionId) await releaseOpsEditLock('production_order');
     if (!res || res.error) return customAlert(typeof explainApiPolicyError === 'function' ? explainApiPolicyError(res) : (res?.error || 'Не удалось сохранить производственный заказ.'));
-    selectedProductionOrderId = Number(res.id || editingProductionId || selectedProductionOrderId || 0);
+    const editorWasOpen = document.getElementById('productionView')?.classList.contains('production-editor-mode');
+    const savedOrderId = Number(res.id || editingProductionId || selectedProductionOrderId || 0);
+    selectedProductionOrderId = savedOrderId;
     if (typeof markWorkflowFocus === 'function') markWorkflowFocus('production', selectedProductionOrderId);
     resetProductionForm();
     await renderProduction();
     if (currentProjectId && typeof renderProjectOpsSummary === 'function') renderProjectOpsSummary();
     showToast('Производство', 'Производственный заказ сохранён');
-    if (typeof scrollToWorkflowTarget === 'function') scrollToWorkflowTarget('[data-production-id].workflow-row-highlight, [data-production-id]');
+    if (editorWasOpen && savedOrderId) {
+        setProductionEditorMode(false);
+        window.openProductionWorkspaceTab?.('orders');
+        await openEntityCard('production_order', savedOrderId);
+    } else if (typeof scrollToWorkflowTarget === 'function') {
+        scrollToWorkflowTarget('[data-production-id].workflow-row-highlight, [data-production-id]');
+    }
 }
 
 window.presetProductionFlow = function(mode = 'order') {
     if (mode === 'order') {
-        if (typeof scrollToWorkflowTarget === 'function') scrollToWorkflowTarget('#productionOrderForm', { block: 'center' });
-        if (typeof focusFieldById === 'function') focusFieldById('productionOrderName');
+        resetProductionForm();
+        setProductionEditorMode(true, null);
+        window.openProductionWorkspaceTab?.('orders');
+        window.setTimeout(() => {
+            document.getElementById('productionEditorBar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (typeof focusFieldById === 'function') focusFieldById('productionOrderName');
+        }, 60);
     }
 };
 
@@ -1999,7 +2156,6 @@ async function saveProductionOperation() {
     };
     const errors = [];
     if (!payload.operation_name) errors.push({ field: 'productionOperationName', message: 'Укажите название операции.' });
-    if (!payload.work_center) errors.push({ field: 'productionOperationWorkCenter', message: 'Укажите участок или рабочий центр.' });
     if (errors.length) {
         if (typeof showFormErrors === 'function') showFormErrors(errors, 'productionOperationForm');
         return;
@@ -2125,6 +2281,91 @@ async function applyProductionRouteTemplates() {
     showToast('Производство', `Маршрут развёрнут: ${res.created || 0} операций`);
 }
 
+function supplyRecordDateTime(value) {
+    const number = Number(value || 0);
+    if (!number) return 'Не указано';
+    const date = new Date(number * 1000);
+    return Number.isNaN(date.getTime()) ? 'Не указано' : date.toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function supplyRecordValue(value, fallback = 'Не указано') {
+    const text = String(value ?? '').trim();
+    return opsEscape(text || fallback);
+}
+
+function supplyRecordDetails(rows) {
+    return `<dl class="supply-record-details">${rows.map(([label, value]) => `<div><dt>${opsEscape(label)}</dt><dd>${value}</dd></div>`).join('')}</dl>`;
+}
+
+window.closeSupplyRecordCard = function() {
+    const modal = document.getElementById('genericModal');
+    modal?.querySelector('.modal-card')?.classList.remove('supply-record-modal');
+    if (modal) modal.style.display = 'none';
+};
+
+window.openSupplyRecordCard = function(type, id) {
+    const isReservation = type === 'reservation';
+    const item = isReservation
+        ? stockReservationsDB.find(row => Number(row.id) === Number(id))
+        : purchasesDB.find(row => Number(row.id) === Number(id));
+    const modal = document.getElementById('genericModal');
+    if (!item || !modal) return;
+    modal.querySelector('.modal-card')?.classList.add('supply-record-modal');
+    const title = isReservation ? 'Запрос материала' : 'Закупка';
+    const itemName = isReservation ? item.nomenclature_name : item.item_name;
+    const itemArticle = isReservation ? item.nomenclature_article : item.item_article;
+    const unit = item.unit || 'шт';
+    const project = item.project_contract || item.project_name || 'Без проекта';
+    document.getElementById('genModalTitle').innerText = `${title} #${item.id}`;
+    const commonRows = [
+        ['Материал', supplyRecordValue(itemName)],
+        ['Артикул', supplyRecordValue(itemArticle)],
+        ['Количество', `${Number(item.qty || 0).toLocaleString('ru-RU')} ${supplyRecordValue(unit, 'шт')}`],
+        ['Проект или заказ', supplyRecordValue(project, 'Без проекта')],
+        ['Статус', supplyRecordValue(opsDisplayStatus(item.status))],
+        ['Юридическое лицо', supplyRecordValue(item.legal_entity_name)],
+        ['Подразделение', supplyRecordValue(item.business_unit_name)],
+        ['Создал', supplyRecordValue(item.created_by)],
+        ['Дата создания', supplyRecordDateTime(item.created_at)],
+    ];
+    const specificRows = isReservation ? [
+        ['Склад', supplyRecordValue(item.warehouse)],
+        ['Ячейка', supplyRecordValue(item.bin_code)],
+        ['Партия', supplyRecordValue(item.batch_code)],
+        ['Выдано', `${Number(item.fulfilled_qty || 0).toLocaleString('ru-RU')} ${supplyRecordValue(unit, 'шт')}`],
+        ['Осталось выдать', `${Number(item.remaining_qty || 0).toLocaleString('ru-RU')} ${supplyRecordValue(unit, 'шт')}`],
+    ] : [
+        ['Контрагент', supplyRecordValue(item.client_name)],
+        ['Поставщик', supplyRecordValue(item.supplier)],
+        ['Цена за единицу', formatMoney(item.unit_price || 0)],
+        ['Общая сумма', formatMoney(item.total_amount || 0)],
+        ['Ожидаемая поставка', supplyRecordValue(item.expected_date)],
+    ];
+    document.getElementById('genModalBody').innerHTML = `
+        <div class="supply-record-card">
+            <div class="supply-record-card__head">
+                <div><span>${isReservation ? 'Запрос на склад' : 'Заказ поставщику'}</span><strong>${supplyRecordValue(itemName, 'Материал не указан')}</strong></div>
+                <span class="status-badge ${isReservation ? (item.status === 'shortage' ? 'status-overdue' : 'status-active') : purchaseStatusClass(item.status)}">${supplyRecordValue(opsDisplayStatus(item.status))}</span>
+            </div>
+            <section><h4>Основные данные</h4>${supplyRecordDetails(commonRows)}</section>
+            <section><h4>${isReservation ? 'Выдача со склада' : 'Условия закупки'}</h4>${supplyRecordDetails(specificRows)}</section>
+            <section class="supply-record-card__comment"><h4>Комментарий</h4><p>${supplyRecordValue(item.comment, 'Комментарий не добавлен')}</p></section>
+        </div>`;
+    const canEdit = isReservation
+        ? (hasCurrentPermission('supply', 'update') || hasCurrentPermission('supply', 'reserve'))
+        : (hasCurrentPermission('supply', 'update') || hasCurrentPermission('supply', 'create'));
+    const roleCanIssue = ['Директор', 'Склад', 'Производство и ОТК'].includes(String(currentUser?.role || ''));
+    const canIssue = isReservation
+        && (hasCurrentPermission('supply', 'receive') || hasCurrentPermission('supply', 'update') || hasCurrentPermission('nsi', 'update') || roleCanIssue)
+        && Number(item.remaining_qty || 0) > 0
+        && !['fulfilled', 'cancelled'].includes(String(item.status || ''));
+    document.getElementById('genModalFooter').innerHTML = `
+        ${canIssue ? `<button class="btn-secondary" onclick="closeSupplyRecordCard(); fulfillReservation(${item.id})">Выдать материал</button>` : ''}
+        ${canEdit ? `<button class="btn-primary" onclick="${isReservation ? `editStockReservation(${item.id})` : `editPurchase(${item.id})`}">Редактировать</button>` : ''}
+        <button class="btn-secondary" onclick="closeSupplyRecordCard()">Закрыть</button>`;
+    modal.style.display = 'flex';
+};
+
 async function renderSupply() {
     if (typeof loadProjects === 'function' && (!Array.isArray(projectsDB) || !projectsDB.length)) {
         try { await loadProjects(); } catch (_e) {}
@@ -2137,72 +2378,64 @@ async function renderSupply() {
     applyOpsFieldPermissions();
     bindPurchaseDraftAutosave();
     bindPurchaseSmartHints();
+    configureSupplyAccess();
     syncSupplyEditorState();
     if (typeof window.switchSupplyWorkspaceTab === 'function') {
         window.switchSupplyWorkspaceTab(window.supplyActiveWorkspaceTab || 'purchase');
     }
-    const metrics = supplySummaryDB?.metrics || {};
-    renderSupplyRoleWorkbench(metrics);
-    const metricsGrid = document.getElementById('supplyMetricsGrid');
-    const cockpitMount = document.getElementById('supplyCockpitMount');
-    const tbody = document.getElementById('purchasesTable');
-    const reservationsList = document.getElementById('stockReservationsList');
-    if (!metricsGrid || !tbody || !reservationsList) return;
+    const registryList = document.getElementById('supplyRegistryList');
+    if (!registryList) return;
     registerOpsSavedFilters(
         'supply',
         'supplySavedFiltersMount',
-        supplyListFilter === 'this_week' ? 'Поставки на этой неделе' : 'Мой фильтр склада',
+        'Мой фильтр склада',
         () => supplyListFilter,
         value => { supplyListFilter = value || 'all'; },
         renderSupply,
         [
             { id: 'supplyFilterAllBtn', key: 'all', label: 'Все' },
-            { id: 'supplyFilterThisWeekBtn', key: 'this_week', label: 'Эта неделя' },
+            { id: 'supplyFilterReservationsBtn', key: 'reservations', label: 'Запросы материалов' },
+            { id: 'supplyFilterPurchasesBtn', key: 'purchases', label: 'Закупки' },
             { id: 'supplyFilterInTransitBtn', key: 'in_transit', label: 'В пути' },
             { id: 'supplyFilterReceivedBtn', key: 'received', label: 'Получено' },
-            { id: 'supplyFilterReservationsBtn', key: 'reservations', label: 'Резервы' },
         ]
     );
-    metricsGrid.innerHTML = `
-        <div class="metric-card"><div class="metric-title">План закупок</div><div class="metric-value">${formatMoney(metrics.planned_purchases || 0)}</div></div>
-        <div class="metric-card warning"><div class="metric-title">В пути</div><div class="metric-value">${formatMoney(metrics.in_transit || 0)}</div></div>
-        <div class="metric-card success"><div class="metric-title">Получено</div><div class="metric-value">${formatMoney(metrics.received_total || 0)}</div></div>
-        <div class="metric-card"><div class="metric-title">Резервов под проекты</div><div class="metric-value">${metrics.reserved_positions || 0}</div></div>
-        <div class="metric-card"><div class="metric-title">Зарезервировано, шт</div><div class="metric-value">${Number(metrics.reserved_qty || 0).toLocaleString('ru-RU')}</div></div>
-        <div class="metric-card success"><div class="metric-title">Свободный остаток</div><div class="metric-value">${Number(metrics.free_stock_qty || 0).toLocaleString('ru-RU')}</div></div>
-        <div class="metric-card warning"><div class="metric-title">Партий на складе</div><div class="metric-value">${metrics.lot_positions || 0}</div></div>
-        <div class="metric-card danger"><div class="metric-title">Дефициты</div><div class="metric-value">${metrics.shortages || 0}</div></div>
-    `;
-    if (cockpitMount) cockpitMount.innerHTML = renderSupplyCockpit(metrics);
     const visiblePurchases = getVisiblePurchases();
     const visibleReservations = getVisibleStockReservations();
-    pruneOpsBulkSelection('supply', visiblePurchases);
-    renderOpsBulkToolbar('supply');
-    tbody.innerHTML = visiblePurchases.length ? visiblePurchases.map(item => `
-        <tr data-purchase-id="${item.id}" class="${typeof isWorkflowFocused === 'function' && isWorkflowFocused('purchase', item.id) ? 'workflow-row-highlight' : ''}">
-            <td>${renderOpsBulkCheckbox('supply', item.id)}</td>
-            <td><div class="finance-row-title">${item.item_name}</div><div class="finance-row-meta">${item.item_article || 'Без артикула'} · ${item.qty || 0} ${item.unit || 'шт'}</div></td>
-            <td>${projectAndClientMeta(item)}</td>
-            <td><div class="finance-row-title">${item.supplier || '—'}</div><div class="finance-row-meta">${item.comment || 'Без комментария'}</div></td>
-            <td><div class="finance-row-title">${formatMoney(item.total_amount || 0)}</div><div class="finance-row-meta">${item.unit_price ? `${formatMoney(item.unit_price || 0)} / ${item.unit || 'шт'}` : 'Цена не указана'}</div></td>
-            <td><div class="finance-row-title">${item.expected_date || '—'}</div><div class="finance-row-meta">${item.received_date || 'Ожидается'}</div></td>
-            <td><span class="status-badge ${purchaseStatusClass(item.status)}">${financeStatusLabel(item.status)}</span><div class="finance-row-meta">${item.linked_payment_id ? `Оплата #${item.linked_payment_id} · ${financeStatusLabel(item.linked_payment_status || 'planned')} · 1С ${opsDisplayStatus(item.linked_payment_exchange_state || 'draft')}` : 'Оплата создаётся автоматически'}</div></td>
-            <td><div class="view-actions">${typeof renderEntityFavoriteButton === 'function' ? renderEntityFavoriteButton('purchase_order', item.id, item.item_name || item.item_article || `Закупка #${item.id}`, `${item.supplier || ''} · ${formatMoney(item.total_amount || 0)} · ${financeStatusLabel(item.status)}`, 'supply', 'renderSupply') : ''}${typeof renderEntityWatchButton === 'function' ? renderEntityWatchButton('purchase_order', item.id, item.item_name || item.item_article || `Закупка #${item.id}`, `${item.supplier || ''} · срок ${item.expected_date || '—'}`, 'supply', 'renderSupply', 'overdue') : ''}<button class="btn-secondary" onclick="openEntityCard('purchase_order', ${item.id})">Карточка</button><button class="btn-secondary" onclick="editPurchase(${item.id})">Редактировать</button><button class="btn-secondary" onclick="duplicatePurchase(${item.id})">Создать похожую</button><button class="btn-danger" onclick="deletePurchase(${item.id})">Удалить</button></div></td>
-        </tr>
-    `).join('') : '<tr><td colspan="8" class="nsi-empty-row">Закупок по текущему фильтру нет.</td></tr>';
-    reservationsList.innerHTML = visibleReservations.length ? visibleReservations.slice(0, 8).map(item => `
-        <div class="client360-item">
-            <div>
-                <div class="client360-item-title">${item.nomenclature_name}</div>
-                <div class="client360-item-meta">${item.nomenclature_article || 'Без артикула'} · ${item.qty} шт · остаток к выдаче ${item.remaining_qty || 0}</div>
-                <div class="client360-item-meta">${item.warehouse || 'Источник не выбран'} / ${item.bin_code || 'ячейка не указана'}${item.batch_code ? ` · партия ${item.batch_code}` : ''}${item.serial_no ? ` · серийный ${item.serial_no}` : ''}</div>
+    const combinedRows = [
+        ...visiblePurchases.map(item => ({ type: 'purchase', sort: Number(item.created_at || 0), item })),
+        ...visibleReservations.map(item => ({ type: 'reservation', sort: Number(item.created_at || 0), item })),
+    ].sort((a, b) => b.sort - a.sort || Number(b.item.id || 0) - Number(a.item.id || 0));
+    registryList.innerHTML = combinedRows.length ? combinedRows.map(({ type, item }) => {
+        const isReservation = type === 'reservation';
+        const title = isReservation ? item.nomenclature_name : item.item_name;
+        const project = item.project_contract || item.project_name || 'Без проекта';
+        const unit = item.unit || 'шт';
+        return `
+        <article data-${isReservation ? 'reservation' : 'purchase'}-id="${item.id}" class="supply-list-card ${!isReservation && typeof isWorkflowFocused === 'function' && isWorkflowFocused('purchase', item.id) ? 'workflow-row-highlight' : ''}">
+            <div class="supply-list-card__main">
+                <div class="supply-list-card__title-row">
+                    <span class="supply-record-type">${isReservation ? 'Запрос материала' : 'Закупка'}</span>
+                    <strong>${opsEscape(title || 'Материал не указан')}</strong>
+                    <span class="status-badge ${isReservation ? (item.status === 'shortage' ? 'status-overdue' : 'status-active') : purchaseStatusClass(item.status)}">${opsDisplayStatus(item.status)}</span>
+                </div>
+                <div class="supply-list-card__meta">
+                    <span><b>${Number(item.qty || 0).toLocaleString('ru-RU')} ${opsEscape(unit)}</b></span>
+                    <span>${opsEscape(isReservation ? (item.warehouse || 'Склад не назначен') : (item.supplier || 'Поставщик не указан'))}</span>
+                    <span>${opsEscape(project)}</span>
+                </div>
+                ${item.comment ? `<p>${opsEscape(item.comment)}</p>` : ''}
             </div>
-            <div class="view-actions">
-                <span class="status-badge ${item.status === 'fulfilled' ? 'status-completed' : item.status === 'shortage' ? 'status-overdue' : 'status-active'}">${opsDisplayStatus(item.status)}</span>
-                ${Number(item.remaining_qty || 0) > 0 && item.status !== 'shortage' ? `<button class="btn-secondary" onclick="fulfillReservation(${item.id})">Исполнить</button>` : ''}
+            <div class="supply-list-card__side">
+                <span>${isReservation ? 'Создан' : 'Поставка'}</span>
+                <strong>${opsEscape(isReservation ? supplyRecordDateTime(item.created_at) : (item.expected_date || 'Дата не указана'))}</strong>
+                <small>${isReservation ? `Осталось ${Number(item.remaining_qty || 0).toLocaleString('ru-RU')} ${opsEscape(unit)}` : formatMoney(item.total_amount || 0)}</small>
+                <div class="supply-list-card__actions">
+                    <button class="btn-primary" onclick="openSupplyRecordCard('${type}', ${item.id})">Открыть карточку</button>
+                </div>
             </div>
-        </div>
-    `).join('') : '<div class="empty-state">Резервов под проекты по текущему фильтру нет.</div>';
+        </article>
+    `; }).join('') : '<div class="supply-empty-state"><strong>Записей по этому фильтру нет</strong><span>Измените фильтр, запросите материал или оформите закупку.</span></div>';
 }
 
 async function renderSales() {
@@ -2683,7 +2916,7 @@ async function renderProduction() {
             <td><div class="finance-row-title">${item.planned_finish || '—'}</div><div class="finance-row-meta">${item.actual_finish || 'Факт не закрыт'} · ${formatMoney(item.actual_cost_total || item.actual_cost || 0)}</div><div class="finance-row-meta">План ${formatMoney(item.planned_cost_total || item.planned_cost || 0)} · мат. ${formatMoney(item.planned_material_cost || 0)}</div></td>
             <td><span class="status-badge ${purchaseStatusClass(item.stage === 'done' ? 'received' : item.stage === 'in_work' ? 'in_transit' : 'planned')}">${productionStageLabel(item.stage)}</span></td>
             <td>${item.progress || 0}%<div class="finance-row-meta">${Number(item.produced_qty_total || item.produced_qty || 0).toLocaleString('ru-RU')} / ${Number(item.planned_qty_total || item.planned_qty || 0).toLocaleString('ru-RU')} шт · брак ${Number(item.scrap_qty_total || item.scrap_qty || 0).toLocaleString('ru-RU')}</div></td>
-            <td><div class="view-actions">${typeof renderEntityFavoriteButton === 'function' ? renderEntityFavoriteButton('production_order', item.id, item.order_name || `Производственный заказ #${item.id}`, `${productionStageLabel(item.stage)} · ${item.responsible || ''}`, 'production', 'renderProduction') : ''}${typeof renderEntityWatchButton === 'function' ? renderEntityWatchButton('production_order', item.id, item.order_name || `Производственный заказ #${item.id}`, `${productionStageLabel(item.stage)} · ${item.responsible || ''}`, 'production', 'renderProduction', 'stage_changed') : ''}<button class="btn-secondary" onclick="openEntityCard('production_order', ${item.id})">Карточка</button><button class="btn-secondary" onclick="selectProductionOrder(${item.id}); renderProduction();">Операции</button><button class="btn-secondary" onclick="editProductionOrder(${item.id})">Редактировать</button><button class="btn-secondary" onclick="duplicateProductionOrder(${item.id})">Создать похожий</button><button class="btn-danger" onclick="deleteProductionOrder(${item.id})">Удалить</button></div></td>
+            <td><div class="view-actions production-order-actions"><button class="btn-secondary" onclick="openEntityCard('production_order', ${item.id})">Карточка</button><button class="btn-primary" onclick="openProductionOrderEditor(${item.id})">Редактировать заказ</button></div></td>
         </tr>
     `).join('') : '<tr><td colspan="8" class="nsi-empty-row">Производственных заказов по текущему фильтру нет.</td></tr>';
 
@@ -4118,6 +4351,7 @@ window.savePurchase = savePurchase;
 window.saveReservation = saveReservation;
 window.resetPurchaseForm = resetPurchaseForm;
 window.editPurchase = editPurchase;
+window.editStockReservation = editStockReservation;
 window.duplicatePurchase = duplicatePurchase;
 window.deletePurchase = deletePurchase;
 window.fulfillReservation = fulfillReservation;

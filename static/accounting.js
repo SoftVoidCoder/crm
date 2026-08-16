@@ -518,6 +518,160 @@ function accountingCanDelete() {
     return currentPermissions.finance && currentPermissions.finance.includes('delete');
 }
 
+function groupAccountingOptionalFields() {
+    const groups = [
+        {
+            form: document.getElementById('eplWaybillForm'),
+            ids: [
+                'eplWaybillNumber', 'eplWaybillIssueDate',
+                'eplWaybillDispatcherName', 'eplWaybillMedicalName',
+                'eplWaybillMechanicName', 'eplWaybillActualDeparture', 'eplWaybillActualReturn',
+                'eplWaybillOdometerOut', 'eplWaybillOdometerIn', 'eplWaybillFuelIssued',
+                'eplWaybillFuelReturned', 'eplWaybillStatus', 'eplWaybillIntegrationStatus', 'eplWaybillOperatorName',
+                'eplWaybillExternalId',
+            ],
+        },
+        {
+            form: document.getElementById('accountingDriversPanel')?.querySelector('.finance-form-grid'),
+            ids: ['eplDriverSignatureProfile', 'eplDriverStatus'],
+        },
+        {
+            form: document.getElementById('accountingVehiclesPanel')?.querySelector('.finance-form-grid'),
+            ids: ['eplVehicleStatus'],
+        },
+    ];
+
+    groups.forEach(({ form, ids }) => {
+        if (!form) return;
+        const existing = form.querySelector(':scope > .accounting-optional-fields');
+        if (existing) {
+            existing.hidden = true;
+            form.querySelectorAll(':scope > div').forEach(wrapper => {
+                if (wrapper.querySelector('.form-error') && !wrapper.querySelector('input, select, textarea')) {
+                    wrapper.hidden = true;
+                }
+            });
+            return;
+        }
+        const fields = ids.map(id => document.getElementById(id)).filter(Boolean);
+        if (!fields.length) return;
+        const details = document.createElement('details');
+        details.className = 'accounting-optional-fields';
+        details.hidden = true;
+        const summary = document.createElement('summary');
+        summary.textContent = 'Дополнительные данные';
+        const grid = document.createElement('div');
+        grid.className = 'accounting-optional-fields__grid';
+        fields.forEach(field => {
+            const wrapper = field.parentElement?.matches('.ui-date-field, .ui-client-picker, [data-field-wrap]') ? field.parentElement : field;
+            grid.appendChild(wrapper);
+        });
+        details.append(summary, grid);
+        form.appendChild(details);
+        form.querySelectorAll(':scope > div').forEach(wrapper => {
+            if (wrapper.querySelector('.form-error') && !wrapper.querySelector('input, select, textarea')) {
+                wrapper.hidden = true;
+            }
+        });
+    });
+
+    const setStepCopy = (panelId, title, subtitle) => {
+        const panel = document.getElementById(panelId);
+        const heading = panel?.querySelector('.ops-form-card .section-title');
+        const description = panel?.querySelector('.ops-form-card .section-subtitle');
+        if (heading) heading.textContent = title;
+        if (description) description.textContent = subtitle;
+    };
+    setStepCopy(
+        'accountingDriversPanel',
+        'Шаг 1. Водитель',
+        'Укажите ФИО, водительское удостоверение и срок медицинского допуска.'
+    );
+    setStepCopy(
+        'accountingVehiclesPanel',
+        'Шаг 2. Транспорт',
+        'Укажите госномер, марку и модель автомобиля.'
+    );
+    setStepCopy(
+        'accountingWaybillsPanel',
+        'Шаг 3. Путевой лист',
+        'Выберите дату рейса, водителя и транспорт, затем укажите маршрут.'
+    );
+
+    const setListCopy = (panelId, title, subtitle) => {
+        const panel = document.getElementById(panelId);
+        const heading = panel?.querySelector('.ops-list-card .section-title');
+        const description = panel?.querySelector('.ops-list-card .section-subtitle');
+        if (heading) heading.textContent = title;
+        if (description) description.textContent = subtitle;
+    };
+    setListCopy('accountingDriversPanel', 'Сохранённые водители', 'Откройте запись, если данные водителя нужно изменить.');
+    setListCopy('accountingVehiclesPanel', 'Сохранённый транспорт', 'Откройте запись, если данные автомобиля нужно изменить.');
+    setListCopy('accountingWaybillsPanel', 'Созданные ЭПЛ', 'Откройте карточку, чтобы продолжить оформление рейса.');
+
+    const labelField = (form, id, label, { required = false, wide = false } = {}) => {
+        const field = document.getElementById(id);
+        if (!form || !field) return;
+        if (field.closest('.accounting-optional-fields')) return;
+        if (field.closest('.epl-form-field')) return;
+        const directChild = [...form.children].find(child => child === field || child.contains(field));
+        if (!directChild) return;
+        let wrapper = directChild;
+        if (directChild === field || directChild.matches('.ui-date-field, .ui-client-picker')) {
+            wrapper = document.createElement('div');
+            form.insertBefore(wrapper, directChild);
+            wrapper.appendChild(directChild);
+        }
+        wrapper.classList.add('epl-form-field');
+        if (wide) wrapper.classList.add('epl-form-field--wide');
+        const caption = document.createElement('span');
+        caption.className = 'epl-form-field__label';
+        caption.textContent = `${label}${required ? ' *' : ''}`;
+        wrapper.prepend(caption);
+    };
+
+    const driverForm = document.getElementById('accountingDriversPanel')?.querySelector('.finance-form-grid');
+    [
+        ['eplDriverFullName', 'ФИО водителя', { required: true }],
+        ['eplDriverPersonnelNumber', 'Табельный номер'],
+        ['eplDriverPhone', 'Телефон'],
+        ['eplDriverLicenseNumber', 'Номер водительского удостоверения', { required: true }],
+        ['eplDriverLicenseCategory', 'Категория', { required: true }],
+        ['eplDriverMedicalValidTo', 'Медицинский допуск до', { required: true }],
+        ['eplDriverComment', 'Комментарий', { wide: true }],
+    ].forEach(([id, label, options]) => labelField(driverForm, id, label, options));
+
+    const vehicleForm = document.getElementById('accountingVehiclesPanel')?.querySelector('.finance-form-grid');
+    [
+        ['eplVehicleRegistrationNo', 'Госномер', { required: true }],
+        ['eplVehicleGarageNumber', 'Гаражный номер'],
+        ['eplVehicleBrand', 'Марка', { required: true }],
+        ['eplVehicleModel', 'Модель', { required: true }],
+        ['eplVehicleTrailerRegistration', 'Прицеп / полуприцеп'],
+        ['eplVehicleOdometer', 'Текущий пробег, км'],
+        ['eplVehicleCarryingCapacity', 'Грузоподъёмность, т'],
+        ['eplVehicleDiagnosticValidTo', 'Диагностика действует до'],
+        ['eplVehicleInsuranceValidTo', 'Страховка действует до'],
+        ['eplVehicleComment', 'Комментарий', { wide: true }],
+    ].forEach(([id, label, options]) => labelField(vehicleForm, id, label, options));
+
+    const waybillForm = document.getElementById('eplWaybillForm');
+    [
+        ['eplWaybillShiftDate', 'Дата рейса', { required: true }],
+        ['eplWaybillType', 'Тип транспорта'],
+        ['eplWaybillProjectId', 'Проект'],
+        ['eplWaybillClientId', 'Клиент / контрагент'],
+        ['eplWaybillDriverId', 'Водитель', { required: true }],
+        ['eplWaybillVehicleId', 'Транспорт', { required: true }],
+        ['eplWaybillDeparturePoint', 'Откуда'],
+        ['eplWaybillDestinationPoint', 'Куда'],
+        ['eplWaybillPlannedDeparture', 'Плановый выезд'],
+        ['eplWaybillCargo', 'Груз / назначение рейса'],
+        ['eplWaybillRouteText', 'Маршрут / задание', { required: true, wide: true }],
+        ['eplWaybillNotes', 'Комментарий', { wide: true }],
+    ].forEach(([id, label, options]) => labelField(waybillForm, id, label, options));
+}
+
 async function loadAccountingModuleData() {
     const [summary, drivers, vehicles, waybills, syncQueue, syncConflicts] = await Promise.all([
         apiCall('/epl/summary'),
@@ -662,6 +816,14 @@ function switchAccountingTab(tabName) {
         if (btn) btn.classList.toggle('active', tab === tabName);
         if (panel) panel.style.display = tab === tabName ? 'block' : 'none';
     });
+    const hint = document.getElementById('accountingStepHint');
+    if (hint) {
+        hint.textContent = tabName === 'drivers'
+            ? 'Шаг 1. Заполните данные водителя и его действующие допуски.'
+            : tabName === 'vehicles'
+                ? 'Шаг 2. Заполните основные данные и документы транспорта.'
+                : 'Шаг 3. Свяжите водителя и транспорт с рейсом, заполните маршрут и сохраните ЭПЛ.';
+    }
     if (tabName === 'waybills' && !eplWaybillDetailDB && eplWaybillsDB.length) {
         ensureEplWaybillDetail();
     }
@@ -956,7 +1118,8 @@ async function ensureEplWaybillDetail() {
         return;
     }
     if (!eplSelectedWaybillId) {
-        await openEplWaybillDetail(visibleRows[0].id);
+        eplWaybillDetailDB = null;
+        renderSelectedEplWaybill();
         return;
     }
     if (!eplWaybillDetailDB || Number(eplWaybillDetailDB.waybill?.id) !== Number(eplSelectedWaybillId)) {
@@ -971,7 +1134,7 @@ async function ensureEplWaybillDetail() {
     renderSelectedEplWaybill();
 }
 
-function renderEplWaybillsTable() {
+function renderEplWaybillsTableLegacy() {
     const tbody = document.getElementById('eplWaybillsTable');
     const hint = document.getElementById('eplWaybillRegistryHint');
     if (!tbody) return;
@@ -1030,7 +1193,7 @@ function renderEplWaybillsTable() {
     `).join('');
 }
 
-function renderEplDriversTable() {
+function renderEplDriversTableLegacy() {
     const tbody = document.getElementById('eplDriversTable');
     if (!tbody) return;
     const rows = getVisibleEplDrivers();
@@ -1049,7 +1212,7 @@ function renderEplDriversTable() {
     `).join('');
 }
 
-function renderEplVehiclesTable() {
+function renderEplVehiclesTableLegacy() {
     const tbody = document.getElementById('eplVehiclesTable');
     if (!tbody) return;
     const rows = getVisibleEplVehicles();
@@ -1146,7 +1309,7 @@ function buildEplStageCard(stageKey, waybill) {
     `;
 }
 
-function renderSelectedEplWaybill() {
+function renderSelectedEplWaybillLegacy() {
     const title = document.getElementById('eplSelectedWaybillTitle');
     const body = document.getElementById('eplWaybillDetailBody');
     if (!title || !body) return;
@@ -1237,6 +1400,257 @@ function renderSelectedEplWaybill() {
                         </div>
                     `).join('') : '<div class="empty-state">История синхронизации пока пустая.</div>'}
                 </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderEplDriversTable() {
+    const tbody = document.getElementById('eplDriversTable');
+    if (!tbody) return;
+    const header = tbody.closest('table')?.querySelector('thead tr');
+    if (header) header.innerHTML = '<th>Водитель</th><th>Удостоверение</th><th>Категория</th><th>Меддопуск до</th><th>Действие</th>';
+    const rows = getVisibleEplDrivers();
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="nsi-empty-row">Водителей пока нет. Заполните форму слева.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(item => `
+        <tr>
+            <td><strong>${eplEscapeHtml(item.full_name || 'Водитель')}</strong></td>
+            <td>${eplEscapeHtml(item.license_number || 'Не указано')}</td>
+            <td>${eplEscapeHtml(item.license_category || 'Не указана')}</td>
+            <td>${eplEscapeHtml(item.medical_valid_to || 'Не указано')}</td>
+            <td><button class="btn-secondary" onclick="editEplDriver(${item.id})">Редактировать</button></td>
+        </tr>
+    `).join('');
+}
+
+function renderEplVehiclesTable() {
+    const tbody = document.getElementById('eplVehiclesTable');
+    if (!tbody) return;
+    const header = tbody.closest('table')?.querySelector('thead tr');
+    if (header) header.innerHTML = '<th>Госномер</th><th>Марка</th><th>Модель</th><th>Состояние</th><th>Действие</th>';
+    const rows = getVisibleEplVehicles();
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="nsi-empty-row">Транспорта пока нет. Заполните форму слева.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(item => `
+        <tr>
+            <td><strong>${eplEscapeHtml(item.registration_no || item.garage_number || 'Транспорт')}</strong></td>
+            <td>${eplEscapeHtml(item.brand || 'Не указана')}</td>
+            <td>${eplEscapeHtml(item.model || 'Не указана')}</td>
+            <td><span class="status-badge ${item.status === 'active' ? 'status-completed' : 'status-archived'}">${eplEscapeHtml(eplVehicleStatusLabel(item.status))}</span></td>
+            <td><button class="btn-secondary" onclick="editEplVehicle(${item.id})">Редактировать</button></td>
+        </tr>
+    `).join('');
+}
+
+function renderEplWaybillsTable() {
+    const tbody = document.getElementById('eplWaybillsTable');
+    if (!tbody) return;
+    const rows = getVisibleEplWaybills();
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="nsi-empty-row">Путевых листов пока нет. Заполните четыре основных поля слева.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(item => `
+        <tr>
+            <td></td>
+            <td><strong>${eplEscapeHtml(item.number || `ЭПЛ №${item.id}`)}</strong><div class="finance-row-meta">${eplEscapeHtml(item.shift_date || '')}</div></td>
+            <td><strong>${eplEscapeHtml(item.driver_name || 'Водитель не выбран')}</strong><div class="finance-row-meta">${eplEscapeHtml(item.vehicle_label || 'Транспорт не выбран')}</div></td>
+            <td>${eplEscapeHtml(item.route_text || 'Маршрут не указан')}</td>
+            <td><span class="status-badge ${eplStatusClass(item.status)}">${eplEscapeHtml(eplStatusLabel(item.status))}</span></td>
+            <td></td>
+            <td><button class="btn-primary" onclick="openEplWaybillDetail(${item.id})">Открыть карточку</button></td>
+        </tr>
+    `).join('');
+}
+
+function eplCompactStageDone(waybill, stageKey) {
+    const fieldMap = {
+        medical_pretrip: 'medical_pretrip_status',
+        mechanic_pretrip: 'mechanic_pretrip_status',
+        dispatcher_departure: 'dispatcher_departure_status',
+        dispatcher_return: 'dispatcher_return_status',
+        medical_posttrip: 'medical_posttrip_status',
+        mechanic_posttrip: 'mechanic_posttrip_status',
+    };
+    const value = String(waybill?.[fieldMap[stageKey]] || '').toLowerCase();
+    return ['passed', 'departed', 'returned', 'done', 'signed', 'completed', 'fit', 'approved', 'ok'].includes(value);
+}
+
+function getEplCompactWorkStep(waybill) {
+    if (!eplCompactStageDone(waybill, 'medical_pretrip') || !eplCompactStageDone(waybill, 'mechanic_pretrip')) return 'admission';
+    if (!eplCompactStageDone(waybill, 'dispatcher_departure')) return 'departure';
+    if (!eplCompactStageDone(waybill, 'dispatcher_return') || !eplCompactStageDone(waybill, 'medical_posttrip') || !eplCompactStageDone(waybill, 'mechanic_posttrip')) return 'return';
+    return 'complete';
+}
+
+async function saveEplCompactStage(stage, statusValue) {
+    const waybillId = Number(eplSelectedWaybillId || 0);
+    if (!waybillId) return false;
+    const result = await apiCall(`/epl/waybills/${waybillId}/actions`, 'POST', {
+        stage,
+        signer_name: currentUser?.name || 'Ответственный сотрудник',
+        signed_at: getEplTodayRuDate(),
+        status_value: statusValue,
+        comment: '',
+        expected_version: Number(eplWaybillDetailDB?.waybill?.row_version || 0),
+    });
+    if (!result || result.error) {
+        await customAlert(result?.message || 'Не удалось сохранить этап ЭПЛ.');
+        return false;
+    }
+    const fresh = await apiCall(`/epl/waybills/${waybillId}`);
+    if (fresh && !fresh.error) eplWaybillDetailDB = fresh;
+    return true;
+}
+
+async function completeEplCompactStep(stepName) {
+    const sequences = {
+        admission: [['medical_pretrip', 'passed'], ['mechanic_pretrip', 'passed']],
+        departure: [['dispatcher_departure', 'departed']],
+        return: [['dispatcher_return', 'returned'], ['medical_posttrip', 'passed'], ['mechanic_posttrip', 'passed']],
+    };
+    const sequence = sequences[stepName] || [];
+    for (const [stage, statusValue] of sequence) {
+        if (eplCompactStageDone(eplWaybillDetailDB?.waybill, stage)) continue;
+        if (!await saveEplCompactStage(stage, statusValue)) return;
+    }
+    await renderAccounting();
+    await openEplWaybillDetail(eplSelectedWaybillId);
+    document.querySelector('.accounting-detail-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showToast('ЭПЛ', 'Этап сохранён');
+}
+
+function editFullEplCard(waybillId) {
+    const waybill = eplWaybillsDB.find(row => Number(row.id) === Number(waybillId));
+    if (!waybill) return;
+    editEplDriver(waybill.driver_id);
+    editEplVehicle(waybill.vehicle_id);
+    editEplWaybill(waybill.id);
+    switchAccountingTab('drivers');
+    document.querySelector('.accounting-quick-flow')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showToast('ЭПЛ', 'Данные карточки открыты для редактирования');
+}
+
+function eplCardValue(value, fallback = 'Не указано') {
+    const prepared = String(value ?? '').trim();
+    return eplEscapeHtml(prepared || fallback);
+}
+
+function eplWaybillTypeLabel(value) {
+    return ({ truck: 'Грузовой', passenger: 'Пассажирский', special: 'Спецтехника' })[value] || 'Не указан';
+}
+
+function renderSelectedEplWaybill() {
+    const title = document.getElementById('eplSelectedWaybillTitle');
+    const body = document.getElementById('eplWaybillDetailBody');
+    if (!title || !body) return;
+    const subtitle = title.closest('.section-header')?.querySelector('.section-subtitle');
+    if (subtitle) subtitle.textContent = 'Основные данные и одно следующее действие по рейсу.';
+    const waybill = eplWaybillDetailDB?.waybill;
+    if (!waybill) {
+        title.innerText = 'Карточка ЭПЛ';
+        body.innerHTML = '<div class="empty-state">Создайте путевой лист или откройте его из списка.</div>';
+        return;
+    }
+
+    const workStep = getEplCompactWorkStep(waybill);
+    const stepInfo = {
+        admission: { title: 'Подтвердить допуск к рейсу', text: 'Подтвердите медосмотр и исправность транспорта.', button: 'Подтвердить допуск' },
+        departure: { title: 'Отметить выезд', text: 'Водитель и транспорт готовы. Зафиксируйте начало рейса.', button: 'Отметить выезд' },
+        return: { title: 'Завершить рейс', text: 'После возвращения подтвердите возврат и закрытие осмотров.', button: 'Завершить рейс' },
+        complete: { title: 'Рейс завершён', text: 'Все обязательные этапы ЭПЛ закрыты.', button: '' },
+    }[workStep];
+    const progress = [
+        { key: 'admission', label: 'Допуск', done: workStep !== 'admission' },
+        { key: 'departure', label: 'Выезд', done: ['return', 'complete'].includes(workStep) },
+        { key: 'return', label: 'Возврат', done: workStep === 'complete' },
+    ];
+    const driver = eplDriversDB.find(item => Number(item.id) === Number(waybill.driver_id)) || {};
+    const vehicle = eplVehiclesDB.find(item => Number(item.id) === Number(waybill.vehicle_id)) || {};
+    const project = (Array.isArray(projectsDB) ? projectsDB : []).find(item => Number(item.id) === Number(waybill.project_id)) || {};
+    const client = (Array.isArray(clientsDB) ? clientsDB : []).find(item => Number(item.id) === Number(waybill.client_id)) || {};
+    const projectName = project.name || project.contract || '';
+    const clientName = client.name || waybill.client_name || '';
+    const odometer = Number(vehicle.odometer || 0);
+    const capacity = Number(vehicle.carrying_capacity || 0);
+
+    title.innerText = `Карточка ЭПЛ ${waybill.number || `№${waybill.id}`}`;
+    body.innerHTML = `
+        <div class="epl-result-card">
+            <div class="epl-result-card__top">
+                <div>
+                    <span class="status-badge ${eplStatusClass(waybill.status)}">${eplEscapeHtml(eplStatusLabel(waybill.status))}</span>
+                    <h2>${eplEscapeHtml(waybill.route_text || 'Маршрут не указан')}</h2>
+                    <p>${eplCardValue(waybill.number, `ЭПЛ №${waybill.id}`)} · рейс ${eplCardValue(waybill.shift_date, 'без даты')}</p>
+                </div>
+                <button class="btn-secondary" onclick="editFullEplCard(${Number(waybill.id)})">Редактировать данные</button>
+            </div>
+            <div class="epl-result-card__facts">
+                <div><span>Тип</span><strong>${eplEscapeHtml(eplWaybillTypeLabel(waybill.waybill_type))}</strong></div>
+                <div><span>Дата рейса</span><strong>${eplEscapeHtml(waybill.shift_date || 'Не указана')}</strong></div>
+                <div><span>Водитель</span><strong>${eplEscapeHtml(waybill.driver_name || driver.full_name || 'Не выбран')}</strong></div>
+                <div><span>Транспорт</span><strong>${eplEscapeHtml(waybill.vehicle_label || vehicle.registration_no || 'Не выбран')}</strong></div>
+                <div><span>Готовность</span><strong>${Number(waybill.readiness_percent || 0)}%</strong></div>
+            </div>
+
+            <div class="epl-card-sections">
+                <section class="epl-card-section epl-card-section--wide">
+                    <div class="epl-card-section__heading"><div><span>Шаг 3</span><h3>Маршрут и задание</h3></div></div>
+                    <div class="epl-card-data-grid">
+                        <div><span>Маршрут / задание</span><strong>${eplCardValue(waybill.route_text)}</strong></div>
+                        <div><span>Груз / назначение</span><strong>${eplCardValue(waybill.cargo)}</strong></div>
+                        <div><span>Откуда</span><strong>${eplCardValue(waybill.departure_point)}</strong></div>
+                        <div><span>Куда</span><strong>${eplCardValue(waybill.destination_point)}</strong></div>
+                        <div><span>Плановый выезд</span><strong>${eplCardValue(waybill.planned_departure)}</strong></div>
+                        <div><span>Проект</span><strong>${eplCardValue(projectName, 'Без проекта')}</strong></div>
+                        <div><span>Клиент / контрагент</span><strong>${eplCardValue(clientName, 'Не выбран')}</strong></div>
+                        <div><span>Комментарий</span><strong>${eplCardValue(waybill.notes)}</strong></div>
+                    </div>
+                </section>
+
+                <section class="epl-card-section">
+                    <div class="epl-card-section__heading"><div><span>Шаг 1</span><h3>Водитель</h3></div></div>
+                    <div class="epl-card-data-grid epl-card-data-grid--single">
+                        <div><span>ФИО</span><strong>${eplCardValue(driver.full_name || waybill.driver_name)}</strong></div>
+                        <div><span>Табельный номер</span><strong>${eplCardValue(driver.personnel_number)}</strong></div>
+                        <div><span>Телефон</span><strong>${eplCardValue(driver.phone)}</strong></div>
+                        <div><span>Удостоверение</span><strong>${eplCardValue(driver.license_number)}</strong></div>
+                        <div><span>Категория</span><strong>${eplCardValue(driver.license_category)}</strong></div>
+                        <div><span>Меддопуск до</span><strong>${eplCardValue(driver.medical_valid_to)}</strong></div>
+                        <div><span>Комментарий</span><strong>${eplCardValue(driver.comment)}</strong></div>
+                    </div>
+                </section>
+
+                <section class="epl-card-section">
+                    <div class="epl-card-section__heading"><div><span>Шаг 2</span><h3>Транспорт</h3></div></div>
+                    <div class="epl-card-data-grid epl-card-data-grid--single">
+                        <div><span>Госномер</span><strong>${eplCardValue(vehicle.registration_no || waybill.vehicle_label)}</strong></div>
+                        <div><span>Гаражный номер</span><strong>${eplCardValue(vehicle.garage_number)}</strong></div>
+                        <div><span>Марка и модель</span><strong>${eplCardValue([vehicle.brand, vehicle.model].filter(Boolean).join(' '))}</strong></div>
+                        <div><span>Прицеп</span><strong>${eplCardValue(vehicle.trailer_registration)}</strong></div>
+                        <div><span>Текущий пробег</span><strong>${odometer ? `${odometer.toLocaleString('ru-RU')} км` : 'Не указан'}</strong></div>
+                        <div><span>Грузоподъёмность</span><strong>${capacity ? `${capacity.toLocaleString('ru-RU')} т` : 'Не указана'}</strong></div>
+                        <div><span>Диагностика до</span><strong>${eplCardValue(vehicle.diagnostic_valid_to)}</strong></div>
+                        <div><span>Страховка до</span><strong>${eplCardValue(vehicle.insurance_valid_to)}</strong></div>
+                        <div><span>Комментарий</span><strong>${eplCardValue(vehicle.comment)}</strong></div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="epl-card-workflow">
+                <div class="epl-card-workflow__heading"><span>Работа по рейсу</span><strong>Текущий этап и следующее действие</strong></div>
+            <div class="epl-simple-progress">
+                ${progress.map((item, index) => `<div class="epl-simple-progress__item ${item.done ? 'is-done' : item.key === workStep ? 'is-current' : ''}"><span>${item.done ? '✓' : index + 1}</span><strong>${item.label}</strong></div>`).join('')}
+            </div>
+            <div class="epl-next-action ${workStep === 'complete' ? 'is-complete' : ''}">
+                <div><span>Следующее действие</span><strong>${stepInfo.title}</strong><p>${stepInfo.text}</p></div>
+                ${stepInfo.button ? `<button class="btn-primary" onclick="completeEplCompactStep('${workStep}')">${stepInfo.button}</button>` : (waybill.qr_code ? `<button class="btn-secondary" onclick="openSelectedEplQr()">Открыть QR-код</button>` : '')}
+            </div>
             </div>
         </div>
     `;
@@ -1417,6 +1831,7 @@ async function saveEplWaybill() {
     await renderAccounting();
     if (res.id) await openEplWaybillDetail(res.id);
     else if (targetWaybillId) await openEplWaybillDetail(targetWaybillId);
+    document.querySelector('.accounting-detail-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     showToast('1С ЭПЛ', wasEditing ? 'Карточка ЭПЛ обновлена' : 'Путевой лист создан');
 }
 
@@ -1433,13 +1848,16 @@ async function saveEplDriver() {
         status: document.getElementById('eplDriverStatus').value,
         comment: document.getElementById('eplDriverComment').value.trim(),
     };
-    if (!payload.full_name) return customAlert('Укажи ФИО водителя.');
+    if (!payload.full_name || !payload.license_number || !payload.license_category || !payload.medical_valid_to) {
+        return customAlert('Заполни ФИО, номер и категорию водительского удостоверения, а также срок медицинского допуска.');
+    }
     const endpoint = editingEplDriverId ? `/epl/drivers/${editingEplDriverId}` : '/epl/drivers';
     const method = editingEplDriverId ? 'PUT' : 'POST';
     const res = await apiCall(endpoint, method, payload);
     if (!res || res.error) return customAlert(typeof explainApiPolicyError === 'function' ? explainApiPolicyError(res) : 'Не удалось сохранить водителя.');
     resetEplDriverForm();
     await renderAccounting();
+    switchAccountingTab('vehicles');
     showToast('1С ЭПЛ', wasEditing ? 'Водитель обновлён' : 'Водитель создан');
 }
 
@@ -1458,13 +1876,16 @@ async function saveEplVehicle() {
         status: document.getElementById('eplVehicleStatus').value,
         comment: document.getElementById('eplVehicleComment').value.trim(),
     };
-    if (!payload.registration_no && !payload.garage_number) return customAlert('Укажи госномер или гаражный номер ТС.');
+    if (!payload.registration_no || !payload.brand || !payload.model) {
+        return customAlert('Заполни госномер, марку и модель транспорта.');
+    }
     const endpoint = editingEplVehicleId ? `/epl/vehicles/${editingEplVehicleId}` : '/epl/vehicles';
     const method = editingEplVehicleId ? 'PUT' : 'POST';
     const res = await apiCall(endpoint, method, payload);
     if (!res || res.error) return customAlert(typeof explainApiPolicyError === 'function' ? explainApiPolicyError(res) : 'Не удалось сохранить транспорт.');
     resetEplVehicleForm();
     await renderAccounting();
+    switchAccountingTab('waybills');
     showToast('1С ЭПЛ', wasEditing ? 'Транспорт обновлён' : 'Транспорт создан');
 }
 
@@ -1553,6 +1974,9 @@ async function renderAccounting() {
         return;
     }
     await loadAccountingModuleData();
+    groupAccountingOptionalFields();
+    if (!eplDriversDB.length) accountingActiveTab = 'drivers';
+    else if (!eplVehiclesDB.length) accountingActiveTab = 'vehicles';
     populateEplSelects();
     await applyAccountingFieldPermissions();
     renderAccountingMetrics();
@@ -1572,4 +1996,10 @@ async function renderAccounting() {
     } else {
         renderSelectedEplWaybill();
     }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', groupAccountingOptionalFields, { once: true });
+} else {
+    groupAccountingOptionalFields();
 }

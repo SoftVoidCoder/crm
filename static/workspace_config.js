@@ -61,6 +61,8 @@ const WORKSPACE_SHORTCUT_DEFS = {
 
 let workspaceConfigCache = null;
 let workspaceConfigCacheKey = '';
+let workspaceConfigDraft = null;
+let workspaceConfigActiveTab = 'navigation';
 
 function workspaceConfigStorageKey() {
     const email = String(currentUser?.email || currentUser?.name || 'guest').trim().toLowerCase();
@@ -273,13 +275,14 @@ function workspaceShortcutSignature(shortcut = {}) {
     ].filter(Boolean).join('+');
 }
 
-function findWorkspaceShortcutConflict(actionKey, shortcut, config = loadWorkspaceConfig()) {
+function findWorkspaceShortcutConflict(actionKey, shortcut, config = null) {
     const defs = window.WORKSPACE_SHORTCUT_DEFS || {};
+    const sourceConfig = config || workspaceConfigDraft || loadWorkspaceConfig();
     const signature = workspaceShortcutSignature(shortcut);
     if (!signature) return null;
     return Object.keys(defs).find(otherActionKey => {
         if (otherActionKey === actionKey) return false;
-        return workspaceShortcutSignature(getWorkspaceShortcutConfig(otherActionKey, config)) === signature;
+        return workspaceShortcutSignature(getWorkspaceShortcutConfig(otherActionKey, sourceConfig)) === signature;
     }) || null;
 }
 
@@ -381,7 +384,7 @@ function renderWorkspaceShortcutSection(config = loadWorkspaceConfig()) {
 function applySidebarWorkspaceConfig() {
     const sidebar = document.querySelector('.krd-shell-sidebar, .sidebar');
     if (!sidebar) return;
-    const config = loadWorkspaceConfig();
+    const config = workspaceConfigDraft || loadWorkspaceConfig();
     const allowedNavIds = getWorkspaceAllowedNavIds();
     const footer = sidebar.querySelector('.krd-shell-sidebar__footer');
     const hiddenGroups = new Set(config.hiddenGroups || []);
@@ -401,10 +404,11 @@ function applySidebarWorkspaceConfig() {
             const itemEl = document.getElementById(itemId);
             if (!itemEl) return;
             const visible = allowedNavIds.has(itemId) && !hiddenGroups.has(group.id) && !hiddenNavItems.has(itemId);
-            itemEl.style.display = visible ? 'flex' : 'none';
+            itemEl.style.setProperty('display', visible ? 'flex' : 'none', 'important');
             if (visible) visibleCount += 1;
         });
-        groupEl.style.display = hiddenGroups.has(group.id) || visibleCount === 0 ? 'none' : '';
+        if (hiddenGroups.has(group.id) || visibleCount === 0) groupEl.style.setProperty('display', 'none', 'important');
+        else groupEl.style.removeProperty('display');
     });
 }
 
@@ -440,7 +444,7 @@ function renderWorkspaceConfigModal() {
     const body = document.getElementById('workspaceConfigBody');
     if (!modal || !body || !currentUser || currentUser.status !== 'approved') return;
 
-    const config = loadWorkspaceConfig();
+    const config = workspaceConfigDraft || loadWorkspaceConfig();
     const allowedNavIds = getWorkspaceAllowedNavIds();
     const sidebarGroups = getWorkspaceSidebarMeta()
         .filter(group => group.itemIds.some(itemId => allowedNavIds.has(itemId)))
@@ -533,22 +537,50 @@ function renderWorkspaceConfigModal() {
                 <div class="workspace-config-stack">${dashboardHtml || '<div class="empty-state">Блоки дашборда пока недоступны для настройки.</div>'}</div>
             </section>
         </div>
-        ${renderWorkspaceShortcutSection(config)}
         <div class="workspace-config-note">Личный кабинет и служебные зоны остаются закреплены. Конфиг сохраняется отдельно для каждого пользователя и роли.</div>
     `;
+
+    const legacyGrid = body.querySelector(':scope > .workspace-config-grid');
+    const navigationSection = legacyGrid?.children?.[0] || null;
+    const dashboardSection = legacyGrid?.children?.[1] || null;
+    const panels = [
+        ['navigation', navigationSection],
+        ['dashboard', dashboardSection],
+    ];
+    panels.forEach(([panelName, section]) => {
+        if (!section) return;
+        const panel = document.createElement('div');
+        panel.className = `workspace-config-panel${workspaceConfigActiveTab === panelName ? ' is-active' : ''}`;
+        panel.dataset.workspaceConfigPanel = panelName;
+        section.classList.add('workspace-config-section--flat');
+        body.insertBefore(panel, legacyGrid || body.firstChild);
+        panel.appendChild(section);
+    });
+    legacyGrid?.remove();
+    body.querySelector(':scope > .workspace-config-note')?.remove();
+    switchWorkspaceConfigTab(workspaceConfigActiveTab);
 }
 
 function mutateWorkspaceConfig(mutator) {
-    const draft = JSON.parse(JSON.stringify(loadWorkspaceConfig()));
+    const hasModalDraft = Boolean(workspaceConfigDraft);
+    const draft = JSON.parse(JSON.stringify(workspaceConfigDraft || loadWorkspaceConfig()));
     mutator(draft);
+    if (hasModalDraft) {
+        workspaceConfigDraft = normalizeWorkspaceConfig(draft);
+        renderWorkspaceConfigModal();
+        return workspaceConfigDraft;
+    }
     saveWorkspaceConfig(draft);
     applyWorkspaceConfig();
     renderWorkspaceConfigModal();
+    return loadWorkspaceConfig();
 }
 
 function openWorkspaceConfigModal() {
     const modal = document.getElementById('workspaceConfigModal');
     if (!modal) return;
+    workspaceConfigDraft = JSON.parse(JSON.stringify(loadWorkspaceConfig()));
+    workspaceConfigActiveTab = 'navigation';
     renderWorkspaceConfigModal();
     document.body.classList.add('workspace-config-open');
     modal.style.display = 'flex';
@@ -557,7 +589,30 @@ function openWorkspaceConfigModal() {
 function closeWorkspaceConfigModal() {
     const modal = document.getElementById('workspaceConfigModal');
     if (modal) modal.style.display = 'none';
+    workspaceConfigDraft = null;
     document.body.classList.remove('workspace-config-open');
+}
+
+function switchWorkspaceConfigTab(tabName) {
+    const nextTab = ['navigation', 'dashboard'].includes(String(tabName || '')) ? String(tabName) : 'navigation';
+    workspaceConfigActiveTab = nextTab;
+    document.querySelectorAll('[data-workspace-config-tab]').forEach(button => {
+        button.classList.toggle('is-active', button.dataset.workspaceConfigTab === nextTab);
+    });
+    document.querySelectorAll('[data-workspace-config-panel]').forEach(panel => {
+        panel.classList.toggle('is-active', panel.dataset.workspaceConfigPanel === nextTab);
+    });
+}
+
+function saveWorkspaceConfigChanges() {
+    if (!workspaceConfigDraft) return;
+    saveWorkspaceConfig(workspaceConfigDraft);
+    workspaceConfigDraft = null;
+    applyWorkspaceConfig();
+    if (typeof renderDashboard === 'function') renderDashboard();
+    if (typeof updateCommandPaletteShortcutHints === 'function') updateCommandPaletteShortcutHints();
+    closeWorkspaceConfigModal();
+    if (typeof showToast === 'function') showToast('Настройка интерфейса', 'Изменения сохранены');
 }
 
 function toggleWorkspaceGroup(groupId) {
@@ -642,7 +697,7 @@ function resetWorkspaceShortcutConfig(actionKey) {
 function changeWorkspaceShortcutAction(slotIndex, nextActionKey) {
     const defs = window.WORKSPACE_SHORTCUT_DEFS || {};
     if (!defs[nextActionKey]) return;
-    const config = loadWorkspaceConfig();
+    const config = workspaceConfigDraft || loadWorkspaceConfig();
     const fallbackOrder = Object.keys(defs);
     const order = Array.isArray(config?.shortcutOrder) && config.shortcutOrder.length
         ? [...config.shortcutOrder]
@@ -706,6 +761,12 @@ async function resetWorkspaceConfig() {
         ? await customConfirm('Сбросить персональную конфигурацию интерфейса и вернуть порядок по умолчанию?')
         : true;
     if (!shouldReset) return;
+    if (workspaceConfigDraft) {
+        workspaceConfigDraft = normalizeWorkspaceConfig(getWorkspaceDefaultConfig());
+        renderWorkspaceConfigModal();
+        if (typeof showToast === 'function') showToast('Настройка интерфейса', 'Настройки сброшены. Нажмите «Сохранить изменения».');
+        return;
+    }
     const storageKey = workspaceConfigStorageKey();
     localStorage.removeItem(storageKey);
     workspaceConfigCache = null;
@@ -721,6 +782,8 @@ window.applyWorkspaceConfig = applyWorkspaceConfig;
 window.applyDashboardWorkspaceConfig = applyDashboardWorkspaceConfig;
 window.openWorkspaceConfigModal = openWorkspaceConfigModal;
 window.closeWorkspaceConfigModal = closeWorkspaceConfigModal;
+window.switchWorkspaceConfigTab = switchWorkspaceConfigTab;
+window.saveWorkspaceConfigChanges = saveWorkspaceConfigChanges;
 window.toggleWorkspaceGroup = toggleWorkspaceGroup;
 window.moveWorkspaceGroup = moveWorkspaceGroup;
 window.toggleWorkspaceNavItem = toggleWorkspaceNavItem;

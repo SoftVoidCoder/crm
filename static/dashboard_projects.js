@@ -703,7 +703,7 @@ function drawCharts() {
         statusChartObj = new Chart(stEl, { 
             type: 'pie', 
             data: { 
-                labels: ['В работе', 'Архив', 'Отменены'], 
+                labels: ['В работе', 'Завершённые', 'Отменённые'],
                 datasets: [{ 
                     data: [a, ar, c], 
                     backgroundColor: ['#275df6', '#19bf88', '#e14852'], 
@@ -857,7 +857,7 @@ function setViewMode(mode) {
 
 function generateCardHTML(p) {
     let bC = `status-${p.status}`;
-    let bT = { 'active': 'В работе', 'archive': 'В архиве', 'canceled': 'Отменен' }[p.status];
+    let bT = { 'active': 'В работе', 'archive': 'Завершён', 'canceled': 'Отменён', 'terminated': 'Расторгнут', 'prolongation': 'На продлении' }[p.status] || 'В работе';
     let cC = "";
     let oB = "";
     
@@ -878,37 +878,38 @@ function generateCardHTML(p) {
             <span style="color: var(--secondary)">Отправлен: ${p.archive_details.date}</span>
         </div>`; 
     }
-    const favoriteActive = isDashboardFavorite('project', p.id);
-    
+    const progress = Math.max(0, Math.min(100, Number(p.progress || 0)));
+    const budget = Number(p.budget || 0);
     return `
-    <div class="project-card fade-in" ${cC} onclick="openProject(${p.id})">
-        <div class="project-card-header">
+    <article class="project-registry-row fade-in" ${cC} onclick="openProject(${Number(p.id || 0)})">
+        <div class="project-registry-row__identity">
             <div class="project-card-badges"><span class="status-badge ${bC}">${bT}</span>${oB}</div>
-            <button class="btn-secondary project-card-favorite" title="${favoriteActive ? 'Убрать из избранного' : 'В избранное'}" onclick="event.stopPropagation(); toggleDashboardProjectFavorite(${Number(p.id || 0)})">${favoriteActive ? '★' : '☆'}</button>
+            <h3>${dashboardEscape(p.name || 'Без названия')}</h3>
+            <p>${dashboardEscape(p.client || 'Заказчик не указан')}</p>
         </div>
-        <div class="project-card-body">
-            <h3>${p.name}</h3>
-            <p class="project-card-contract">Договор: ${p.contract}</p>
-            <div class="project-card-meta">
-                <span class="project-card-meta-label">Заказчик</span>
-                <span class="project-card-meta-value">${p.client || 'Не указан'}</span>
-            </div>
+        <div class="project-registry-row__meta">
+            <span>Договор</span>
+            <strong>${dashboardEscape(p.contract || 'Не указан')}</strong>
         </div>
+        <div class="project-registry-row__meta">
+            <span>Ответственный</span>
+            <strong>${dashboardEscape(p.manager || 'Не назначен')}</strong>
+        </div>
+        <div class="project-registry-row__meta">
+            <span>Бюджет</span>
+            <strong>${budget.toLocaleString('ru-RU')} ₽</strong>
+        </div>
+        <div class="project-registry-row__progress">
+            <div><span>Готовность</span><strong>${progress}%</strong></div>
+            <div class="card-progress"><div class="card-progress-fill" style="width:${progress}%"></div></div>
+        </div>
+        <button class="btn-secondary project-registry-row__open" type="button">Открыть</button>
         ${archiveHtml}
-        <div class="project-card-footer">
-            <div class="project-card-progress-meta">
-                <span>Готовность</span>
-                <span>${p.progress}%</span>
-            </div>
-            <div class="card-progress">
-                <div class="card-progress-fill" style="width: ${p.progress}%"></div>
-            </div>
-        </div>
-    </div>`;
+    </article>`;
 }
 
 function getDashboardFilteredProjects() {
-    const sInput = document.getElementById('searchInput');
+    const sInput = document.getElementById('projectRegistrySearch');
     const q = sInput ? sInput.value.toLowerCase().trim() : '';
     let filt = projectsDB.filter(p => p.status === currentTab);
 
@@ -1364,14 +1365,16 @@ function renderDashboardHero(filteredProjects = []) {
     const roleLabel = role === 'Директор' ? 'Портфель' : (role === 'Менеджер' ? 'Мой день' : 'Проекты');
     let title = 'Портфель проектов';
     let text = 'Активные проекты, бюджет, затраты и просрочки в одном экране.';
-    let primaryAction = `<button class="btn-primary" onclick="createNewProject()">Создать проект</button>`;
+    // Создание проекта уже доступно в шапке списка ниже. Не дублируем
+    // одинаковое действие в обзорном блоке портфеля.
+    let primaryAction = '';
     let secondaryAction = currentUser && currentUser.role === 'Директор'
         ? `<button class="btn-secondary" onclick="navigateTo('executive')">Панель директора</button>`
         : `<button class="btn-secondary" onclick="setViewMode('kanban')">Доска</button>`;
     if (role === 'Менеджер') {
         title = 'Мой день менеджера';
         text = 'Быстрый вход в проекты, документы, клиентов и реализацию без лишнего ERP-шума.';
-        primaryAction = `<button class="btn-primary" onclick="createNewProject()">Новый проект</button>`;
+        primaryAction = '';
         secondaryAction = `<button class="btn-secondary" onclick="navigateAndFocus('sales', 'salesProjectId')">Реализация</button>`;
     } else if (role === 'Сотрудник') {
         title = 'Мой рабочий день';

@@ -4,6 +4,7 @@ let outreachImportsDB = [];
 let outreachControlDB = [];
 let outreachSelectedId = 0;
 let outreachEditingId = 0;
+let outreachClientEditMode = false;
 let outreachSearch = '';
 let outreachStatusFilter = '';
 let outreachPriorityFilter = '';
@@ -22,6 +23,12 @@ let outreachBitrixSelected = new Set();
 let outreachBitrixLoading = false;
 let outreachBitrixImporting = false;
 let outreachBitrixAction = '';
+let outreachBitrixConnection = null;
+let outreachBitrixConnectionBusy = false;
+let outreachLoadedScope = '';
+let outreachPoolRows = [];
+let outreachPoolSearch = '';
+let outreachPoolRefreshTimer = 0;
 
 const OUTREACH_KNOWLEDGE_BLOCKS = [
     {
@@ -535,9 +542,11 @@ function detectOutreachDelimiter(text, filename = '') {
     return variants[0].count ? variants[0].delimiter : ',';
 }
 
-async function loadOutreachProspects() {
-    const data = await apiCall('/outreach/prospects');
+async function loadOutreachProspects(scope = '') {
+    const scopeQuery = scope ? `?scope=${encodeURIComponent(scope)}` : '';
+    const data = await apiCall(`/outreach/prospects${scopeQuery}`);
     outreachProspectsDB = Array.isArray(data) ? data : [];
+    outreachLoadedScope = scope || 'all';
     return outreachProspectsDB;
 }
 
@@ -563,12 +572,12 @@ async function loadOutreachImports() {
     return outreachImportsDB;
 }
 
-async function ensureOutreachData(force = false) {
+async function ensureOutreachData(force = false, scope = 'mine') {
     if (!Array.isArray(allUsersDB) || !allUsersDB.length) {
         await loadAllUsers();
     }
-    if (force || !Array.isArray(outreachProspectsDB) || !outreachProspectsDB.length) {
-        await loadOutreachProspects();
+    if (force || outreachLoadedScope !== scope || !Array.isArray(outreachProspectsDB)) {
+        await loadOutreachProspects(scope);
     }
     if (force || !Array.isArray(outreachReportsDB)) {
         await loadOutreachReports();
@@ -618,18 +627,14 @@ function renderOutreachSummary() {
     const rows = filteredOutreachRows();
     const mount = document.getElementById('outreachSummaryStrip');
     if (!mount) return;
-    const unprocessed = rows.filter(row => Number(row.is_processed || 0) === 0).length;
     const overdue = rows.filter(row => row.is_overdue).length;
     const today = rows.filter(row => row.is_due_today).length;
     const warm = rows.filter(row => ['warm', 'meeting'].includes(String(row.status || ''))).length;
-    const converted = rows.filter(row => String(row.status || '') === 'converted').length;
     mount.innerHTML = `
-        <div class="crm-summary-card"><div class="crm-summary-label">Всего в базе</div><div class="crm-summary-value">${rows.length}</div></div>
-        <div class="crm-summary-card"><div class="crm-summary-label">Не обработаны</div><div class="crm-summary-value">${unprocessed}</div></div>
-        <div class="crm-summary-card"><div class="crm-summary-label">План на сегодня</div><div class="crm-summary-value">${today}</div></div>
+        <div class="crm-summary-card"><div class="crm-summary-label">Мои клиенты</div><div class="crm-summary-value">${rows.length}</div></div>
+        <div class="crm-summary-card"><div class="crm-summary-label">Связаться сегодня</div><div class="crm-summary-value">${today}</div></div>
         <div class="crm-summary-card"><div class="crm-summary-label">Просрочено</div><div class="crm-summary-value">${overdue}</div></div>
-        <div class="crm-summary-card"><div class="crm-summary-label">Тёплые</div><div class="crm-summary-value">${warm}</div></div>
-        <div class="crm-summary-card"><div class="crm-summary-label">Переведены в лид</div><div class="crm-summary-value">${converted}</div></div>
+        <div class="crm-summary-card"><div class="crm-summary-label">Есть интерес</div><div class="crm-summary-value">${warm}</div></div>
     `;
 }
 
@@ -1037,9 +1042,98 @@ async function renderBitrixImport() {
         view.style.display = 'block';
         view.classList.add('fade-in');
     }
-    await Promise.all([loadOutreachProspects(), loadOutreachImports()]);
+    await Promise.all([loadOutreachProspects(), loadOutreachImports(), loadBitrixConnectionStatus()]);
     renderBitrixImportStats();
     renderOutreachBitrixPanel();
+}
+
+function canManageBitrixConnection() {
+    return typeof hasCurrentPermission === 'function' && hasCurrentPermission('clients', 'import');
+}
+
+function canUseBitrixImport() {
+    return typeof hasCurrentPermission === 'function'
+        && (hasCurrentPermission('clients', 'update') || hasCurrentPermission('clients', 'import'));
+}
+
+function renderBitrixConnectionStatus() {
+    const mount = document.getElementById('bitrixConnectionStatus');
+    const input = document.getElementById('bitrixWebhookInput');
+    const testButton = document.getElementById('bitrixTestButton');
+    const saveButton = document.getElementById('bitrixSaveButton');
+    const form = input?.closest('.bitrix-connection-form');
+    const hint = document.querySelector('#bitrixConnectionPanel .bitrix-connection-hint');
+    if (!mount) return;
+    const allowed = canManageBitrixConnection();
+    const canUse = canUseBitrixImport();
+    const configured = Boolean(outreachBitrixConnection?.configured);
+    const portal = String(outreachBitrixConnection?.portal || '');
+    if (form) {
+        if (allowed) form.style.removeProperty('display');
+        else form.style.setProperty('display', 'none', 'important');
+    }
+    if (hint) hint.textContent = allowed
+        ? 'Адрес скрыт после сохранения. Для замены подключения вставьте новый вебхук.'
+        : 'Подключение защищено. Менеджер может запускать выгрузку, но не может менять вебхук.';
+    if (input) input.disabled = !allowed || outreachBitrixConnectionBusy;
+    if (testButton) testButton.disabled = !allowed || outreachBitrixConnectionBusy;
+    if (saveButton) saveButton.disabled = !allowed || outreachBitrixConnectionBusy;
+    if (!canUse) {
+        mount.innerHTML = '<span class="crm-inline-pill crm-inline-pill--neutral">Нет доступа</span>';
+        return;
+    }
+    mount.innerHTML = configured
+        ? `<span class="crm-inline-pill crm-inline-pill--positive">Подключено</span><small>${outreachEscape(portal)}${allowed ? '' : ' · настройка защищена'}</small>`
+        : '<span class="crm-inline-pill crm-inline-pill--critical">Не подключено</span><small>Сохраните входящий вебхук</small>';
+}
+
+async function loadBitrixConnectionStatus() {
+    if (!canUseBitrixImport()) {
+        outreachBitrixConnection = { configured: false, forbidden: true };
+        renderBitrixConnectionStatus();
+        return outreachBitrixConnection;
+    }
+    const res = await apiCall('/integrations/bitrix24/status');
+    outreachBitrixConnection = (!res || res.error) ? { configured: false, error: res?.error || 'status_failed' } : res;
+    renderBitrixConnectionStatus();
+    return outreachBitrixConnection;
+}
+
+function bitrixWebhookValue() {
+    return String(document.getElementById('bitrixWebhookInput')?.value || '').trim();
+}
+
+async function testBitrixConnection() {
+    const webhookUrl = bitrixWebhookValue();
+    if (!webhookUrl && !outreachBitrixConnection?.configured) {
+        return customAlert('Вставьте входящий вебхук Bitrix24.');
+    }
+    outreachBitrixConnectionBusy = true;
+    renderBitrixConnectionStatus();
+    const res = await apiCall('/integrations/bitrix24/test', 'POST', { webhook_url: webhookUrl });
+    outreachBitrixConnectionBusy = false;
+    renderBitrixConnectionStatus();
+    if (!res || res.error || res.status === 'failed') return customAlert(res?.error || 'Не удалось подключиться к Bitrix24.');
+    showToast('Bitrix24', 'Подключение работает');
+}
+
+async function saveBitrixConnection() {
+    const webhookUrl = bitrixWebhookValue();
+    if (!webhookUrl) return customAlert('Вставьте входящий вебхук Bitrix24.');
+    outreachBitrixConnectionBusy = true;
+    renderBitrixConnectionStatus();
+    const res = await apiCall('/integrations/bitrix24/configure', 'POST', { webhook_url: webhookUrl });
+    outreachBitrixConnectionBusy = false;
+    if (!res || res.error || res.status === 'failed') {
+        renderBitrixConnectionStatus();
+        return customAlert(res?.error || 'Не удалось сохранить подключение Bitrix24.');
+    }
+    outreachBitrixConnection = res;
+    const input = document.getElementById('bitrixWebhookInput');
+    if (input) input.value = '';
+    renderBitrixConnectionStatus();
+    renderOutreachBitrixPanel();
+    showToast('Bitrix24', 'Подключение сохранено в CRM');
 }
 
 function renderOutreachBitrixPanel() {
@@ -1050,12 +1144,16 @@ function renderOutreachBitrixPanel() {
     const syncButton = document.getElementById('outreachBitrixSyncButton');
     const updateButton = document.getElementById('outreachBitrixUpdateButton');
     const clearButton = document.getElementById('outreachBitrixClearButton');
+    const configured = Boolean(outreachBitrixConnection?.configured);
     const busy = outreachBitrixLoading || outreachBitrixImporting || Boolean(outreachBitrixAction);
-    if (searchButton) searchButton.disabled = busy;
-    if (importButton) importButton.disabled = busy || !outreachBitrixSelected.size;
-    if (syncButton) syncButton.disabled = busy;
-    if (updateButton) updateButton.disabled = busy;
-    if (clearButton) clearButton.disabled = busy;
+    if (searchButton) searchButton.disabled = busy || !configured;
+    if (importButton) importButton.disabled = busy || !configured || !outreachBitrixSelected.size;
+    if (syncButton) syncButton.disabled = busy || !configured;
+    if (updateButton) updateButton.disabled = busy || !configured;
+    if (clearButton) {
+        clearButton.disabled = busy;
+        clearButton.style.display = canManageBitrixConnection() ? '' : 'none';
+    }
     if (outreachBitrixLoading) {
         mount.innerHTML = '<div class="empty-state">Ищу в Bitrix24...</div>';
         return;
@@ -1066,6 +1164,10 @@ function renderOutreachBitrixPanel() {
     }
     if (outreachBitrixAction) {
         mount.innerHTML = `<div class="empty-state">${outreachEscape(outreachBitrixAction)}</div>`;
+        return;
+    }
+    if (!configured) {
+        mount.innerHTML = '<div class="empty-state">Сначала сохраните подключение Bitrix24 выше.</div>';
         return;
     }
     if (!Array.isArray(outreachBitrixResults) || !outreachBitrixResults.length) {
@@ -1225,199 +1327,304 @@ function syncOutreachFilterControls() {
     const prioritySelect = document.getElementById('outreachPriorityFilter');
     const processedSelect = document.getElementById('outreachProcessedFilter');
     const problemsButton = document.getElementById('outreachProblemsBtn');
+    const advancedCount = document.getElementById('outreachAdvancedCount');
     document.querySelectorAll('[data-outreach-quick-filter]').forEach(button => {
-        button.classList.toggle('btn-primary', String(button.dataset.outreachQuickFilter || '') === outreachQuickFilter);
-        button.classList.toggle('btn-secondary', String(button.dataset.outreachQuickFilter || '') !== outreachQuickFilter);
+        const active = String(button.dataset.outreachQuickFilter || '') === outreachQuickFilter;
+        button.classList.toggle('btn-primary', active);
+        button.classList.toggle('btn-secondary', !active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
     if (statusSelect) statusSelect.value = outreachStatusFilter || '';
     if (prioritySelect) prioritySelect.value = outreachPriorityFilter || '';
     if (processedSelect) processedSelect.value = outreachProcessedFilter || '';
-    if (problemsButton) problemsButton.classList.toggle('is-active', outreachOnlyProblems);
+    if (problemsButton) problemsButton.setAttribute('aria-pressed', outreachOnlyProblems ? 'true' : 'false');
+    if (advancedCount) {
+        const count = Number(Boolean(outreachPriorityFilter)) + Number(Boolean(outreachProcessedFilter)) + Number(outreachOnlyProblems);
+        advancedCount.textContent = String(count);
+        advancedCount.classList.toggle('is-active', count > 0);
+    }
 }
 
-function renderOutreachDetail(row) {
-    if (!row) return `<div class="empty-state">Выбери карточку из реестра или создай новую запись.</div>`;
-    const activities = Array.isArray(row.activities) ? row.activities : [];
-    const dossier = outreachClientDossier(row);
+function outreachContactMethodLabel(value) {
+    return {
+        phone: 'Телефон',
+        email: 'Почта',
+        message: 'Сообщение',
+        mixed: 'Любой способ',
+    }[String(value || '')] || 'Не указан';
+}
+
+function outreachActivityTypeLabel(value) {
+    return {
+        call: 'Звонок',
+        email: 'Письмо',
+        message: 'Сообщение',
+        meeting: 'Встреча',
+        note: 'Заметка',
+    }[String(value || '')] || 'Контакт';
+}
+
+function renderOutreachSavedClientCard(row, activities) {
+    const isConverted = String(row.status || '') === 'converted';
+    const isRejected = String(row.status || '') === 'do_not_contact';
+    const lastActivity = activities[0] || null;
+    const tags = Array.isArray(row.tags) ? row.tags : [];
     return `
-        <div class="crm-detail-card prospecting-detail-card">
-            <div class="crm-detail-head">
+        <article id="myClientCardStep" class="my-client-result-card ${isConverted ? 'is-complete' : ''}">
+            <div class="my-client-result-card__head">
                 <div>
-                    <div class="crm-detail-title">${outreachEscape(row.company_name || 'Без компании')}</div>
-                    <div class="crm-detail-meta">${outreachEscape(row.contact_name || 'Контакт не указан')} · ${outreachEscape(row.position || 'без должности')} · ${outreachEscape(row.city || 'город не указан')}</div>
+                    <span class="my-client-card__step-label">Карточка клиента</span>
+                    <h2>${outreachEscape(row.company_name || 'Без компании')}</h2>
+                    <p>Все сохранённые данные и результаты работы с клиентом.</p>
                 </div>
-                <div class="prospecting-badge-stack">
-                    <span class="crm-inline-pill crm-inline-pill--${outreachTone(row.status, row.is_overdue)}">${outreachEscape(outreachStatusLabel(row.status))}</span>
-                    <span class="crm-inline-pill crm-inline-pill--${outreachPriorityTone(row.priority)}">${outreachEscape(outreachPriorityLabel(row.priority))}</span>
-                    <span class="crm-inline-pill crm-inline-pill--${Number(row.is_processed || 0) ? 'positive' : 'neutral'}">${outreachEscape(outreachProcessedLabel(row.is_processed))}</span>
-                </div>
+                <span class="crm-inline-pill crm-inline-pill--${outreachTone(row.status, row.is_overdue)}">${outreachEscape(outreachStatusLabel(row.status))}</span>
             </div>
-            <div class="crm-detail-grid">
-                <div><span class="crm-detail-label">Телефон</span><strong>${outreachEscape(row.phone || '—')}</strong></div>
-                <div><span class="crm-detail-label">Почта</span><strong>${outreachEscape(row.email || '—')}</strong></div>
-                <div><span class="crm-detail-label">Как связаться</span><strong>${outreachEscape(row.contact_method || '—')}</strong></div>
-                <div><span class="crm-detail-label">Менеджер</span><strong>${outreachEscape(row.manager_name || row.manager_email || 'не назначен')}</strong></div>
-                <div><span class="crm-detail-label">Приоритет</span><strong>${outreachEscape(outreachPriorityLabel(row.priority))}</strong></div>
-                <div><span class="crm-detail-label">План контакта</span><strong>${outreachEscape(row.planned_contact_date || '—')}</strong></div>
-                <div><span class="crm-detail-label">Следующий шаг</span><strong>${outreachEscape(row.next_action_date || '—')}</strong></div>
-                <div><span class="crm-detail-label">Попыток</span><strong>${Number(row.attempts_count || 0)}</strong></div>
-                <div><span class="crm-detail-label">Последний результат</span><strong>${outreachEscape(row.last_result || '—')}</strong></div>
-            </div>
-            <div class="crm-detail-actions">
-                <button class="btn-secondary" onclick="openOutreachEditor(${Number(row.id || 0)})">Редактировать</button>
-                <button class="btn-secondary" onclick="markOutreachProcessed(${Number(row.id || 0)})">Отметить обработанным</button>
-                <button class="btn-primary" onclick="convertOutreachProspect(${Number(row.id || 0)})">Перевести в лид</button>
-            </div>
-            <div class="crm-tags">${(row.tags || []).map(tag => `<span class="crm-tag">${outreachEscape(tag)}</span>`).join('') || '<span class="crm-tag">Без тегов</span>'}</div>
-            <div class="crm-detail-note">${outreachEscape(row.notes || 'Комментарий не заполнен.')}</div>
-            <div class="crm-activity-block">
-                <div class="section-header">
-                    <div>
-                        <h3 class="section-title">Досье клиента</h3>
-                        <p class="section-subtitle">Проверка полноты данных перед переводом в лид, клиента 360 или документооборот.</p>
-                    </div>
-                    <span class="crm-inline-pill crm-inline-pill--${dossier.tone}">${dossier.score}% готово</span>
+
+            <section class="my-client-data-section">
+                <h3>Компания и контактное лицо</h3>
+                <div class="my-client-data-grid">
+                    <div><span>Компания</span><strong>${outreachEscape(row.company_name || 'Не указана')}</strong></div>
+                    <div><span>ИНН</span><strong>${outreachEscape(row.company_inn || 'Не указан')}</strong></div>
+                    <div><span>Контактное лицо</span><strong>${outreachEscape(row.contact_name || 'Не указано')}</strong></div>
+                    <div><span>Должность</span><strong>${outreachEscape(row.position || 'Не указана')}</strong></div>
+                    <div><span>Телефон</span><strong>${outreachEscape(row.phone || 'Не указан')}</strong></div>
+                    <div><span>Почта</span><strong>${outreachEscape(row.email || 'Не указана')}</strong></div>
+                    <div><span>Сайт</span><strong>${outreachEscape(row.website || 'Не указан')}</strong></div>
+                    <div><span>Город</span><strong>${outreachEscape(row.city || 'Не указан')}</strong></div>
                 </div>
-                <div class="prospecting-dossier-grid">
-                    ${dossier.checks.map(check => `
-                        <div class="prospecting-dossier-item">
-                            <span class="crm-inline-pill crm-inline-pill--${check.ok ? 'positive' : 'neutral'}">${check.ok ? 'Есть' : 'Нет'}</span>
-                            <strong>${outreachEscape(check.label)}</strong>
-                        </div>
-                    `).join('')}
+            </section>
+
+            <section class="my-client-data-section">
+                <h3>Работа с клиентом</h3>
+                <div class="my-client-data-grid">
+                    <div><span>Предпочтительный способ связи</span><strong>${outreachEscape(outreachContactMethodLabel(row.contact_method))}</strong></div>
+                    <div><span>Источник</span><strong>${outreachEscape(row.source_name || 'Не указан')}</strong></div>
+                    <div><span>Ответственный</span><strong>${outreachEscape(row.manager_name || row.manager_email || 'Не назначен')}</strong></div>
+                    <div><span>Первичный контакт до</span><strong>${outreachEscape(row.planned_contact_date || 'Не назначен')}</strong></div>
+                    <div><span>Приоритет</span><strong>${outreachEscape(outreachPriorityLabel(row.priority))}</strong></div>
+                    <div><span>Статус</span><strong>${outreachEscape(outreachStatusLabel(row.status))}</strong></div>
+                    <div><span>Следующее действие</span><strong>${outreachEscape(row.next_action || 'Не назначено')}</strong></div>
+                    <div><span>До какого числа</span><strong>${outreachEscape(row.next_action_date || 'Не назначено')}</strong></div>
                 </div>
-                <div class="prospecting-dossier-note">
-                    ${dossier.missing.length ? `Дозаполнить: ${outreachEscape(dossier.missing.join(', '))}.` : 'Карточка готова для дальнейшей работы.'}
+                <div class="my-client-result-card__note"><span>Что узнали о клиенте</span><p>${outreachEscape(row.notes || 'Дополнительная информация не заполнена.')}</p></div>
+                ${tags.length ? `<div class="crm-tags">${tags.map(tag => `<span class="crm-tag">${outreachEscape(tag)}</span>`).join('')}</div>` : ''}
+            </section>
+
+            <section class="my-client-data-section">
+                <div class="my-client-data-section__head">
+                    <h3>Последний контакт</h3>
+                    <span>${activities.length} ${activities.length === 1 ? 'запись' : 'записей'}</span>
                 </div>
-            </div>
-            <div class="crm-activity-block">
-                <div class="section-header">
-                    <div>
-                        <h3 class="section-title">Обработка клиента</h3>
-                        <p class="section-subtitle">Звонок, письмо, повторный контакт, встреча, причина отказа и следующий шаг.</p>
-                    </div>
+                <div class="my-client-contact-result">
+                    <div><span>Как связались</span><strong>${outreachEscape(lastActivity ? outreachActivityTypeLabel(lastActivity.activity_type) : 'Не указано')}</strong></div>
+                    <div><span>Результат</span><strong>${outreachEscape(lastActivity ? outreachStatusLabel(lastActivity.result_status) : 'Не указан')}</strong></div>
+                    <div><span>Следующий шаг</span><strong>${outreachEscape(lastActivity?.next_action || row.next_action || 'Не назначен')}</strong></div>
+                    <div><span>Дата следующего контакта</span><strong>${outreachEscape(lastActivity?.next_action_date || row.next_action_date || 'Не назначена')}</strong></div>
                 </div>
-                <div class="prospecting-activity-grid">
-                    <select id="outreachActivityType" class="auth-input">
-                        <option value="call">Звонок</option>
-                        <option value="email">Письмо</option>
-                        <option value="message">Сообщение</option>
-                        <option value="meeting">Встреча</option>
-                        <option value="note">Заметка</option>
-                    </select>
-                    <select id="outreachActivityResult" class="auth-input">
-                        <option value="">Результат</option>
-                        <option value="no_answer">Нет ответа</option>
-                        <option value="follow_up">Нужен повторный контакт</option>
-                        <option value="warm">Есть интерес</option>
-                        <option value="meeting">Назначена встреча</option>
-                        <option value="converted">Готов к квалификации</option>
-                        <option value="do_not_contact">Не интересно / стоп</option>
-                    </select>
-                    <input id="outreachActivityNextDate" class="auth-input" type="text" placeholder="Следующий шаг: дд.мм.гггг">
-                    <input id="outreachActivityNextAction" class="auth-input" type="text" placeholder="Что дальше сделать">
-                    <textarea id="outreachActivitySummary" class="auth-input" rows="2" placeholder="Комментарий по итогам контакта"></textarea>
-                    <button class="btn-primary" onclick="saveOutreachActivity(${Number(row.id || 0)})">Сохранить контакт</button>
-                </div>
-                <div class="client360-list" style="margin-top:16px;">
+                <div class="my-client-result-card__note"><span>Комментарий по итогам</span><p>${outreachEscape(lastActivity?.summary || 'Комментарий не заполнен.')}</p></div>
+            </section>
+
+            <details class="my-client-details my-client-history">
+                <summary>Вся история контактов <span>${activities.length}</span></summary>
+                <div class="client360-list">
                     ${activities.map(activity => `
                         <div class="client360-item">
                             <div>
-                                <div class="client360-item-title">${outreachEscape(activity.activity_type || 'Контакт')} · ${outreachEscape(activity.result_status || 'без результата')}</div>
-                                <div class="client360-item-meta">${outreachEscape(activity.manager_name || '')} · ${outreachEscape(activity.next_action_date || 'без даты')} · ${outreachEscape(activity.summary || 'без комментария')}</div>
+                                <div class="client360-item-title">${outreachEscape(outreachActivityTypeLabel(activity.activity_type))} · ${outreachEscape(outreachStatusLabel(activity.result_status || ''))}</div>
+                                <div class="client360-item-meta">${outreachEscape(activity.manager_name || '')} · ${outreachEscape(activity.next_action_date || 'без следующей даты')}</div>
+                                <div class="client360-item-meta">${outreachEscape(activity.summary || 'без комментария')}</div>
                             </div>
-                            <span class="crm-inline-pill crm-inline-pill--${outreachTone(activity.result_status || '')}">${outreachEscape(activity.channel || activity.activity_type || '')}</span>
                         </div>
                     `).join('') || '<div class="empty-state">Истории обработки пока нет.</div>'}
                 </div>
+            </details>
+
+            <div id="outreachRejectPanel" class="my-client-reject-panel" hidden>
+                <div>
+                    <h3>Укажите причину отказа</h3>
+                    <p>Причина сохранится в истории клиента. Без неё отказаться от клиента нельзя.</p>
+                </div>
+                <textarea id="outreachRejectReason" class="auth-input" rows="3" placeholder="Например: клиент отказался от предложения из-за бюджета"></textarea>
+                <div class="my-client-reject-panel__actions">
+                    <button class="btn-secondary" type="button" onclick="toggleOutreachRejectForm(false)">Отмена</button>
+                    <button class="btn-danger" type="button" onclick="rejectOutreachClient(${Number(row.id || 0)})">Подтвердить отказ</button>
+                </div>
             </div>
-            <div class="crm-activity-block">
-                <div class="section-header">
+
+            <div class="my-client-result-card__actions">
+                <button class="btn-secondary" type="button" onclick="editOutreachClient(${Number(row.id || 0)})">Изменить</button>
+                ${isConverted
+                    ? '<button class="btn-primary" type="button" onclick="navigateTo(\'leads\')">Открыть в лидах</button>'
+                    : (!isRejected ? `<button class="btn-primary" type="button" onclick="convertOutreachProspect(${Number(row.id || 0)})">Перевести в лид</button>` : '')}
+                ${!isConverted && !isRejected ? '<button class="btn-danger" type="button" onclick="toggleOutreachRejectForm(true)">Отказ клиента</button>' : ''}
+            </div>
+        </article>
+    `;
+}
+
+function renderOutreachDetail(row) {
+    if (!row) {
+        const hasClients = filteredOutreachRows().length > 0;
+        return `
+        <div class="my-clients-empty">
+            <span class="my-clients-empty__number">1</span>
+            <h3>${hasClients ? 'Выберите клиента в таблице' : 'Сначала заберите клиента'}</h3>
+            <p>${hasClients ? 'Нажмите «Открыть клиента»: появится номер для звонка и три шага работы.' : 'Свободные клиенты находятся в «Базе развития». После выбора клиент появится здесь и исчезнет у других менеджеров.'}</p>
+            ${hasClients ? '' : '<button class="btn-primary" type="button" onclick="navigateTo(\'prospecting\')">Перейти в базу развития</button>'}
+        </div>
+        `;
+    }
+    const activities = Array.isArray(row.activities) ? row.activities : [];
+    const isConverted = String(row.status || '') === 'converted';
+    const cleanPhone = String(row.phone || '').replace(/[^\d+]/g, '');
+    const managerName = row.manager_name || row.manager_email || currentUser?.name || 'Не назначен';
+    if (!outreachClientEditMode && activities.length > 0) {
+        return renderOutreachSavedClientCard(row, activities);
+    }
+    return `
+        <div class="my-client-workspace">
+            <section id="myClientProfileStep" class="my-client-work-step my-client-profile-step">
+                <div class="my-client-work-step__head my-client-work-step__head--spread">
+                    <div class="my-client-work-step__title">
+                        <span class="my-client-work-step__number">1</span>
+                        <div>
+                            <h3>Позвоните клиенту и уточните данные</h3>
+                            <p>Если дозвонились, заполните известные данные компании и контактного лица.</p>
+                        </div>
+                    </div>
+                    ${row.phone
+                        ? `<a class="my-client-phone" href="tel:${outreachEscape(cleanPhone)}"><span>Позвонить</span><strong>${outreachEscape(row.phone)}</strong></a>`
+                        : '<div class="my-client-phone my-client-phone--empty"><span>Телефон</span><strong>Номер не указан</strong></div>'}
+                </div>
+                <div class="my-client-profile-grid">
+                    <label class="my-client-field"><span>Компания *</span><input id="outreachFormCompany" class="auth-input" type="text" value="${outreachEscape(row.company_name || '')}" placeholder="Название компании"></label>
+                    <label class="my-client-field"><span>ИНН</span><input id="outreachFormInn" class="auth-input" type="text" value="${outreachEscape(row.company_inn || '')}" placeholder="ИНН компании"></label>
+                    <label class="my-client-field"><span>Контактное лицо</span><input id="outreachFormContact" class="auth-input" type="text" value="${outreachEscape(row.contact_name || '')}" placeholder="ФИО"></label>
+                    <label class="my-client-field"><span>Должность</span><input id="outreachFormPosition" class="auth-input" type="text" value="${outreachEscape(row.position || '')}" placeholder="Должность"></label>
+                    <label class="my-client-field"><span>Телефон</span><input id="outreachFormPhone" class="auth-input" type="tel" value="${outreachEscape(row.phone || '')}" placeholder="+7 ..."></label>
+                    <label class="my-client-field"><span>Почта</span><input id="outreachFormEmail" class="auth-input" type="email" value="${outreachEscape(row.email || '')}" placeholder="name@company.ru"></label>
+                    <label class="my-client-field"><span>Сайт</span><input id="outreachFormWebsite" class="auth-input" type="text" value="${outreachEscape(row.website || '')}" placeholder="company.ru"></label>
+                    <label class="my-client-field"><span>Город</span><input id="outreachFormCity" class="auth-input" type="text" value="${outreachEscape(row.city || '')}" placeholder="Город"></label>
+                    <label class="my-client-field"><span>Как удобнее связаться</span><select id="outreachFormMethod" class="auth-input">
+                        <option value="">Не указано</option>
+                        <option value="phone" ${row.contact_method === 'phone' ? 'selected' : ''}>Телефон</option>
+                        <option value="email" ${row.contact_method === 'email' ? 'selected' : ''}>Почта</option>
+                        <option value="message" ${row.contact_method === 'message' ? 'selected' : ''}>Сообщение</option>
+                        <option value="mixed" ${row.contact_method === 'mixed' ? 'selected' : ''}>Любой способ</option>
+                    </select></label>
+                    <label class="my-client-field"><span>Источник</span><input id="outreachFormSource" class="auth-input" type="text" value="${outreachEscape(row.source_name || '')}" placeholder="Например: Bitrix24"></label>
+                    <label class="my-client-field"><span>Ответственный</span><input class="auth-input" type="text" value="${outreachEscape(managerName)}" readonly><input id="outreachFormManager" type="hidden" value="${outreachEscape(row.manager_email || currentUser?.email || '')}"></label>
+                    <label class="my-client-field"><span>Первичный контакт до</span><input id="outreachFormPlannedDate" class="auth-input date-picker" type="text" value="${outreachEscape(row.planned_contact_date || '')}" placeholder="дд.мм.гггг" autocomplete="off"></label>
+                    <label class="my-client-field"><span>Приоритет</span><select id="outreachFormPriority" class="auth-input">
+                        <option value="high" ${row.priority === 'high' ? 'selected' : ''}>Высокий</option>
+                        <option value="normal" ${String(row.priority || 'normal') === 'normal' ? 'selected' : ''}>Обычный</option>
+                        <option value="low" ${row.priority === 'low' ? 'selected' : ''}>Низкий</option>
+                    </select></label>
+                    <label class="my-client-field"><span>Текущий статус</span><select id="outreachFormStatus" class="auth-input">
+                        <option value="new" ${row.status === 'new' ? 'selected' : ''}>Новый клиент</option>
+                        <option value="assigned" ${row.status === 'assigned' ? 'selected' : ''}>Новый клиент</option>
+                        <option value="in_progress" ${row.status === 'in_progress' ? 'selected' : ''}>В работе</option>
+                        <option value="no_answer" ${row.status === 'no_answer' ? 'selected' : ''}>Не дозвонились</option>
+                        <option value="follow_up" ${row.status === 'follow_up' ? 'selected' : ''}>Повторный контакт</option>
+                        <option value="warm" ${row.status === 'warm' ? 'selected' : ''}>Есть интерес</option>
+                        <option value="meeting" ${row.status === 'meeting' ? 'selected' : ''}>Назначена встреча</option>
+                        <option value="do_not_contact" ${row.status === 'do_not_contact' ? 'selected' : ''}>Не беспокоить</option>
+                        <option value="converted" ${row.status === 'converted' ? 'selected' : ''}>Переведён в лид</option>
+                        <option value="archived" ${row.status === 'archived' ? 'selected' : ''}>Архив</option>
+                    </select></label>
+                    <input id="outreachFormTags" type="hidden" value="${outreachEscape((row.tags || []).join(', '))}">
+                    <label class="my-client-field my-client-field--wide"><span>Что узнали о клиенте</span><textarea id="outreachFormNotes" class="auth-input" rows="3" placeholder="Потребность, объём, особенности и важные детали">${outreachEscape(row.notes || '')}</textarea></label>
+                </div>
+                <div class="my-client-work-step__footer">
+                    <span>Сначала сохраните уточнённые данные, затем зафиксируйте итог разговора.</span>
+                    <button class="btn-primary" type="button" onclick="saveMyClientProfile(${Number(row.id || 0)})">Сохранить данные и продолжить</button>
+                </div>
+            </section>
+
+            <section id="myClientContactStep" class="my-client-work-step">
+                <div class="my-client-work-step__head">
+                    <span class="my-client-work-step__number">2</span>
                     <div>
-                        <h3 class="section-title">Последние импорты</h3>
-                        <p class="section-subtitle">Чтобы быстро понять, откуда пришла база и кто её загружал.</p>
+                        <h3>Зафиксируйте контакт</h3>
+                        <p>После звонка, письма или встречи заполните результат и нажмите «Сохранить контакт».</p>
                     </div>
                 </div>
-                <div class="client360-list">
-                    ${(outreachImportsDB || []).slice(0, 4).map(batch => `
-                        <div class="client360-item">
-                            <div>
-                                <div class="client360-item-title">${outreachEscape(batch.source_filename || 'Импорт')}</div>
-                                <div class="client360-item-meta">${outreachEscape(batch.source_name || 'без источника')} · строк ${Number(batch.rows_total || 0)} · создано ${Number(batch.created_total || 0)} · обновлено ${Number(batch.updated_total || 0)} · пропущено ${Number(batch.skipped_total || batch.skipped || 0)} · проблемные ${Number(batch.problem_rows || batch.skipped_total || batch.skipped || 0)}</div>
-                            </div>
-                            <span class="crm-inline-pill crm-inline-pill--neutral">${outreachEscape(batch.actor_name || '')}</span>
-                        </div>
-                    `).join('') || '<div class="empty-state">Импорты ещё не запускались.</div>'}
+                <div class="prospecting-activity-grid">
+                    <label class="my-client-field"><span>Как связались</span><select id="outreachActivityType" class="auth-input">
+                            <option value="call">Звонок</option>
+                            <option value="email">Письмо</option>
+                            <option value="message">Сообщение</option>
+                            <option value="meeting">Встреча</option>
+                        </select></label>
+                    <label class="my-client-field"><span>Результат контакта *</span><select id="outreachActivityResult" class="auth-input" onchange="applyOutreachActivityResult(this.value)">
+                            <option value="">Выберите результат</option>
+                            <option value="no_answer">Нет ответа</option>
+                            <option value="follow_up">Просил перезвонить</option>
+                            <option value="warm">Есть интерес</option>
+                            <option value="meeting">Назначена встреча</option>
+                            <option value="do_not_contact">Не интересно / больше не звонить</option>
+                        </select></label>
+                    <label class="my-client-field"><span>Что сделать дальше</span><input id="outreachActivityNextAction" class="auth-input" type="text" placeholder="Например: отправить КП"></label>
+                    <label class="my-client-field"><span>До какого числа</span><input id="outreachActivityNextDate" class="auth-input date-picker" type="text" placeholder="дд.мм.гггг" autocomplete="off"></label>
+                    <label class="my-client-field my-client-field--wide"><span>Комментарий по итогам *</span><textarea id="outreachActivitySummary" class="auth-input" rows="3" placeholder="Коротко: о чём договорились и что важно учесть"></textarea></label>
                 </div>
-            </div>
+                <div class="my-client-work-step__footer">
+                    <span>Сохранение добавит запись в историю и обновит статус клиента.</span>
+                    <button class="btn-primary" type="button" onclick="saveOutreachActivity(${Number(row.id || 0)})">Сохранить контакт</button>
+                </div>
+            </section>
+
         </div>
     `;
 }
 
 function renderOutreachRegistry() {
     const rows = filteredOutreachRows();
-    if (!outreachSelectedId && rows.length) outreachSelectedId = Number(rows[0].id || 0);
     const selected = rows.find(row => Number(row.id) === Number(outreachSelectedId)) || null;
-    const allSelected = rows.length > 0 && rows.every(row => outreachSelectedIds.has(Number(row.id)));
     return `
         <div class="crm-registry-layout">
-            <div class="table-shell">
+            <section class="my-clients-list">
+                <div class="my-clients-list__head">
+                    <div><span class="my-client-list-icon">К</span><div><h2>Список моих клиентов</h2><p>Номер и ближайшее действие видны сразу. Для работы откройте карточку.</p></div></div>
+                    <strong>${rows.length}</strong>
+                </div>
+                <div class="table-shell">
                 <table class="admin-table admin-table--dense crm-registry-table">
                     <colgroup>
-                        <col style="width: 52px;">
-                        <col style="width: 260px;">
-                        <col style="width: 210px;">
-                        <col style="width: 230px;">
-                        <col style="width: 180px;">
-                        <col style="width: 150px;">
-                        <col style="width: 260px;">
-                        <col style="width: 120px;">
-                        <col style="width: 170px;">
-                        <col style="width: 250px;">
+                        <col style="width: 27%;">
+                        <col style="width: 18%;">
+                        <col style="width: 21%;">
+                        <col style="width: 20%;">
+                        <col style="width: 14%;">
                     </colgroup>
                     <thead>
                         <tr>
-                            <th style="width:36px;"><input type="checkbox" ${allSelected ? 'checked' : ''} onchange="toggleAllOutreachSelection(this.checked)"></th>
-                            <th>Компания</th>
-                            <th>Контакт</th>
-                            <th>Связь</th>
-                            <th>Менеджер</th>
-                            <th>Приоритет</th>
-                            <th>План / след. шаг</th>
-                            <th class="is-num">Попытки</th>
-                            <th>Статус</th>
-                            <th>Быстро</th>
+                            <th>Клиент</th>
+                            <th>Телефон</th>
+                            <th>Контактное лицо</th>
+                            <th>Следующее действие</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         ${rows.map(row => `
                             <tr class="${Number(row.id) === Number(outreachSelectedId) ? 'is-selected' : ''}" onclick="selectOutreachRow(${Number(row.id || 0)})">
-                                <td onclick="event.stopPropagation()"><input type="checkbox" ${outreachSelectedIds.has(Number(row.id)) ? 'checked' : ''} onchange="toggleOutreachSelection(${Number(row.id || 0)}, this.checked)"></td>
                                 <td class="crm-title-cell">
                                     <strong>${outreachEscape(row.company_name || '—')}</strong>
-                                    <div class="table-subtext">${outreachEscape(outreachProcessedLabel(row.is_processed))}</div>
+                                    <div class="table-subtext">${outreachEscape(outreachStatusLabel(row.status))}</div>
                                 </td>
-                                <td class="crm-title-cell">${outreachEscape(row.contact_name || '—')}<div class="table-subtext">${outreachEscape(row.position || '—')}</div></td>
-                                <td class="crm-contact-cell">${outreachEscape(row.phone || '—')}<div class="table-subtext">${outreachEscape(row.email || '—')}</div></td>
-                                <td class="crm-meta-cell"><span class="crm-cell-single">${outreachEscape(row.manager_name || row.manager_email || 'не назначен')}</span></td>
-                                <td><span class="crm-inline-pill crm-inline-pill--${outreachPriorityTone(row.priority)}">${outreachEscape(outreachPriorityLabel(row.priority))}</span></td>
-                                <td class="crm-action-cell"><span class="crm-inline-pill crm-inline-pill--${row.is_overdue ? 'critical' : row.is_due_today ? 'attention' : 'neutral'}">${outreachEscape(row.is_first_contact_overdue ? 'SLA 24ч' : (row.next_action_date || row.planned_contact_date || 'без даты'))}</span><div class="table-subtext">${outreachEscape(row.overdue_reason || row.next_action || '—')}</div></td>
-                                <td class="is-num crm-meta-cell">${Number(row.attempts_count || 0)}<div class="table-subtext">${outreachEscape(row.last_result || '—')}</div></td>
-                                <td class="crm-stage-cell"><span class="crm-inline-pill crm-inline-pill--${outreachTone(row.status, row.is_overdue)}">${outreachEscape(outreachStatusLabel(row.status))}</span></td>
+                                <td class="crm-contact-cell"><strong>${outreachEscape(row.phone || 'Не указан')}</strong><div class="table-subtext">${outreachEscape(row.email || '')}</div></td>
+                                <td><strong>${outreachEscape(row.contact_name || 'Не указан')}</strong><div class="table-subtext">${outreachEscape(row.position || 'Должность не указана')}</div></td>
+                                <td class="crm-action-cell"><strong>${outreachEscape(row.next_action || 'Связаться с клиентом')}</strong><div class="table-subtext ${row.is_overdue ? 'is-overdue' : ''}">${outreachEscape(row.next_action_date || row.planned_contact_date || 'Дата не назначена')}</div></td>
                                 <td onclick="event.stopPropagation()">
-                                    <div class="prospecting-quick-actions">
-                                        <button type="button" title="Зафиксировать звонок" onclick="quickOutreachAction(event, ${Number(row.id || 0)}, 'call')">Звонок</button>
-                                        <button type="button" title="Зафиксировать письмо" onclick="quickOutreachAction(event, ${Number(row.id || 0)}, 'email')">Письмо</button>
-                                        <button type="button" title="Нет ответа" onclick="quickOutreachAction(event, ${Number(row.id || 0)}, 'no_answer')">Нет ответа</button>
-                                        <button type="button" title="Есть интерес" onclick="quickOutreachAction(event, ${Number(row.id || 0)}, 'warm')">Тёплый</button>
-                                        <button type="button" title="Перевести в лид" onclick="quickOutreachAction(event, ${Number(row.id || 0)}, 'convert')">В лид</button>
-                                    </div>
+                                    <button class="btn-secondary prospecting-open-client" type="button" onclick="selectOutreachRow(${Number(row.id || 0)})">Открыть клиента</button>
                                 </td>
                             </tr>
-                        `).join('') || '<tr><td colspan="10"><div class="empty-state">По текущему фильтру база не найдена.</div></td></tr>'}
+                        `).join('') || '<tr><td colspan="5"><div class="empty-state">По текущему фильтру клиентов нет.</div></td></tr>'}
                     </tbody>
                 </table>
-            </div>
+                </div>
+            </section>
             ${renderOutreachDetail(selected)}
         </div>
     `;
@@ -1473,8 +1680,13 @@ function renderOutreachEditor() {
     `;
     const managerSelect = document.getElementById('outreachFormManager');
     if (managerSelect) {
-        managerSelect.innerHTML = outreachManagerOptions(false);
-        managerSelect.value = row.manager_email || currentUser?.email || '';
+        if (outreachIsSupervisor()) {
+            managerSelect.innerHTML = outreachManagerOptions(false);
+            managerSelect.value = row.manager_email || currentUser?.email || '';
+        } else {
+            managerSelect.innerHTML = `<option value="${outreachEscape(currentUser?.email || '')}" data-name="${outreachEscape(currentUser?.name || '')}">${outreachEscape(currentUser?.name || currentUser?.email || 'Менеджер')}</option>`;
+            managerSelect.disabled = true;
+        }
     }
 }
 
@@ -1492,8 +1704,78 @@ function openOutreachEditor(id = 0) {
 
 function selectOutreachRow(id) {
     outreachSelectedId = Number(id || 0);
+    outreachClientEditMode = false;
     const mount = document.getElementById('prospectingContentMount');
     if (mount) mount.innerHTML = renderOutreachRegistry();
+    initOutreachDatePicker();
+}
+
+function initOutreachDatePicker() {
+    if (typeof flatpickr !== 'function') return;
+    ['outreachFormPlannedDate', 'outreachActivityNextDate'].forEach(id => {
+        const input = document.getElementById(id);
+        if (!input || input._flatpickr) return;
+        flatpickr(input, { locale: 'ru', dateFormat: 'd.m.Y', disableMobile: true, allowInput: true });
+    });
+}
+
+function scrollToMyClientStep(id) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function saveMyClientProfile(id) {
+    outreachEditingId = Number(id || 0);
+    await saveOutreachProspect('myClientContactStep');
+}
+
+function editOutreachClient(id) {
+    outreachSelectedId = Number(id || outreachSelectedId || 0);
+    outreachClientEditMode = true;
+    const mount = document.getElementById('prospectingContentMount');
+    if (mount) mount.innerHTML = renderOutreachRegistry();
+    initOutreachDatePicker();
+    scrollToMyClientStep('myClientProfileStep');
+}
+
+function toggleOutreachRejectForm(show) {
+    const panel = document.getElementById('outreachRejectPanel');
+    if (!panel) return;
+    panel.hidden = !show;
+    if (show) {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        window.setTimeout(() => document.getElementById('outreachRejectReason')?.focus(), 180);
+    }
+}
+
+async function rejectOutreachClient(prospectId) {
+    const reason = String(document.getElementById('outreachRejectReason')?.value || '').trim();
+    if (reason.length < 3) return customAlert('Укажите причину отказа клиента.');
+    const res = await apiCall('/outreach/activities', 'POST', {
+        prospect_id: Number(prospectId || 0),
+        activity_type: 'note',
+        result_status: 'do_not_contact',
+        prospect_status: 'do_not_contact',
+        next_action: '',
+        next_action_date: '',
+        summary: `Причина отказа: ${reason}`,
+    });
+    if (!res || res.error) return customAlert(res?.message || 'Не удалось сохранить отказ клиента.');
+    outreachClientEditMode = false;
+    await renderProspecting(true);
+    showToast('Мои клиенты', 'Отказ и причина сохранены в карточке');
+}
+
+function applyOutreachActivityResult(result) {
+    const nextAction = document.getElementById('outreachActivityNextAction');
+    const suggestions = {
+        no_answer: 'Перезвонить',
+        follow_up: 'Связаться повторно',
+        warm: 'Подготовить и отправить предложение',
+        meeting: 'Провести встречу',
+        converted: 'Перевести в лид',
+        do_not_contact: '',
+    };
+    if (nextAction && !nextAction.value.trim()) nextAction.value = suggestions[String(result || '')] || '';
 }
 
 function toggleOutreachSelection(id, checked) {
@@ -1540,6 +1822,16 @@ function setOutreachProcessedFilter(value) {
     renderProspecting();
 }
 
+function toggleOutreachAdvancedFilters() {
+    const panel = document.querySelector('#myProspectingView .prospecting-filter-panel');
+    const toggle = document.getElementById('outreachAdvancedToggle');
+    const advanced = document.getElementById('outreachAdvancedFilters');
+    if (!panel || !toggle || !advanced) return;
+    const expanded = panel.classList.toggle('prospecting-filter-panel--advanced');
+    toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    advanced.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+}
+
 function toggleOutreachOverdueFilter() {
     outreachOnlyOverdue = !outreachOnlyOverdue;
     renderProspecting();
@@ -1575,7 +1867,7 @@ function resetOutreachFilters() {
     renderProspecting();
 }
 
-async function saveOutreachProspect() {
+async function saveOutreachProspect(nextStepId = '') {
     const managerEmail = document.getElementById('outreachFormManager')?.value || '';
     const payload = {
         company_name: document.getElementById('outreachFormCompany')?.value || '',
@@ -1604,6 +1896,9 @@ async function saveOutreachProspect() {
     outreachSelectedId = Number(res.id || outreachEditingId || outreachSelectedId);
     closeOutreachEditor();
     await renderProspecting(true);
+    if (nextStepId) scrollToMyClientStep(nextStepId);
+    showToast('Мои клиенты', 'Данные клиента сохранены');
+    return true;
 }
 
 async function saveOutreachActivity(prospectId) {
@@ -1616,12 +1911,17 @@ async function saveOutreachActivity(prospectId) {
         summary: document.getElementById('outreachActivitySummary')?.value || '',
         prospect_status: document.getElementById('outreachActivityResult')?.value || '',
     };
-    if (!payload.summary.trim() && !payload.next_action.trim() && !payload.result_status.trim()) {
-        return customAlert('Заполни результат или комментарий по контакту.');
-    }
+    if (!payload.result_status.trim()) return customAlert('Выберите результат контакта.');
+    if (!payload.summary.trim()) return customAlert('Коротко напишите, чем закончился контакт.');
+    const requiresNextStep = ['no_answer', 'follow_up', 'warm', 'meeting'].includes(payload.result_status);
+    if (requiresNextStep && !payload.next_action.trim()) return customAlert('Укажите, что нужно сделать дальше.');
+    if (requiresNextStep && !payload.next_action_date.trim()) return customAlert('Выберите дату следующего контакта.');
     const res = await apiCall('/outreach/activities', 'POST', payload);
     if (!res || res.error) return customAlert(res?.message || 'Не удалось сохранить контакт.');
+    outreachClientEditMode = false;
     await renderProspecting(true);
+    scrollToMyClientStep('myClientCardStep');
+    showToast('Мои клиенты', 'Контакт сохранён, следующий шаг обновлён');
 }
 
 async function saveOutreachReport() {
@@ -1808,8 +2108,127 @@ async function importOutreachFile() {
     await renderProspecting(true);
 }
 
+function filteredOutreachPoolRows() {
+    const needle = outreachPoolSearch.trim().toLowerCase();
+    if (!needle) return outreachPoolRows;
+    return outreachPoolRows.filter(row => [
+        row.company_name,
+        row.contact_name,
+        row.phone,
+        row.email,
+        row.source_name,
+        row.city,
+    ].join(' ').toLowerCase().includes(needle));
+}
+
+function outreachPoolDate(value) {
+    const timestamp = Number(value || 0);
+    if (!timestamp) return '—';
+    return new Date(timestamp * 1000).toLocaleDateString('ru-RU');
+}
+
+function renderOutreachPoolSummary() {
+    const mount = document.getElementById('outreachPoolSummary');
+    if (!mount) return;
+    const rows = outreachPoolRows || [];
+    const withPhone = rows.filter(row => String(row.phone || '').trim()).length;
+    const withEmail = rows.filter(row => String(row.email || '').trim()).length;
+    const bitrix = rows.filter(row => String(row.source_name || '') === 'Bitrix24 API').length;
+    mount.innerHTML = `
+        <div class="crm-summary-card"><div class="crm-summary-label">Свободно сейчас</div><div class="crm-summary-value">${rows.length}</div></div>
+        <div class="crm-summary-card"><div class="crm-summary-label">С телефоном</div><div class="crm-summary-value">${withPhone}</div></div>
+        <div class="crm-summary-card"><div class="crm-summary-label">С почтой</div><div class="crm-summary-value">${withEmail}</div></div>
+        <div class="crm-summary-card"><div class="crm-summary-label">Из Bitrix24</div><div class="crm-summary-value">${bitrix}</div></div>
+    `;
+}
+
+function renderOutreachPool() {
+    const mount = document.getElementById('outreachPoolMount');
+    if (!mount) return;
+    const rows = filteredOutreachPoolRows();
+    mount.innerHTML = `
+        <div class="table-shell outreach-pool-table-shell">
+            <table class="admin-table admin-table--dense outreach-pool-table">
+                <colgroup>
+                    <col style="width: 28%;">
+                    <col style="width: 20%;">
+                    <col style="width: 23%;">
+                    <col style="width: 14%;">
+                    <col style="width: 15%;">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>Компания</th>
+                        <th>Контакт</th>
+                        <th>Связь</th>
+                        <th>Источник</th>
+                        <th>Действие</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows.map(row => `
+                        <tr data-pool-prospect-id="${Number(row.id || 0)}">
+                            <td class="crm-title-cell"><strong>${outreachEscape(row.company_name || 'Без названия')}</strong><div class="table-subtext">Обновлено ${outreachPoolDate(row.updated_at)}</div></td>
+                            <td class="crm-title-cell">${outreachEscape(row.contact_name || '—')}<div class="table-subtext">${outreachEscape(row.position || '')}</div></td>
+                            <td class="crm-contact-cell">${outreachEscape(row.phone || '—')}<div class="table-subtext">${outreachEscape(row.email || '—')}</div></td>
+                            <td><span class="crm-inline-pill crm-inline-pill--neutral">${outreachEscape(row.source_name || 'CRM')}</span></td>
+                            <td><button class="btn-primary outreach-claim-button" type="button" onclick="claimOutreachProspect(${Number(row.id || 0)}, this)">Забрать себе</button></td>
+                        </tr>
+                    `).join('') || '<tr><td colspan="5"><div class="empty-state">Свободных клиентов по этому запросу нет. Обновите выгрузку Bitrix24 или очистите поиск.</div></td></tr>'}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+async function refreshOutreachPool(showLoading = false) {
+    const mount = document.getElementById('outreachPoolMount');
+    if (showLoading && mount) mount.innerHTML = '<div class="empty-state">Обновляю свободную базу...</div>';
+    const data = await apiCall('/outreach/prospects?scope=free');
+    outreachPoolRows = Array.isArray(data) ? data : [];
+    renderOutreachPoolSummary();
+    renderOutreachPool();
+    return outreachPoolRows;
+}
+
+function setOutreachPoolSearch(value) {
+    outreachPoolSearch = String(value || '');
+    renderOutreachPool();
+}
+
+async function claimOutreachProspect(prospectId, button = null) {
+    const id = Number(prospectId || 0);
+    if (!id) return;
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Забираю...';
+    }
+    const res = await apiCall(`/outreach/prospects/${id}/claim`, 'POST');
+    if (!res || res.error || res.status === 'conflict') {
+        await refreshOutreachPool(false);
+        return customAlert(res?.error === 'already_claimed'
+            ? 'Этого клиента уже забрал другой менеджер. Список свободных клиентов обновлён.'
+            : 'Не удалось забрать клиента. Обновите страницу и попробуйте ещё раз.');
+    }
+    outreachPoolRows = outreachPoolRows.filter(row => Number(row.id) !== id);
+    renderOutreachPoolSummary();
+    renderOutreachPool();
+    showToast('База развития', 'Клиент добавлен в раздел «Мои клиенты»');
+}
+
+async function renderOutreachPoolPage() {
+    const bitrixButton = document.getElementById('outreachBitrixNavButton');
+    if (bitrixButton) bitrixButton.style.display = canUseBitrixImport() ? '' : 'none';
+    await refreshOutreachPool(false);
+    if (!outreachPoolRefreshTimer) {
+        outreachPoolRefreshTimer = window.setInterval(() => {
+            if (window.__navCurrentView === 'prospecting') refreshOutreachPool(false);
+        }, 12000);
+    }
+}
+
 async function renderProspecting(forceReload = false) {
-    await ensureOutreachData(forceReload);
+    await ensureOutreachData(forceReload, 'mine');
     renderOutreachManagerSelects();
     renderOutreachImportPreview();
     renderOutreachImportResult();
@@ -1822,19 +2241,35 @@ async function renderProspecting(forceReload = false) {
     const overdueBtn = document.getElementById('outreachOverdueBtn');
     const todayBtn = document.getElementById('outreachTodayBtn');
     const problemsBtn = document.getElementById('outreachProblemsBtn');
-    if (overdueBtn) overdueBtn.classList.toggle('btn-primary', outreachOnlyOverdue);
-    if (todayBtn) todayBtn.classList.toggle('btn-primary', outreachOnlyToday);
-    if (problemsBtn) problemsBtn.classList.toggle('btn-primary', outreachOnlyProblems);
+    [
+        [overdueBtn, outreachOnlyOverdue],
+        [todayBtn, outreachOnlyToday],
+        [problemsBtn, outreachOnlyProblems],
+    ].forEach(([button, active]) => {
+        if (!button) return;
+        button.classList.toggle('btn-primary', Boolean(active));
+        button.classList.toggle('btn-secondary', !active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
     const mount = document.getElementById('prospectingContentMount');
     if (mount) mount.innerHTML = renderOutreachRegistry();
+    initOutreachDatePicker();
 }
 
 window.renderProspecting = renderProspecting;
+window.renderMyProspecting = renderProspecting;
+window.renderOutreachPoolPage = renderOutreachPoolPage;
 window.renderBitrixImport = renderBitrixImport;
 window.openOutreachEditor = openOutreachEditor;
 window.closeOutreachEditor = closeOutreachEditor;
 window.saveOutreachProspect = saveOutreachProspect;
 window.selectOutreachRow = selectOutreachRow;
+window.applyOutreachActivityResult = applyOutreachActivityResult;
+window.saveMyClientProfile = saveMyClientProfile;
+window.scrollToMyClientStep = scrollToMyClientStep;
+window.editOutreachClient = editOutreachClient;
+window.toggleOutreachRejectForm = toggleOutreachRejectForm;
+window.rejectOutreachClient = rejectOutreachClient;
 window.toggleOutreachSelection = toggleOutreachSelection;
 window.toggleAllOutreachSelection = toggleAllOutreachSelection;
 window.applyOutreachSearch = applyOutreachSearch;
@@ -1855,6 +2290,11 @@ window.importSelectedBitrixClients = importSelectedBitrixClients;
 window.syncBitrixClientsNow = syncBitrixClientsNow;
 window.updateBitrixClientsNow = updateBitrixClientsNow;
 window.clearBitrixClientList = clearBitrixClientList;
+window.testBitrixConnection = testBitrixConnection;
+window.saveBitrixConnection = saveBitrixConnection;
+window.refreshOutreachPool = refreshOutreachPool;
+window.setOutreachPoolSearch = setOutreachPoolSearch;
+window.claimOutreachProspect = claimOutreachProspect;
 window.exportOutreachDirectorReport = exportOutreachDirectorReport;
 window.askOutreachAssistant = askOutreachAssistant;
 window.applyOutreachBulkAction = applyOutreachBulkAction;

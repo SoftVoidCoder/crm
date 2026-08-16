@@ -61,6 +61,7 @@ const VIEW_NAV_MAP = {
     operations: 'navOperations',
     clients: 'navClients',
     prospecting: 'navProspecting',
+    myProspecting: 'navMyProspecting',
     bitrixImport: 'navBitrixImport',
     leads: 'navLeads',
     deals: 'navDeals',
@@ -68,7 +69,6 @@ const VIEW_NAV_MAP = {
     contract360: 'navContract360',
     nomenclature: 'navNomenclature',
     contacts: 'navContacts',
-    analytics: 'navAnalytics',
     kpi: 'navKpi',
     profile: 'navProfile',
     admin: 'adminBtn',
@@ -133,7 +133,7 @@ function filterByDepartment(role, el) {
     if (titleEl) titleEl.innerText = `ВХОДЯЩИЕ: ${role.toUpperCase()}`;
     
     const viewsToHide = [
-        'analyticsView', 'adminView', 'projectView', 'clientsView', 'bitrixImportView', 'prospectingView', 'leadsView', 'dealsView',
+        'analyticsView', 'adminView', 'projectView', 'clientsView', 'bitrixImportView', 'prospectingView', 'myProspectingView', 'leadsView', 'dealsView',
         'profileView', 'emailsView', 'meetingsView', 'messengerView', 
         'tasksView', 'knowledgeView', 'approvalsView', 'documentsView', 'claimsView', 'kpiView',
         'nomenclatureView', 'contactsView', 'financeView', 'accountingView', 'integrationsView', 'client360View', 'contract360View', 'supplyView', 'salesView', 'productionView', 'expensesView', 'requestsView', 'resourcesView', 'serviceView', 'executiveView', 'operationsView'
@@ -189,7 +189,7 @@ function navigateTo(view, triggerRender = true) {
     // 1. Скрываем вообще все экраны
     const views = [
         'dashboardView', 'analyticsView', 'adminView', 'projectView', 
-        'clientsView', 'bitrixImportView', 'prospectingView', 'leadsView', 'dealsView', 'profileView', 'emailsView', 'meetingsView', 
+        'clientsView', 'bitrixImportView', 'prospectingView', 'myProspectingView', 'leadsView', 'dealsView', 'profileView', 'emailsView', 'meetingsView',
         'messengerView', 'tasksView', 'knowledgeView', 'approvalsView', 
         'documentsView', 'claimsView', 'kpiView', 'nomenclatureView', 'contactsView', 'financeView', 'accountingView', 'integrationsView', 'client360View', 'contract360View', 'supplyView', 'salesView', 'productionView', 'expensesView', 'requestsView', 'resourcesView', 'serviceView', 'executiveView', 'operationsView'
     ];
@@ -210,7 +210,7 @@ function navigateTo(view, triggerRender = true) {
     else if (nextView === 'messenger') { 
         const nav = document.getElementById('navMessenger'); 
         if(nav) nav.classList.add('active'); 
-        if (typeof messengerSwitchTab === 'function') messengerSwitchTab(isMobileWorkspaceMode() ? 'chats' : 'feed');
+        if (typeof messengerSwitchTab === 'function') messengerSwitchTab('chats');
         else loadGlobalChats(); 
     }
     else if (nextView === 'emails') { 
@@ -298,7 +298,12 @@ function navigateTo(view, triggerRender = true) {
     else if (nextView === 'documents') { 
         const nav = document.getElementById('navDocuments'); 
         if(nav) nav.classList.add('active'); 
-        renderDocuments(); 
+        renderDocuments();
+        if (typeof ensureDocumentClientSources === 'function') {
+            ensureDocumentClientSources().then(() => {
+                if (document.getElementById('documentsView')?.style.display === 'block') renderDocuments();
+            });
+        }
     }
     else if (nextView === 'claims') {
         clearDepartmentFilter(false);
@@ -328,13 +333,6 @@ function navigateTo(view, triggerRender = true) {
         if(nav) nav.classList.add('active'); 
         if(triggerRender) renderDashboard(); 
     } 
-    else if (nextView === 'analytics') { 
-        clearDepartmentFilter(false); 
-        const nav = document.getElementById('navAnalytics'); 
-        if(nav) nav.classList.add('active'); 
-        requestAnimationFrame(() => drawCharts());
-        setTimeout(() => drawCharts(), 120);
-    } 
     else if (nextView === 'clients') { 
         clearDepartmentFilter(false); 
         const nav = document.getElementById('navClients'); 
@@ -345,7 +343,13 @@ function navigateTo(view, triggerRender = true) {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navProspecting');
         if (nav) nav.classList.add('active');
-        if (typeof renderProspecting === 'function') renderProspecting();
+        if (typeof renderOutreachPoolPage === 'function') renderOutreachPoolPage();
+    }
+    else if (nextView === 'myProspecting') {
+        clearDepartmentFilter(false);
+        const nav = document.getElementById('navMyProspecting');
+        if (nav) nav.classList.add('active');
+        if (typeof renderMyProspecting === 'function') renderMyProspecting();
     }
     else if (nextView === 'bitrixImport') {
         clearDepartmentFilter(false);
@@ -363,7 +367,8 @@ function navigateTo(view, triggerRender = true) {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navDeals');
         if (nav) nav.classList.add('active');
-        if (typeof renderDeals === 'function') renderDeals();
+        if (typeof refreshDealsFromServer === 'function') refreshDealsFromServer(true);
+        else if (typeof renderDeals === 'function') renderDeals();
     }
     else if (nextView === 'client360') {
         clearDepartmentFilter(false);
@@ -406,7 +411,7 @@ function navigateTo(view, triggerRender = true) {
     const target = document.getElementById(nextView + 'View');
     if (target) {
         target.classList.remove('krd-is-hidden');
-        target.style.display = 'block';
+        target.style.display = nextView === 'profile' ? 'flex' : 'block';
         target.classList.add('fade-in');
     }
     scrollMainContentToTop();

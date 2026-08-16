@@ -1,87 +1,26 @@
 <div id="prospectingView" class="view-page" style="display:none;">
-    <div class="surface-card surface-card--padded crm-workspace-shell">
+    <div class="surface-card surface-card--padded crm-workspace-shell outreach-pool-page">
         <div class="view-header">
             <div class="view-heading">
-                <span class="view-eyebrow">CRM</span>
+                <span class="view-eyebrow">Общая очередь</span>
                 <h1 class="view-title">База развития</h1>
-                <p class="view-subtitle">Холодная и отложенная база клиентов: импорт списков, назначение менеджеров, прозвон, письма, ежедневные отчёты и конверсия в лиды.</p>
+                <p class="view-subtitle">Здесь находятся только свободные клиенты. Заберите подходящего клиента — после этого он исчезнет у других менеджеров и появится в разделе «Мои клиенты».</p>
             </div>
             <div class="view-actions">
-                <button class="btn-secondary" onclick="navigateTo('bitrixImport')">Выгрузка Bitrix24</button>
-                <button class="btn-primary" onclick="openOutreachEditor()">+ Новый клиент в базу</button>
+                <button id="outreachBitrixNavButton" class="btn-secondary" type="button" onclick="navigateTo('bitrixImport')">Выгрузить из Bitrix24</button>
+                <button class="btn-primary" type="button" onclick="navigateTo('myProspecting')">Мои клиенты</button>
             </div>
         </div>
 
-        <div id="outreachSummaryStrip" class="crm-summary-strip"></div>
-        <div id="outreachDirectorPanel" class="prospecting-director-panel"></div>
-        <div id="outreachKnowledgePanel" class="prospecting-knowledge-panel"></div>
+        <div id="outreachPoolSummary" class="crm-summary-strip"></div>
 
-        <section class="surface-card prospecting-panel" id="outreachReportPanel"></section>
+        <section class="outreach-pool-toolbar" aria-label="Поиск свободных клиентов">
+            <div class="outreach-pool-toolbar__search">
+                <input id="outreachPoolSearch" class="auth-input" type="search" placeholder="Компания, контакт или реквизиты" aria-label="Поиск свободных клиентов" oninput="setOutreachPoolSearch(this.value)">
+            </div>
+            <button class="btn-secondary" type="button" onclick="refreshOutreachPool(true)">Обновить</button>
+        </section>
 
-        <div class="crm-toolbar">
-            <div class="crm-toolbar__group crm-toolbar__group--wide">
-                <input id="outreachSearchInput" class="auth-input" type="search" placeholder="Поиск по компании, контакту, телефону, почте" oninput="applyOutreachSearch(this.value)">
-            </div>
-            <div class="crm-toolbar__group">
-                <select id="outreachStatusFilter" class="auth-input" onchange="setOutreachStatusFilter(this.value)">
-                    <option value="">Все статусы</option>
-                    <option value="new">Не обработан</option>
-                    <option value="assigned">Назначен</option>
-                    <option value="in_progress">В работе</option>
-                    <option value="no_answer">Не дозвонились</option>
-                    <option value="follow_up">Повторный контакт</option>
-                    <option value="warm">Тёплый</option>
-                    <option value="meeting">Назначена встреча</option>
-                    <option value="converted">Переведён в лид</option>
-                    <option value="do_not_contact">Не беспокоить</option>
-                    <option value="archived">Архив</option>
-                </select>
-                <select id="outreachPriorityFilter" class="auth-input" onchange="setOutreachPriorityFilter(this.value)">
-                    <option value="">Все приоритеты</option>
-                    <option value="high">Высокий</option>
-                    <option value="normal">Обычный</option>
-                    <option value="low">Низкий</option>
-                </select>
-                <select id="outreachManagerFilter" class="auth-input" onchange="setOutreachManagerFilter(this.value)"></select>
-                <select id="outreachProcessedFilter" class="auth-input" onchange="setOutreachProcessedFilter(this.value)">
-                    <option value="">Все покрытия</option>
-                    <option value="no">Не обработаны</option>
-                    <option value="yes">Обработаны</option>
-                </select>
-            </div>
-            <div class="crm-toolbar__group">
-                <button class="btn-secondary" data-outreach-quick-filter="called" onclick="setOutreachQuickFilter('called')">Позвонил</button>
-                <button class="btn-secondary" data-outreach-quick-filter="emailed" onclick="setOutreachQuickFilter('emailed')">Написал</button>
-                <button class="btn-secondary" data-outreach-quick-filter="no_answer" onclick="setOutreachQuickFilter('no_answer')">Не дозвонился</button>
-                <button class="btn-secondary" data-outreach-quick-filter="warm" onclick="setOutreachQuickFilter('warm')">Тёплые</button>
-                <button class="btn-secondary" data-outreach-quick-filter="converted" onclick="setOutreachQuickFilter('converted')">В лидах</button>
-                <button id="outreachOverdueBtn" class="btn-secondary" onclick="toggleOutreachOverdueFilter()">Только просроченные</button>
-                <button id="outreachTodayBtn" class="btn-secondary" onclick="toggleOutreachTodayFilter()">План на сегодня</button>
-                <button id="outreachProblemsBtn" class="btn-secondary" onclick="toggleOutreachProblemFilter()">Проблемная база</button>
-                <button class="btn-secondary" onclick="resetOutreachFilters()">Сбросить</button>
-            </div>
-        </div>
-
-        <div id="outreachEditorPanel" class="crm-editor-panel" style="display:none;"></div>
-        <div id="prospectingContentMount"></div>
-
-        <div class="prospecting-bulkbar">
-            <div class="prospecting-bulkbar__title">Массовые действия</div>
-            <div class="prospecting-bulkbar__controls">
-                <select id="outreachBulkManager" class="auth-input"></select>
-                <input id="outreachBulkPlanDate" class="auth-input" type="text" placeholder="дд.мм.гггг">
-                <select id="outreachBulkStatus" class="auth-input">
-                    <option value="">Статус без изменения</option>
-                    <option value="assigned">Назначен</option>
-                    <option value="in_progress">В работе</option>
-                    <option value="follow_up">Повторный контакт</option>
-                    <option value="warm">Тёплый</option>
-                    <option value="converted">Конвертирован</option>
-                    <option value="archived">Архив</option>
-                </select>
-                <input id="outreachBulkNote" class="auth-input" type="text" placeholder="Комментарий к массовому действию">
-                <button class="btn-primary" onclick="applyOutreachBulkAction()">Применить к выбранным</button>
-            </div>
-        </div>
+        <div id="outreachPoolMount"></div>
     </div>
 </div>

@@ -6,7 +6,7 @@ from email.mime.multipart import MIMEMultipart
 from email.message import EmailMessage
 from fastapi import APIRouter, Request, UploadFile, File, Form
 from fastapi.responses import JSONResponse
-from database import get_connection, audit_log, create_notification, get_notifications_for_user, mark_notification_read, mark_all_notifications_read, record_error_log
+from database import get_connection, audit_log, create_notification, create_targeted_notifications, get_notifications_for_user, mark_notification_read, mark_all_notifications_read, get_dismissed_notification_keys, dismiss_notifications_for_user, record_error_log
 from auth_security import get_request_user
 from permissions import require_approved_user, require_director, has_permission
 from schemas import (
@@ -55,6 +55,7 @@ from services.collaboration_service import (
     resolve_task_executor,
     create_task_record,
     update_task_record,
+    delete_task_record,
     add_task_message,
     list_company_feed,
     create_company_feed_post,
@@ -351,6 +352,7 @@ def _load_live_notifications(actor: dict, limit: int = 80) -> list[dict]:
 def _build_notification_feed(actor: dict, limit: int = 80):
     stored = get_notifications_for_user(actor.get("email", ""), actor.get("name", ""), limit=limit)
     live = _load_live_notifications(actor, limit=limit)
+    dismissed_keys = get_dismissed_notification_keys(actor.get("email", ""))
     seen_keys = set()
     merged = []
 
@@ -365,10 +367,14 @@ def _build_notification_feed(actor: dict, limit: int = 80):
     for item in stored:
         payload = dict(item)
         payload["synthetic"] = 0
+        if f"stored:{payload.get('id')}" in dismissed_keys:
+            continue
         merged.append(payload)
         seen_keys.add(item_key(payload))
 
     for item in live:
+        if str(item.get("id") or "") in dismissed_keys:
+            continue
         key = item_key(item)
         if key in seen_keys:
             continue
@@ -931,15 +937,27 @@ async def create_meeting(data: MeetingData, request: Request):
     actor = require_approved_user(request)
     if not actor or not has_permission(actor, "meetings", "create"):
         return {"error": "forbidden"}
-    create_meeting_record(
+    meeting_id = create_meeting_record(
         title=data.title,
         m_date=data.m_date,
         m_time=data.m_time,
         participants=data.participants,
         agenda=data.agenda,
     )
+    for participant in data.participants or []:
+        create_targeted_notifications(
+            "Новое совещание",
+            f"{actor.get('name', 'Система')} пригласил(а) вас на «{data.title}» — {data.m_date or 'дата не указана'} {data.m_time or ''}".strip(),
+            user_name=_safe_text(participant),
+            role=_safe_text(participant),
+            category="meeting",
+            entity_type="meeting",
+            entity_id=str(meeting_id),
+            exclude_email=actor.get("email", ""),
+        )
     await manager.broadcast({"type": "meetings"})
-    return {"status": "success"}
+    await manager.broadcast({"type": "notifications"})
+    return {"status": "success", "id": meeting_id}
 
 @router.put("/api/meetings/{m_id}")
 async def update_meeting(m_id: int, data: MeetingUpdate, request: Request):
@@ -956,7 +974,20 @@ async def update_meeting(m_id: int, data: MeetingUpdate, request: Request):
         decisions=data.decisions,
         status=data.status,
     )
+    meeting_state = "отменено" if _safe_text(data.status).lower() in {"cancelled", "canceled"} else "обновлено"
+    for participant in data.participants or []:
+        create_targeted_notifications(
+            "Совещание обновлено",
+            f"Совещание «{data.title}» {meeting_state}. Дата: {data.m_date or 'не указана'} {data.m_time or ''}".strip(),
+            user_name=_safe_text(participant),
+            role=_safe_text(participant),
+            category="meeting",
+            entity_type="meeting",
+            entity_id=str(m_id),
+            exclude_email=actor.get("email", ""),
+        )
     await manager.broadcast({"type": "meetings"})
+    await manager.broadcast({"type": "notifications"})
     return {"status": "success"}
 
 @router.get("/api/chats")
@@ -971,9 +1002,21 @@ async def create_chat(data: GlobalChatData, request: Request):
     actor = require_approved_user(request)
     if not actor or not has_permission(actor, "chats", "create"):
         return {"error": "forbidden"}
-    create_chat_record(name=data.name, creator=actor.get("name", ""), participants=data.participants)
+    chat_id = create_chat_record(name=data.name, creator=actor.get("name", ""), participants=data.participants)
+    for participant in data.participants or []:
+        create_targeted_notifications(
+            "Вас добавили в корпоративный чат",
+            f"{actor.get('name', 'Система')} добавил(а) вас в чат «{data.name}».",
+            user_name=_safe_text(participant),
+            role=_safe_text(participant),
+            category="chat",
+            entity_type="chat",
+            entity_id=str(chat_id),
+            exclude_email=actor.get("email", ""),
+        )
     await manager.broadcast({"type": "chats"})
-    return {"status": "success"}
+    await manager.broadcast({"type": "notifications"})
+    return {"status": "success", "id": chat_id}
 
 @router.delete("/api/chats/{chat_id}")
 async def delete_chat(chat_id: int, request: Request):
@@ -1002,7 +1045,29 @@ async def post_message(chat_id: int, data: GlobalMessageData, request: Request):
         role=actor.get("role", ""),
         text=data.text,
     )
+    chat_conn = get_connection(row_factory=True)
+    try:
+        chat_row = dict(chat_conn.execute("SELECT name, type, participants FROM global_chats WHERE id=?", (chat_id,)).fetchone() or {})
+    finally:
+        chat_conn.close()
+    try:
+        chat_participants = json.loads(chat_row.get("participants") or "[]")
+    except Exception:
+        chat_participants = []
+    for participant in chat_participants:
+        create_targeted_notifications(
+            "Новое сообщение в чате",
+            f"{actor.get('name', 'Пользователь')} в «{chat_row.get('name') or 'Корпоративный чат'}»: {_safe_text(data.text)[:140]}",
+            user_name=_safe_text(participant),
+            role=_safe_text(participant),
+            category="chat",
+            entity_type="chat",
+            entity_id=str(chat_id),
+            exclude_email=actor.get("email", ""),
+            fallback_to_director=False,
+        )
     await manager.broadcast({"type": "chats"})
+    await manager.broadcast({"type": "notifications"})
     return {"status": "success"}
 
 @router.get("/api/email/accounts")
@@ -1198,6 +1263,21 @@ def read_all_notifications(request: Request):
     return {"status": "success"}
 
 
+@router.delete("/api/notifications")
+def clear_notifications(request: Request):
+    actor = require_approved_user(request)
+    if not actor:
+        return {"error": "forbidden"}
+    feed = _build_notification_feed(actor, limit=300)
+    keys = [
+        str(item.get("id") or "") if int(item.get("synthetic") or 0) else f"stored:{item.get('id')}"
+        for item in feed
+        if item.get("id") not in (None, "")
+    ]
+    cleared = dismiss_notifications_for_user(actor.get("email", ""), keys)
+    return {"status": "success", "cleared": cleared}
+
+
 @router.post("/api/emails/{message_id}/read")
 def mark_email_read(message_id: int, data: EmailMessageStateData, request: Request):
     actor = get_request_user(request)
@@ -1316,6 +1396,21 @@ def get_tasks(request: Request):
         return {"error": "forbidden"}
     return list_tasks()
 
+
+def _task_access_flags(actor: dict, task: dict):
+    actor_name = _safe_text(actor.get("name")).strip()
+    executor = _safe_text(task.get("executor")).strip()
+    is_director = _safe_text(actor.get("role")).strip() == "Директор"
+    is_author = bool(actor_name) and actor_name == _safe_text(task.get("author")).strip()
+    is_executor = bool(actor_name) and (executor == actor_name or executor.startswith(f"{actor_name} (И.О."))
+    return {
+        "is_director": is_director,
+        "is_author": is_author,
+        "is_executor": is_executor,
+        "can_manage": is_director or is_author,
+        "can_work": is_director or is_author or is_executor,
+    }
+
 @router.post("/api/tasks")
 async def create_task(data: TaskData, request: Request):
     actor = require_approved_user(request)
@@ -1323,18 +1418,6 @@ async def create_task(data: TaskData, request: Request):
         return {"error": "forbidden"}
     resolution = resolve_task_executor(data.executor)
     actual_executor = resolution["actual_executor"]
-    if resolution["executor_email"]:
-        mail_text = f"Здравствуйте!\n\nВам назначена новая задача в Korda CRM:\n\nТема: {data.title}\nДедлайн: {data.deadline}\nОписание: {data.description}\n\nС уважением,\nСистема уведомлений Korda CRM"
-        asyncio.create_task(asyncio.to_thread(send_smtp_notification, resolution["executor_email"], f"Новое поручение: {data.title}", mail_text))
-        create_notification(
-            title="Новое поручение",
-            message=f"{actor.get('name', data.author)} назначил(а) задачу «{data.title}» с дедлайном {data.deadline}",
-            user_email=resolution["executor_email"],
-            user_name=resolution["executor_lookup_name"],
-            category="task",
-            entity_type="task",
-        )
-
     task_id = create_task_record(
         title=data.title,
         description=data.description,
@@ -1345,6 +1428,20 @@ async def create_task(data: TaskData, request: Request):
         priority=data.priority,
         project_id=data.project_id,
     )
+    if resolution["executor_email"]:
+        mail_text = f"Здравствуйте!\n\nВам назначена новая задача в Korda CRM:\n\nТема: {data.title}\nДедлайн: {data.deadline}\nОписание: {data.description}\n\nС уважением,\nСистема уведомлений Korda CRM"
+        asyncio.create_task(asyncio.to_thread(send_smtp_notification, resolution["executor_email"], f"Новое поручение: {data.title}", mail_text))
+    create_targeted_notifications(
+        title="Новое поручение",
+        message=f"{actor.get('name', data.author)} назначил(а) задачу «{data.title}» с дедлайном {data.deadline or 'без срока'}",
+        user_email=resolution["executor_email"],
+        user_name=resolution["executor_lookup_name"],
+        role=resolution["executor_lookup_name"],
+        category="task",
+        entity_type="task",
+        entity_id=str(task_id),
+        exclude_email=actor.get("email", ""),
+    )
     await manager.broadcast({"type": "tasks"})
     await manager.broadcast({"type": "notifications"})
     return {"status": "success", "id": task_id}
@@ -1354,6 +1451,21 @@ async def update_task(task_id: int, data: TaskUpdate, request: Request):
     actor = require_approved_user(request)
     if not actor or not has_permission(actor, "tasks", "update"):
         return {"error": "forbidden"}
+    task_conn = get_connection(row_factory=True)
+    try:
+        task_before = dict(task_conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone() or {})
+    finally:
+        task_conn.close()
+    if not task_before:
+        return {"error": "not_found", "message": "Поручение не найдено."}
+    access = _task_access_flags(actor, task_before)
+    update_payload = data.model_dump(exclude_none=True) if hasattr(data, "model_dump") else data.dict(exclude_none=True)
+    changed_fields = set(update_payload.keys())
+    if changed_fields == {"status"}:
+        if not access["can_work"]:
+            return {"error": "forbidden", "message": "Менять статус может исполнитель, автор поручения или директор."}
+    elif changed_fields and not access["can_manage"]:
+        return {"error": "forbidden", "message": "Изменять поручение может только его автор или директор."}
     update_task_record(
         task_id=task_id,
         status=data.status,
@@ -1365,6 +1477,30 @@ async def update_task(task_id: int, data: TaskUpdate, request: Request):
         deadline=data.deadline,
         project_id=data.project_id,
     )
+    if data.executor and data.executor != task_before.get("executor"):
+        executor_resolution = resolve_task_executor(data.executor)
+        create_targeted_notifications(
+            "Вам передано поручение",
+            f"{actor.get('name', 'Система')} передал(а) вам задачу «{data.title or task_before.get('title') or 'Без названия'}».",
+            user_email=executor_resolution.get("executor_email", ""),
+            user_name=executor_resolution.get("executor_lookup_name", data.executor),
+            role=executor_resolution.get("executor_lookup_name", data.executor),
+            category="task",
+            entity_type="task",
+            entity_id=str(task_id),
+            exclude_email=actor.get("email", ""),
+        )
+    completed_statuses = {"completed", "done", "closed"}
+    if _safe_text(data.status).lower() in completed_statuses and _safe_text(task_before.get("status")).lower() not in completed_statuses:
+        create_targeted_notifications(
+            "Поручение выполнено",
+            f"{actor.get('name', 'Исполнитель')} завершил(а) задачу «{data.title or task_before.get('title') or 'Без названия'}».",
+            user_name=task_before.get("author", ""),
+            category="task",
+            entity_type="task",
+            entity_id=str(task_id),
+            exclude_email=actor.get("email", ""),
+        )
     conn = get_connection(row_factory=True)
     try:
         for document_id in list_documents_for_task(conn, int(task_id or 0)):
@@ -1374,6 +1510,38 @@ async def update_task(task_id: int, data: TaskUpdate, request: Request):
         conn.close()
     await manager.broadcast({"type": "tasks"})
     await manager.broadcast({"type": "documents"})
+    await manager.broadcast({"type": "notifications"})
+    return {"status": "success"}
+
+
+@router.delete("/api/tasks/{task_id}")
+async def delete_task(task_id: int, request: Request):
+    actor = require_approved_user(request)
+    if not actor or not has_permission(actor, "tasks", "update"):
+        return {"error": "forbidden", "message": "Недостаточно прав для удаления поручения."}
+    conn = get_connection(row_factory=True)
+    try:
+        task = dict(conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone() or {})
+    finally:
+        conn.close()
+    if not task:
+        return {"error": "not_found", "message": "Поручение не найдено."}
+    if not _task_access_flags(actor, task)["can_manage"]:
+        return {"error": "forbidden", "message": "Удалить поручение может только тот, кто его создал, или директор."}
+    if not delete_task_record(task_id):
+        return {"error": "not_found", "message": "Поручение уже удалено."}
+    create_targeted_notifications(
+        "Поручение удалено",
+        f"{actor.get('name', 'Пользователь')} удалил(а) поручение «{task.get('title') or 'Без названия'}».",
+        user_name=task.get("executor", ""),
+        category="task",
+        entity_type="task",
+        entity_id=str(task_id),
+        exclude_email=actor.get("email", ""),
+        fallback_to_director=False,
+    )
+    await manager.broadcast({"type": "tasks"})
+    await manager.broadcast({"type": "notifications"})
     return {"status": "success"}
 
 
@@ -1382,11 +1550,34 @@ async def post_task_message(task_id: int, data: TaskChatMessageData, request: Re
     actor = require_approved_user(request)
     if not actor or not has_permission(actor, "tasks", "update"):
         return {"error": "forbidden"}
+    message_conn = get_connection(row_factory=True)
+    try:
+        task_row = dict(message_conn.execute("SELECT title, author, executor FROM tasks WHERE id=?", (task_id,)).fetchone() or {})
+    finally:
+        message_conn.close()
+    if not task_row:
+        return {"error": "not_found", "message": "Поручение не найдено."}
+    if not _task_access_flags(actor, task_row)["can_work"]:
+        return {"error": "forbidden", "message": "Комментарии доступны исполнителю, автору поручения и директору."}
     text = _safe_text(data.text).strip()
     if not text:
         return {"error": "validation_error", "message": "Напишите комментарий к задаче."}
     message = add_task_message(task_id=task_id, user=actor.get("name", "Пользователь"), role=actor.get("role", "Сотрудник"), text=text)
+    for recipient_name in {task_row.get("author", ""), task_row.get("executor", "")}:
+        if not recipient_name:
+            continue
+        create_targeted_notifications(
+            "Новый комментарий к поручению",
+            f"{actor.get('name', 'Пользователь')}: {text[:160]}",
+            user_name=recipient_name,
+            category="task",
+            entity_type="task",
+            entity_id=str(task_id),
+            exclude_email=actor.get("email", ""),
+            fallback_to_director=False,
+        )
     await manager.broadcast({"type": "tasks"})
+    await manager.broadcast({"type": "notifications"})
     return {"status": "success", "message_item": message}
 
 

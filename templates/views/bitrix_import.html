@@ -11,6 +11,23 @@
             </div>
         </div>
 
+        <section id="bitrixConnectionPanel" class="surface-card prospecting-panel bitrix-connection-panel">
+            <div class="bitrix-connection-panel__head">
+                <div>
+                    <span class="view-eyebrow">Подключение</span>
+                    <h3 class="section-title">Связь с Bitrix24</h3>
+                    <p class="section-subtitle">Вебхук хранится в базе CRM и не зависит от обновления файлов проекта.</p>
+                </div>
+                <div id="bitrixConnectionStatus" class="bitrix-connection-status"></div>
+            </div>
+            <div class="bitrix-connection-form">
+                <input id="bitrixWebhookInput" class="auth-input" type="password" autocomplete="off" placeholder="https://ваш-портал.bitrix24.ru/rest/.../.../" aria-label="Входящий вебхук Bitrix24">
+                <button id="bitrixTestButton" class="btn-secondary" type="button" onclick="testBitrixConnection()">Проверить</button>
+                <button id="bitrixSaveButton" class="btn-primary" type="button" onclick="saveBitrixConnection()">Сохранить подключение</button>
+            </div>
+            <p class="bitrix-connection-hint">Адрес скрыт после сохранения. Для замены подключения вставьте новый вебхук.</p>
+        </section>
+
         <div id="bitrixImportStats" class="crm-summary-strip"></div>
 
         <section class="surface-card prospecting-panel bitrix-import-control">
@@ -21,7 +38,7 @@
                 </div>
             </div>
             <div class="prospecting-inline-grid prospecting-bitrix-grid bitrix-import-grid">
-                <input id="outreachBitrixSearch" class="auth-input" type="search" placeholder="Название, контакт, телефон или email">
+                    <input id="outreachBitrixSearch" class="auth-input" type="search" placeholder="Название, контакт или реквизиты">
                 <button id="outreachBitrixSearchButton" class="btn-primary" onclick="searchBitrixClients()">Найти клиента</button>
                 <button id="outreachBitrixImportButton" class="btn-secondary" onclick="importSelectedBitrixClients()">Загрузить выбранных</button>
                 <select id="outreachBitrixSyncLimit" class="auth-input">
@@ -41,15 +58,13 @@
             <div class="section-header">
                 <div>
                     <h3 class="section-title">Что происходит после загрузки</h3>
-                    <p class="section-subtitle">Клиенты попадают в базу развития, где их можно обзванивать, прогревать и переводить в лиды.</p>
+                    <p class="section-subtitle">Выгруженные клиенты сначала попадают в общую свободную очередь. Они не назначаются менеджеру автоматически.</p>
                 </div>
             </div>
             <div class="bitrix-import-action-grid">
-                <div><strong>Звонок</strong><span>Пишет активность “звонок” и переводит карточку в работу.</span></div>
-                <div><strong>Письмо</strong><span>Пишет активность “письмо” и переводит карточку в работу.</span></div>
-                <div><strong>Нет ответа</strong><span>Фиксирует попытку звонка и ставит статус “Не дозвонились”.</span></div>
-                <div><strong>Тёплый</strong><span>Фиксирует интерес и ставит статус “Тёплый”.</span></div>
-                <div><strong>В лид</strong><span>Создаёт лид в CRM и оставляет связь с исходной карточкой.</span></div>
+                <div><strong>1. Выгрузить</strong><span>Менеджер загружает новые компании, контакты и лиды из Bitrix24 без дублей.</span></div>
+                <div><strong>2. Забрать</strong><span>В «Базе развития» менеджер нажимает «Забрать себе». Клиент сразу исчезает у коллег.</span></div>
+                <div><strong>3. Работать</strong><span>В разделе «Мои клиенты» менеджер фиксирует контакты, следующий шаг и перевод в лид.</span></div>
             </div>
         </section>
     </div>

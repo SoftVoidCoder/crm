@@ -25,7 +25,6 @@ function connectWebSocket() {
             await loadProjects();
             if (document.getElementById('dashboardView') && document.getElementById('dashboardView').style.display === 'block') {
                 if (typeof renderDashboard === 'function') renderDashboard();
-                if (document.getElementById('analyticsView') && document.getElementById('analyticsView').style.display === 'block' && typeof drawCharts === 'function') drawCharts();
             } else if (document.getElementById('projectView') && document.getElementById('projectView').style.display === 'block') {
                 if (typeof updateChecklistUI === 'function') updateChecklistUI();
                 if (typeof renderChat === 'function') renderChat();
@@ -175,6 +174,8 @@ async function logout() {
     window.location.href = '/static/login.html';
 }
 
+window.logout = logout;
+
 function showToast(title, message, type = 'success') {
     const container = document.getElementById('toastContainer');
     if (!container) return;
@@ -269,6 +270,46 @@ function customPrompt(message, defaultValue = '') {
     });
 }
 
+function customSelectPrompt(message, options = [], defaultValue = '') {
+    return new Promise(resolve => {
+        const normalizedOptions = Array.isArray(options) ? options : [];
+        const m = document.getElementById('genericModal');
+        if (!m) {
+            const list = normalizedOptions.map((item, index) => `${index + 1}. ${item.label}`).join('\n');
+            const answer = window.prompt(`${message}\n${list}`, String(Math.max(1, normalizedOptions.findIndex(item => item.value === defaultValue) + 1)));
+            if (answer === null) return resolve(null);
+            const selected = normalizedOptions[Number(answer) - 1];
+            return resolve(selected ? selected.value : defaultValue);
+        }
+
+        document.getElementById('genModalTitle').innerText = 'Выбор статуса';
+        document.getElementById('genModalBody').innerHTML = `
+            <label for="genSelect" style="font-size:13px; margin-bottom:8px; display:block;">${nl2brSafe(message)}</label>
+            <select id="genSelect" class="auth-input" style="margin:0;">
+                ${normalizedOptions.map(item => `<option value="${escapeHtml(item.value)}"${item.value === defaultValue ? ' selected' : ''}>${escapeHtml(item.label)}</option>`).join('')}
+            </select>
+        `;
+        document.getElementById('genModalFooter').innerHTML = `
+            <button class="btn-secondary" id="genCancel">Отмена</button>
+            <button class="btn-primary" id="genSubmit">Сохранить</button>
+        `;
+        m.style.display = 'flex';
+        const select = document.getElementById('genSelect');
+        select.focus();
+        select.onkeypress = event => {
+            if (event.key === 'Enter') document.getElementById('genSubmit').click();
+        };
+        document.getElementById('genCancel').onclick = () => {
+            m.style.display = 'none';
+            resolve(null);
+        };
+        document.getElementById('genSubmit').onclick = () => {
+            m.style.display = 'none';
+            resolve(select.value);
+        };
+    });
+}
+
 function entityCardBadge(status) {
     const raw = String(status || '').toLowerCase();
     if (['green', 'success', 'synced', 'paid', 'done', 'completed', 'signed', 'posted'].includes(raw)) return 'status-completed';
@@ -286,9 +327,141 @@ function renderEntityCardList(items, emptyText, renderer) {
     return `<div class="audit-log-list">${items.map(renderer).join('')}</div>`;
 }
 
+function productionCardStageLabel(value) {
+    return ({ queue: 'Очередь', in_work: 'В работе', in_progress: 'В работе', otk: 'Проверка ОТК', done: 'Готово' })[String(value || '')] || 'Не указан';
+}
+
+function productionCardPriorityLabel(value) {
+    return ({ normal: 'Обычный', high: 'Высокий', critical: 'Критичный' })[String(value || '')] || 'Обычный';
+}
+
+function productionCardOperationStatus(value) {
+    return ({ planned: 'Запланировано', in_progress: 'В работе', otk: 'ОТК', done: 'Готово' })[String(value || '')] || 'Запланировано';
+}
+
+function productionCardValue(value, fallback = 'Не указано') {
+    const text = String(value ?? '').trim();
+    return escapeHtml(text || fallback);
+}
+
+async function openProductionLinkedDocument(documentId) {
+    const id = Number(documentId || 0);
+    if (!id) return;
+    const cached = window.productionCardDocumentCache?.[id] || {};
+    const fileUrl = String(cached.file_url || '').trim();
+    if (fileUrl) {
+        window.open(fileUrl, '_blank', 'noopener');
+        return;
+    }
+    closeGenericModal();
+    if (typeof openOmniSearchResult === 'function') {
+        await openOmniSearchResult('document', id, 'documents');
+        return;
+    }
+    if (typeof navigateTo === 'function') navigateTo('documents');
+}
+
+function closeGenericModal() {
+    const modal = document.getElementById('genericModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function renderProductionEntityCard(card) {
+    const record = card.record || {};
+    const orderId = Number(card.entity_id || record.id || 0);
+    const operations = typeof productionOperationsDB !== 'undefined'
+        ? (productionOperationsDB || []).filter(item => Number(item.order_id || 0) === orderId)
+        : [];
+    const materials = typeof productionBomDB !== 'undefined'
+        ? (productionBomDB || []).filter(item => Number(item.order_id || 0) === orderId)
+        : [];
+    const project = typeof projectsDB !== 'undefined'
+        ? (projectsDB || []).find(item => Number(item.id || 0) === Number(record.project_id || 0))
+        : null;
+    const client = typeof clientsDB !== 'undefined'
+        ? (clientsDB || []).find(item => Number(item.id || 0) === Number(record.client_id || 0))
+        : null;
+    const stage = productionCardStageLabel(record.stage);
+    const progress = Math.max(0, Math.min(100, Number(record.progress || 0)));
+    const quantity = Number(record.planned_qty || record.planned_qty_total || Math.max(0, ...operations.map(item => Number(item.planned_qty || 0))));
+    const produced = Number(record.produced_qty || record.produced_qty_total || Math.max(0, ...operations.map(item => Number(item.completed_qty || 0))));
+    const documents = Array.isArray(card.documents) ? card.documents : [];
+    const files = Array.isArray(card.files) ? card.files : [];
+    const currentFiles = new Map();
+    files.forEach(file => {
+        const documentId = Number(file.document_id || 0);
+        if (!currentFiles.has(documentId) || Number(file.is_current || 0) === 1) currentFiles.set(documentId, file);
+    });
+    window.productionCardDocumentCache = window.productionCardDocumentCache || {};
+    documents.forEach(document => {
+        const documentId = Number(document.id || 0);
+        const file = currentFiles.get(documentId);
+        window.productionCardDocumentCache[documentId] = {
+            ...document,
+            file_url: String(file?.file_url || document.file_url || '').trim(),
+        };
+    });
+
+    return `
+        <div class="production-entity-card">
+            <div class="production-card-metrics">
+                <div><span>Текущий этап</span><strong>${escapeHtml(stage)}</strong></div>
+                <div><span>Готовность</span><strong>${progress}%</strong></div>
+                <div><span>Срок</span><strong>${productionCardValue(record.planned_finish, 'Не указан')}</strong></div>
+                <div><span>Ответственный</span><strong>${productionCardValue(record.responsible)}</strong></div>
+            </div>
+
+            <section class="production-card-section">
+                <div class="production-card-section__head">
+                    <div><h4>Карточка заказа</h4><p>Заполненные данные по этому заказу. Пустые пункты можно добавить позже.</p></div>
+                    <span class="status-badge ${entityCardBadge(record.stage)}">${escapeHtml(stage)}</span>
+                </div>
+                <dl class="production-card-details">
+                    <div><dt>Заказ</dt><dd>${productionCardValue(record.order_name)}</dd></div>
+                    <div><dt>Проект</dt><dd>${productionCardValue(project?.contract || project?.name, 'Без проекта')}</dd></div>
+                    <div><dt>Клиент</dt><dd>${productionCardValue(record.client_name || record.client_display_name || client?.name, 'Не указан')}</dd></div>
+                    <div><dt>Количество</dt><dd>${quantity ? `${quantity.toLocaleString('ru-RU')} шт.` : 'Не указано'}${produced ? ` · готово ${produced.toLocaleString('ru-RU')}` : ''}</dd></div>
+                    <div><dt>Приоритет</dt><dd>${escapeHtml(productionCardPriorityLabel(record.priority))}</dd></div>
+                    <div><dt>Маршрут / техкарта</dt><dd>${productionCardValue(record.route_name, 'Не нужен или не указан')}</dd></div>
+                </dl>
+                ${record.comment ? `<div class="production-card-note"><span>Комментарий</span><p>${escapeHtml(record.comment)}</p></div>` : ''}
+            </section>
+
+            <div class="production-card-grid">
+                <section class="production-card-section">
+                    <div class="production-card-section__head"><div><h4>Операции</h4><p>Шаги работы, если они нужны этому заказу.</p></div><strong>${operations.length}</strong></div>
+                    ${operations.length ? `<div class="production-card-list">${operations.slice(0, 6).map(item => `
+                        <div><span>${Number(item.sequence_no || 0)}. ${productionCardValue(item.operation_name)}</span><small>${productionCardValue(item.work_center, 'Участок не указан')} · ${escapeHtml(productionCardOperationStatus(item.status))}</small></div>
+                    `).join('')}</div>` : '<div class="production-card-empty">Операции не нужны или ещё не заполнены.</div>'}
+                </section>
+                <section class="production-card-section">
+                    <div class="production-card-section__head"><div><h4>Материалы</h4><p>Спецификация, если заказ требует материалов.</p></div><strong>${materials.length}</strong></div>
+                    ${materials.length ? `<div class="production-card-list">${materials.slice(0, 6).map(item => `
+                        <div><span>${productionCardValue(item.item_name || item.article)}</span><small>${Number(item.planned_qty || 0).toLocaleString('ru-RU')} ${productionCardValue(item.unit, 'шт')} · ${productionCardValue(item.warehouse, 'склад не указан')}</small></div>
+                    `).join('')}</div>` : '<div class="production-card-empty">Материалы не нужны или ещё не заполнены.</div>'}
+                </section>
+            </div>
+
+            <section class="production-card-section">
+                <div class="production-card-section__head"><div><h4>Документы КБ</h4><p>Чертежи, техническое задание и спецификации.</p></div><strong>${documents.length}</strong></div>
+                ${documents.length ? `<div class="production-card-list">${documents.slice(0, 8).map(item => `
+                    <div class="production-card-document">
+                        <div>
+                            <span>${productionCardValue(item.number || `Документ #${item.id}`)}</span>
+                            <small>${productionCardValue(item.subject || item.correspondent)}</small>
+                        </div>
+                        <button class="btn-secondary btn-compact" type="button" onclick="openProductionLinkedDocument(${Number(item.id || 0)})">Открыть</button>
+                    </div>
+                `).join('')}</div>` : '<div class="production-card-empty">Документы к заказу пока не прикреплены.</div>'}
+            </section>
+        </div>
+    `;
+}
+
 async function openEntityCard(entityType, entityId) {
     const m = document.getElementById('genericModal');
     if (!m) return;
+    m.querySelector('.modal-card')?.classList.remove('supply-record-modal');
     document.getElementById('genModalTitle').innerText = 'Карточка объекта';
     document.getElementById('genModalBody').innerHTML = '<div class="empty-state">Загружаю карточку...</div>';
     document.getElementById('genModalFooter').innerHTML = '<button class="btn-secondary" id="genClose">Закрыть</button>';
@@ -304,6 +477,15 @@ async function openEntityCard(entityType, entityId) {
     const favorite = card.favorite || {};
     const watch = card.watch || {};
     document.getElementById('genModalTitle').innerText = card.title || `Объект #${card.entity_id}`;
+    if (card.entity_type === 'production_order') {
+        document.getElementById('genModalBody').innerHTML = renderProductionEntityCard(card);
+        document.getElementById('genModalFooter').innerHTML = `
+            <button class="btn-primary" onclick="openProductionOrderEditor(${Number(card.entity_id || 0)})">Редактировать заказ</button>
+            <button class="btn-secondary" id="genClose">Закрыть</button>
+        `;
+        document.getElementById('genClose').onclick = closeGenericModal;
+        return;
+    }
     document.getElementById('genModalBody').innerHTML = `
         <div class="metrics-grid" style="margin-bottom:14px;">
             <div class="metric-card"><div class="metric-title">Статус</div><div class="metric-value" style="font-size:22px;">${escapeHtml(card.state || '—')}</div></div>
@@ -356,6 +538,8 @@ async function openEntityCard(entityType, entityId) {
 }
 
 window.openEntityCard = openEntityCard;
+window.closeGenericModal = closeGenericModal;
+window.openProductionLinkedDocument = openProductionLinkedDocument;
 
 const formDraftRegistry = {};
 const formDraftServerTimers = {};
@@ -814,13 +998,13 @@ function navigationSearchCatalog() {
         navResources: 'Ресурсы, загрузка и календари',
         navNomenclature: 'НСИ, складские позиции и остатки',
         navContacts: 'Контакты и контактные лица',
-        navAnalytics: 'Аналитика и показатели',
         navKpi: 'KPI и эффективность',
         navProfile: 'Личный кабинет и настройки',
     };
     const keywords = {
         navDashboard: 'главная проекты портфель рабочий стол',
         navProspecting: 'база развития prospecting обзвон клиенты',
+        navMyProspecting: 'мои клиенты работа менеджера обзвон',
         navBitrixImport: 'bitrix битрикс выгрузка импорт клиенты загрузить обновить',
         navLeads: 'лиды входящие запросы crm',
         navDeals: 'сделки продажи pipeline коммерция',
@@ -843,6 +1027,7 @@ function navigationSearchCatalog() {
         navExecutive: 'executive',
         navClients: 'clients',
         navProspecting: 'prospecting',
+        navMyProspecting: 'myProspecting',
         navBitrixImport: 'bitrixImport',
         navLeads: 'leads',
         navDeals: 'deals',
@@ -865,7 +1050,6 @@ function navigationSearchCatalog() {
         navResources: 'resources',
         navNomenclature: 'nomenclature',
         navContacts: 'contacts',
-        navAnalytics: 'analytics',
         navKpi: 'kpi',
         navProfile: 'profile',
     };
@@ -993,8 +1177,44 @@ function commandCreateProductionOrder() {
     }, 180);
 }
 
+const COMMAND_PALETTE_NAV_BY_ICON = Object.freeze({
+    PRJ: 'navDashboard',
+    DOC: 'navDocuments',
+    IN: 'navDocuments',
+    OUT: 'navDocuments',
+    TSK: 'navTasks',
+    PAY: 'navFinance',
+    CASH: 'navFinance',
+    BUY: 'navSupply',
+    INV: 'navSales',
+    MFG: 'navProduction',
+    HOME: 'navDashboard',
+    PIPE: 'navProspecting',
+    LEAD: 'navLeads',
+    DEAL: 'navDeals',
+    INT: 'navIntegrations',
+    FIN: 'navFinance',
+    CLN: 'navClients',
+    CTR: 'navContract360',
+    MAIL: 'navEmails',
+    EPL: 'navAccounting',
+});
+
+const COMMAND_PALETTE_CREATE_PERMISSION_BY_ICON = Object.freeze({
+    PRJ: ['projects', 'create'],
+    DOC: ['documents', 'create'],
+    IN: ['documents', 'create'],
+    OUT: ['documents', 'create'],
+    TSK: ['tasks', 'create'],
+    PAY: ['finance', 'create'],
+    CASH: ['finance', 'create'],
+    BUY: ['supply', 'create'],
+    INV: ['sales', 'create'],
+    MFG: ['production', 'create'],
+});
+
 function commandPaletteStaticCommands() {
-    return [
+    const commands = [
         { group: 'Создать', icon: 'PRJ', title: 'Создать проект', desc: 'Новый проект в портфеле', keywords: 'проект создать new project', action: () => { if (typeof createNewProject === 'function') createNewProject(); } },
         { group: 'Создать', icon: 'DOC', title: 'Создать документ', desc: 'Открыть карточку регистрации документа', keywords: 'документ сед входящий исходящий приказ scan', action: () => commandCreateDocument({}) },
         { group: 'Создать', icon: 'IN', title: 'Входящий документ', desc: 'Зарегистрировать входящее письмо или скан', keywords: 'входящий документ письмо скан', action: () => commandCreateDocument({ type: 'incoming' }) },
@@ -1021,6 +1241,15 @@ function commandPaletteStaticCommands() {
         { group: 'Перейти', icon: 'MAIL', title: 'Открыть почту', desc: 'Входящие, исходящие и обработка писем', keywords: 'почта письма email', action: () => { if (typeof navigateTo === 'function') navigateTo('emails'); } },
         { group: 'Перейти', icon: 'EPL', title: 'Открыть ЭПЛ', desc: 'Путевые листы и интеграция 1С', keywords: 'эпл путевой лист accounting', action: () => { if (typeof navigateTo === 'function') navigateTo('accounting'); } },
     ];
+    return commands.filter(item => {
+        const navId = COMMAND_PALETTE_NAV_BY_ICON[item.icon];
+        if (navId && typeof isNavAvailableForCurrentRole === 'function' && !isNavAvailableForCurrentRole(navId)) return false;
+        if (item.group === 'Создать') {
+            const requirement = COMMAND_PALETTE_CREATE_PERMISSION_BY_ICON[item.icon];
+            if (requirement && typeof hasCurrentPermission === 'function' && !hasCurrentPermission(requirement[0], requirement[1])) return false;
+        }
+        return true;
+    });
 }
 
 function quickSearchActionCatalog() {
@@ -1296,6 +1525,15 @@ function omniSearchActionFor(item) {
         stock_reservation: 'supply',
         inventory_document: 'nomenclature',
         production_order: 'production',
+        service_case: 'service',
+        resource_allocation: 'resources',
+        internal_request: 'requests',
+        expense_request: 'expenses',
+        meeting: 'meetings',
+        chat: 'messenger',
+        feed_post: 'messenger',
+        lead: 'leads',
+        deal: 'deals',
         contract: 'contract360',
         epl_waybill: 'accounting',
         approval: 'approvals',

@@ -19,10 +19,10 @@
     </div>
     <div id="serviceMetricsGrid" class="metrics-grid metrics-grid--info-rail"></div>
     <div class="finance-layout">
-        <section class="surface-card surface-card--padded ops-form-card">
+        <section id="serviceEditorCard" class="surface-card surface-card--padded ops-form-card">
             <div class="section-header">
                 <div>
-                    <h3 class="section-title">Новый сервисный кейс</h3>
+                    <h3 id="serviceEditorTitle" class="section-title">Новое сервисное обращение</h3>
         <p class="section-subtitle">Фиксируй дефект, гарантийный срок, срок сервиса и ответственное лицо.</p>
                 </div>
                 <span class="ops-section-chip">Сервисная заявка</span>
@@ -56,7 +56,7 @@
             </div>
             <div class="finance-actions-row">
                 <button class="btn-secondary" onclick="resetServiceForm()">Очистить</button>
-                <button class="btn-primary" onclick="saveServiceCase()">Сохранить кейс</button>
+                <button id="serviceSaveButton" class="btn-primary" onclick="saveServiceCase()">Создать обращение</button>
             </div>
         </section>
         <section class="surface-card surface-card--padded ops-list-card">

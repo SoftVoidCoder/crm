@@ -140,16 +140,36 @@ function productionActionEmptyState(message, actions = []) {
     `;
 }
 
+window.openProductionWorkspaceTab = function(key = 'orders') {
+    const workspace = document.querySelector('#productionView > .crm-view-workspace');
+    if (!workspace) return false;
+    const sections = Array.from(workspace.querySelectorAll(':scope > .crm-workspace__panels > [data-production-workspace]'));
+    const index = sections.findIndex(section => section.dataset.productionWorkspace === key);
+    if (index < 0) return false;
+    const tabs = Array.from(workspace.querySelectorAll(':scope > .crm-workspace__nav .crm-workspace__tab'));
+    const select = workspace.querySelector(':scope > .crm-workspace__nav .crm-workspace__select');
+    if (tabs[index]) tabs[index].click();
+    else if (select) {
+        select.value = String(index);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    workspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return true;
+};
+
 window.focusProductionQueue = function() {
-    document.getElementById('productionOrdersTable')?.closest('.surface-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.openProductionWorkspaceTab('orders');
+    window.setTimeout(() => document.getElementById('productionOrdersTable')?.closest('.surface-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
 };
 
 window.focusProductionOrderForm = function() {
-    document.getElementById('productionOrderForm')?.closest('.surface-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.openProductionWorkspaceTab('orders');
+    window.setTimeout(() => document.getElementById('productionOrderForm')?.closest('.surface-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
 };
 
 window.focusProductionOperations = function() {
-    document.getElementById('productionOperationForm')?.closest('.surface-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.openProductionWorkspaceTab('operations');
+    window.setTimeout(() => document.getElementById('productionOperationForm')?.closest('.surface-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
 };
 
 window.focusProductionDeepSection = function() {

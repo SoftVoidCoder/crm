@@ -48,28 +48,59 @@
     </form>
 </div>
 
+<div id="changeUserRoleModal" class="modal-overlay" style="display:none;">
+    <form class="modal-card employee-role-modal" onsubmit="saveUserRoleChange(event)">
+        <div class="modal-header employee-create-modal__head">
+            <div>
+                <span class="view-eyebrow">Права сотрудника</span>
+                <h2>Сменить роль</h2>
+                <p id="changeUserRoleDescription">Выберите новую рабочую роль сотрудника.</p>
+            </div>
+            <button class="icon-btn" type="button" aria-label="Закрыть" onclick="closeUserRoleModal()">×</button>
+        </div>
+        <input id="changeUserRoleEmail" type="hidden">
+        <label class="form-field">
+            <span>Новая роль</span>
+            <select id="changeUserRoleSelect" class="auth-input" required></select>
+        </label>
+        <div id="changeUserRoleError" class="form-error krd-is-hidden" role="alert"></div>
+        <div class="modal-actions">
+            <button class="btn-secondary" type="button" onclick="closeUserRoleModal()">Отмена</button>
+            <button id="changeUserRoleSubmit" class="btn-primary" type="submit">Сохранить роль</button>
+        </div>
+    </form>
+</div>
+
 <div id="workspaceConfigModal" class="modal-overlay" style="display: none; z-index: 99997;">
     <div class="modal-card workspace-config-modal">
-        <div class="modal-header modal-header--stack">
+        <div class="modal-header workspace-config-modal__header">
             <div>
-                <h2 class="modal-title">Конфиг интерфейса</h2>
-                <p class="modal-subtitle">Персонально настрой порядок и видимость разделов, не ломая базовую ролевую модель.</p>
+                <span class="view-eyebrow">Личные настройки</span>
+                <h2 class="modal-title">Настройка интерфейса</h2>
+                <p class="modal-subtitle">Настройте меню и главную страницу. Изменения применятся после сохранения.</p>
             </div>
-            <div class="workspace-config-header-actions">
-                <button class="btn-secondary" onclick="resetWorkspaceConfig()">Вернуть по умолчанию</button>
-                <button class="btn-secondary" onclick="closeWorkspaceConfigModal()">Закрыть</button>
-            </div>
+            <button class="icon-btn" type="button" aria-label="Закрыть" onclick="closeWorkspaceConfigModal()">×</button>
         </div>
+        <nav class="workspace-config-tabs" aria-label="Разделы настройки">
+            <button class="workspace-config-tab is-active" type="button" data-workspace-config-tab="navigation" onclick="switchWorkspaceConfigTab('navigation')">Меню</button>
+            <button class="workspace-config-tab" type="button" data-workspace-config-tab="dashboard" onclick="switchWorkspaceConfigTab('dashboard')">Главная</button>
+        </nav>
         <div id="workspaceConfigBody" class="workspace-config-body"></div>
+        <div class="workspace-config-footer">
+            <button class="btn-secondary" type="button" onclick="resetWorkspaceConfig()">Сбросить настройки</button>
+            <span class="workspace-config-footer__hint">Несохранённые изменения можно отменить, закрыв окно.</span>
+            <button class="btn-secondary" type="button" onclick="closeWorkspaceConfigModal()">Отмена</button>
+            <button class="btn-primary" type="button" onclick="saveWorkspaceConfigChanges()">Сохранить изменения</button>
+        </div>
     </div>
 </div>
 
 <div id="createApprovalModal" class="modal-overlay" style="display: none;">
-    <div class="modal-card">
-        <div class="modal-header modal-header--stack">
+    <div class="modal-card approval-create-modal">
+        <div class="modal-header modal-header--stack approval-create-header">
             <div>
                 <h2 class="modal-title">Запуск согласования</h2>
-                <p class="modal-subtitle">Соберите маршрут, выберите документ и сразу отправьте процесс по цепочке.</p>
+                <p class="modal-subtitle">Укажите документ и сотрудников, которые должны принять решение.</p>
             </div>
         </div>
         <div id="approvalForm" class="form-grid-standard">
@@ -79,136 +110,173 @@
                 <span class="form-error" data-error-for="apprTitle"></span>
             </label>
             <label class="form-field form-field--full">
-                <span class="form-label">Ссылка или номер документа</span>
-                <input type="text" id="apprLink" data-field="apprLink" class="auth-input" placeholder="Например, ДГ-14/26 или ссылка на файл">
+                <span class="form-label">Документ или проект <span class="form-required">*</span></span>
+                <select id="apprLink" data-field="apprLink" class="auth-input"><option value="">Выберите документ</option></select>
                 <span class="form-error" data-error-for="apprLink"></span>
             </label>
         </div>
-        <label style="font-size: 12px; color: var(--secondary); margin-bottom: 8px; display: block; font-weight: 600;">КОНСТРУКТОР МАРШРУТА:</label>
-        <div id="smartRouteContainer" style="margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); padding: 15px; border-radius: 12px; border: 1px solid var(--border);">
-            <div style="text-align: center; color: var(--secondary); font-size: 12px; font-style: italic;" id="emptyRouteMsg">Маршрут пока пуст...</div>
-        </div>
-        <div class="form-error" data-error-for="smartRouteContainer" style="margin-bottom: 12px;"></div>
-        <button class="btn-secondary" style="width: 100%; margin-bottom: 10px; justify-content: center; font-size: 13px;" onclick="autoGenerateRoute()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.8 5.7-4.9-3.5-4.9 3.5 1.8-5.7L4 8.8h6.1L12 3z"></path></svg>
-            Авто-маршрут (По сумме договора)
-        </button>
-        <button class="btn-secondary" style="width: 100%; margin-bottom: 20px; justify-content: center; font-size: 13px;" onclick="addSmartRouteStep()">+ Добавить этап (сотрудника)</button>
+        <section class="approval-create-route">
+            <div class="approval-create-route__head"><div><strong>Кто должен согласовать *</strong><span>Сотрудники получат документ по очереди сверху вниз.</span></div></div>
+            <div class="approval-create-route__picker">
+                <select id="apprRouteUser" class="auth-input"><option value="">Выберите сотрудника</option></select>
+                <button class="btn-secondary" type="button" onclick="addApprovalRouteUser()">Добавить</button>
+            </div>
+            <div id="smartRouteContainer" class="approval-create-route__list"><div class="approval-create-route__empty" id="emptyRouteMsg">Согласующие пока не выбраны.</div></div>
+            <div class="form-error" data-error-for="smartRouteContainer"></div>
+        </section>
         <div class="modal-actions form-actions">
             <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="document.getElementById('createApprovalModal').style.display='none'">Отмена</button>
-            <button class="btn-primary" style="flex:1; justify-content:center;" onclick="submitApproval()">Создать</button>
+            <button class="btn-primary" style="flex:1; justify-content:center;" onclick="submitApproval()">Отправить на согласование</button>
         </div>
     </div>
 </div>
 
 <div id="createDocModal" class="modal-overlay" style="display: none;">
-    <div class="modal-card">
-        <div class="modal-header modal-header--stack">
+    <div class="modal-card document-create-modal">
+        <div class="document-create-header">
             <div>
-                <h2 class="modal-title">Регистрация документа</h2>
-                <p class="modal-subtitle">Заведите документ в реестр, свяжите его со сделкой и сохраните маршрут обработки.</p>
+                <h2 class="modal-title">Добавление документа</h2>
+                <p class="modal-subtitle">Укажите, что это за документ и к кому он относится, затем прикрепите готовый файл.</p>
             </div>
+            <button class="icon-btn" type="button" aria-label="Закрыть" onclick="closeDocumentCreateModal()">×</button>
         </div>
-        <div id="documentForm" class="form-grid-standard">
-            <label class="form-field">
-                <span class="form-label">Тип документа</span>
-                <select id="docType" data-field="docType" class="auth-input" style="appearance: auto; cursor: pointer;">
-                    <option value="incoming">Входящий документ</option>
-                    <option value="outgoing">Исходящий документ</option>
-                    <option value="internal_order">Внутренний: Приказ</option>
-                    <option value="internal_memo">Внутренний: Служебная записка</option>
-                    <option value="internal_reg">Внутренний: Регламент / Инструкция</option>
-                </select>
-                <span class="form-error" data-error-for="docType"></span>
-            </label>
-            <label class="form-field">
-                <span class="form-label">Дата документа</span>
-                <input type="text" id="docDate" data-field="docDate" class="date-picker auth-input" placeholder="дд.мм.гггг">
-                <span class="form-error" data-error-for="docDate"></span>
-            </label>
-            <label class="form-field">
-                <span class="form-label">Номер <span class="form-required">*</span></span>
-                <div style="display: flex; gap: 6px;">
-                    <input type="text" id="docNumber" data-field="docNumber" class="auth-input" placeholder="Например, ДГ-14/26" style="width: 100%;">
-                    <button class="btn-secondary" type="button" style="padding: 0 10px;" onclick="generateDocNumber()" title="Автонумератор 1С">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.8 5.7-4.9-3.5-4.9 3.5 1.8-5.7L4 8.8h6.1L12 3z"></path></svg>
-                    </button>
+
+        <div id="documentForm" class="document-create-flow">
+            <section class="document-create-step">
+                <div class="document-create-step__head"><span>1</span><div><h3>Что за документ</h3><p>Выберите направление и понятный вид документа.</p></div></div>
+                <div class="document-create-grid">
+                    <label class="form-field">
+                        <span class="form-label">Направление <span class="form-required">*</span></span>
+                        <select id="docType" data-field="docType" class="auth-input" onchange="syncDocumentKindWithDirection()">
+                            <option value="outgoing">Исходящий — отправляем из компании</option>
+                            <option value="incoming">Входящий — получили в компанию</option>
+                            <option value="internal_memo">Внутренний — используется сотрудниками</option>
+                        </select>
+                        <span class="form-error" data-error-for="docType"></span>
+                    </label>
+                    <label class="form-field">
+                        <span class="form-label">Вид документа <span class="form-required">*</span></span>
+                        <select id="docKind" data-field="docKind" class="auth-input">
+                            <option value="commercial_proposal">Коммерческое предложение (КП)</option>
+                            <option value="company_details">Карточка предприятия / реквизиты</option>
+                            <option value="technical_proposal">Техническое предложение</option>
+                            <option value="contract">Договор</option>
+                            <option value="contract_specification">Спецификация к договору</option>
+                            <option value="invoice">Счёт</option>
+                            <option value="act_upd">Акт / УПД</option>
+                            <option value="technical_task">Техническое задание (ТЗ)</option>
+                            <option value="drawing">Чертёж</option>
+                            <option value="product_specification">Спецификация изделия</option>
+                            <option value="technology_card">Технологическая карта</option>
+                            <option value="production_order">Производственное задание</option>
+                            <option value="purchase_request">Заявка на закупку</option>
+                            <option value="supplier_order">Заказ поставщику</option>
+                            <option value="waybill">Накладная</option>
+                            <option value="quality_act">Акт ОТК</option>
+                            <option value="service_act">Сервисный / гарантийный акт</option>
+                            <option value="internal_memo">Служебная записка</option>
+                            <option value="other">Другой документ</option>
+                        </select>
+                        <span class="form-error" data-error-for="docKind"></span>
+                    </label>
+                    <label class="form-field">
+                        <span class="form-label">Дата документа</span>
+                        <input type="text" id="docDate" data-field="docDate" class="date-picker auth-input" placeholder="дд.мм.гггг" autocomplete="off">
+                        <span class="form-error" data-error-for="docDate"></span>
+                    </label>
+                    <label class="form-field">
+                        <span class="form-label">Номер <span class="form-required">*</span></span>
+                        <div class="document-number-field">
+                            <input type="text" id="docNumber" data-field="docNumber" class="auth-input" placeholder="Например, КП-2026-014">
+                            <button class="btn-secondary" type="button" onclick="generateDocNumber()">Создать номер</button>
+                        </div>
+                        <span class="form-error" data-error-for="docNumber"></span>
+                    </label>
                 </div>
-                <span class="form-error" data-error-for="docNumber"></span>
-            </label>
-            <label class="form-field">
-                <span class="form-label">Отправитель</span>
-                <input type="text" id="docSenderName" data-field="docSenderName" class="auth-input" placeholder="Организация или подразделение-отправитель">
-                <span class="form-error" data-error-for="docSenderName"></span>
-            </label>
-            <label class="form-field">
-                <span class="form-label">Адресат / Получатель</span>
-                <input type="text" id="docRecipientName" data-field="docRecipientName" class="auth-input" placeholder="Кому адресован документ">
-                <span class="form-error" data-error-for="docRecipientName"></span>
-            </label>
-            <label class="form-field">
-                <span class="form-label">Исходящий номер отправителя</span>
-                <input type="text" id="docSourceNumber" data-field="docSourceNumber" class="auth-input" placeholder="Если номер присвоен другой стороной">
-                <span class="form-error" data-error-for="docSourceNumber"></span>
-            </label>
-            <label class="form-field">
-                <span class="form-label">Дата исходящего документа</span>
-                <input type="text" id="docSourceDate" data-field="docSourceDate" class="date-picker auth-input" placeholder="дд.мм.гггг">
-                <span class="form-error" data-error-for="docSourceDate"></span>
-            </label>
-            <label class="form-field">
-                <span class="form-label">Способ доставки</span>
-                <select id="docDeliveryMethod" data-field="docDeliveryMethod" class="auth-input" style="appearance: auto; cursor: pointer;">
-                    <option value="">Не указан</option>
-                    <option value="email">Электронная почта</option>
-                    <option value="courier">Курьер</option>
-                    <option value="post">Почта России / служба доставки</option>
-                    <option value="edo">ЭДО / 1С-ЭДО</option>
-                    <option value="hand">Лично в руки</option>
-                </select>
-                <span class="form-error" data-error-for="docDeliveryMethod"></span>
-            </label>
-            <label class="form-field">
-                <span class="form-label">Подписант</span>
-                <input type="text" id="docSignerName" data-field="docSignerName" class="auth-input" placeholder="Кто подписал документ">
-                <span class="form-error" data-error-for="docSignerName"></span>
-            </label>
-            <label class="form-field">
-                <span class="form-label">Исполнитель</span>
-                <input type="text" id="docExecutorName" data-field="docExecutorName" class="auth-input" placeholder="Ответственный исполнитель">
-                <span class="form-error" data-error-for="docExecutorName"></span>
-            </label>
-            <label class="form-field">
-                <span class="form-label">Краткая связь / корреспондент</span>
-                <input type="text" id="docCorrespondent" data-field="docCorrespondent" class="auth-input" placeholder="Название организации или отдела">
-                <span class="form-error" data-error-for="docCorrespondent"></span>
-            </label>
-            <label class="form-field form-field--full">
-                <span class="form-label">Тема документа <span class="form-required">*</span></span>
-                <textarea id="docSubject" data-field="docSubject" class="auth-input" rows="2" placeholder="Коротко и по делу: о чём документ"></textarea>
-                <span class="form-error" data-error-for="docSubject"></span>
-            </label>
+            </section>
+
+            <section class="document-create-step">
+                <div class="document-create-step__head"><span>2</span><div><h3>Кому и к чему относится</h3><p>Выберите клиента и при необходимости договор, сделку или производственный заказ.</p></div></div>
+                <div class="document-create-grid">
+                    <label class="form-field form-field--full document-client-picker">
+                        <span class="form-label">Клиент или контрагент</span>
+                        <input type="search" id="docClientSearch" class="auth-input" list="docClientOptions" placeholder="Найдите клиента из CRM или Bitrix24 либо введите название вручную" autocomplete="off" oninput="handleDocumentClientChoice(this.value)">
+                        <input type="hidden" id="docClientId" value="0">
+                        <input type="hidden" id="docClientSource" value="">
+                        <input type="hidden" id="docClientSourceId" value="0">
+                        <datalist id="docClientOptions"></datalist>
+                        <small id="docClientSelectionHint">Можно выбрать клиента из CRM и Bitrix24 или указать название вручную.</small>
+                    </label>
+                    <label class="form-field form-field--full">
+                        <span class="form-label">Договор</span>
+                        <input type="search" id="docContractSearch" class="auth-input" list="docContractOptions" placeholder="Найдите договор по номеру, названию или контрагенту" autocomplete="off" oninput="handleDocumentContractChoice(this.value)">
+                        <input type="hidden" id="docContractId" value="0">
+                        <datalist id="docContractOptions"></datalist>
+                        <small id="docContractHint">Если выбрать договор, документ появится в его карточке.</small>
+                    </label>
+                    <label class="form-field form-field--full">
+                        <span class="form-label">Сделка клиента</span>
+                        <select id="docDealId" class="auth-input"><option value="0">Сначала выберите клиента</option></select>
+                        <small>Если выбрать сделку, документ сразу появится на её пятом шаге.</small>
+                    </label>
+                    <label class="form-field form-field--full">
+                        <span class="form-label">Заказ КБ / производства</span>
+                        <input type="search" id="docProductionOrderSearch" class="auth-input" list="docProductionOrderOptions" placeholder="Необязательно: найдите производственный заказ" autocomplete="off" oninput="handleDocumentProductionOrderChoice(this.value)">
+                        <input type="hidden" id="docProductionOrderId" value="0">
+                        <datalist id="docProductionOrderOptions"></datalist>
+                        <small id="docProductionOrderHint">Заполняется только для чертежей, ТЗ, спецификаций и других документов по заказу.</small>
+                    </label>
+                </div>
+            </section>
+
+            <section class="document-create-step">
+                <div class="document-create-step__head"><span>3</span><div><h3>Кто отвечает</h3><p>Сотрудник, который подготовил документ и отвечает за его актуальность.</p></div></div>
+                <div class="document-create-grid">
+                    <label class="form-field form-field--full">
+                        <span class="form-label">Ответственный сотрудник</span>
+                        <input type="text" id="docExecutorName" data-field="docExecutorName" class="auth-input" placeholder="ФИО сотрудника">
+                        <span class="form-error" data-error-for="docExecutorName"></span>
+                    </label>
+                </div>
+            </section>
+
+            <section class="document-create-step">
+                <div class="document-create-step__head"><span>4</span><div><h3>Название и назначение</h3><p>Коротко напишите, что находится в файле и для чего он нужен.</p></div></div>
+                <label class="form-field form-field--full">
+                    <span class="form-label">Название документа <span class="form-required">*</span></span>
+                    <textarea id="docSubject" data-field="docSubject" class="auth-input" rows="3" placeholder="Например: КП на поставку двух шумозащитных кожухов"></textarea>
+                    <span class="form-error" data-error-for="docSubject"></span>
+                </label>
+                <label class="document-priority-field">
+                    <input type="checkbox" id="docPriority">
+                    <span><strong>Важный документ</strong><small>Отметьте, если документ требует особого внимания.</small></span>
+                </label>
+            </section>
+
+            <section class="document-create-step document-create-step--file">
+                <div class="document-create-step__head"><span>5</span><div><h3>Прикрепите файл</h3><p>Подойдут PDF, Word, Excel, изображения и другие рабочие форматы.</p></div></div>
+                <label class="document-file-drop" for="docFile">
+                    <input id="docFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.odt,.ods,.png,.jpg,.jpeg,.webp,.txt,.zip" onchange="updateDocumentFileName()">
+                    <span class="document-file-drop__icon">↑</span>
+                    <strong id="docFileName">Выберите файл с компьютера</strong>
+                    <small>Файл загрузится и сохранится вместе с карточкой документа.</small>
+                </label>
+                <span class="form-error" data-error-for="docFile"></span>
+            </section>
+
+            <input type="hidden" id="docSenderName" data-field="docSenderName">
+            <input type="hidden" id="docRecipientName" data-field="docRecipientName">
+            <input type="hidden" id="docSourceNumber" data-field="docSourceNumber">
+            <input type="hidden" id="docSourceDate" data-field="docSourceDate">
+            <input type="hidden" id="docDeliveryMethod" data-field="docDeliveryMethod">
+            <input type="hidden" id="docSignerName" data-field="docSignerName">
+            <input type="hidden" id="docCorrespondent" data-field="docCorrespondent">
+            <select id="docParentId" hidden><option value="0">Без связанного документа</option></select>
         </div>
-        
-        <label style="font-size: 12px; color: var(--secondary); margin-bottom: 5px; display: block; font-weight: 600; margin-top: 10px;">ПРИВЯЗКА К СДЕЛКЕ (ОПЦИОНАЛЬНО):</label>
-        <select id="docProjectId" class="auth-input" style="appearance: auto; cursor: pointer; margin-bottom: 10px;"></select>
 
-        <label style="font-size: 12px; color: var(--secondary); margin-bottom: 5px; display: block; font-weight: 600;">СВЯЗАННЫЙ ДОКУМЕНТ (В ОТВЕТ НА):</label>
-        <select id="docParentId" class="auth-input" style="appearance: auto; cursor: pointer; margin-bottom: 10px;"></select>
-
-        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: bold; color: var(--danger); margin-bottom: 10px; background: rgba(239, 68, 68, 0.05); padding: 8px; border-radius: 6px;">
-            <input type="checkbox" id="docPriority" style="margin: 0; width: 16px; height: 16px;">
-            Отметить как особо важный документ
-        </label>
-
-        <button class="btn-secondary" style="width: 100%; margin-top: 10px; justify-content: center;" onclick="startBatchScan()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-            Потоковое сканирование со сканера (Штрих-коды)
-        </button>
-        <div class="modal-actions form-actions">
-            <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="document.getElementById('createDocModal').style.display='none'">Отмена</button>
-            <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="submitDocument('draft')">Сохранить черновик</button>
-            <button class="btn-primary" style="flex:1; justify-content:center;" onclick="submitDocument()">Создать</button>
+        <div class="document-create-actions">
+            <button class="btn-secondary" type="button" onclick="closeDocumentCreateModal()">Отмена</button>
+            <button class="btn-primary" type="button" onclick="submitDocument()">Сохранить документ</button>
         </div>
     </div>
 </div>
@@ -218,93 +286,94 @@
         <div class="project-create-header">
             <div>
                 <h2 class="project-create-title">Создание проекта</h2>
-                <p class="project-create-subtitle">Заполните основные данные. Состав и доступы можно добавить сразу или позже.</p>
+                <p class="project-create-subtitle">Три коротких шага. После создания откроется готовая карточка проекта.</p>
             </div>
             <button class="icon-btn" type="button" aria-label="Закрыть" onclick="closeCreateModal()">×</button>
         </div>
 
-        <div class="project-create-grid">
-            <div class="project-create-field project-create-field--wide">
-                <label class="project-create-label" for="newProjName">Наименование проекта <span class="form-required">*</span></label>
-                <input type="text" id="newProjName" class="auth-input" placeholder="Например, Модернизация линии упаковки" required>
-            </div>
+        <div class="project-create-progress" aria-label="Шаги создания проекта">
+            <button type="button" class="project-create-progress__item is-active" data-project-create-step="1" onclick="setProjectCreateStep(1)"><span>1</span>Проект</button>
+            <button type="button" class="project-create-progress__item" data-project-create-step="2" onclick="setProjectCreateStep(2)"><span>2</span>Договор</button>
+            <button type="button" class="project-create-progress__item" data-project-create-step="3" onclick="setProjectCreateStep(3)"><span>3</span>Команда</button>
+        </div>
 
-            <div class="project-create-field">
-                <label class="project-create-label" for="newProjContract">Номер договора</label>
-                <input type="text" id="newProjContract" class="auth-input" placeholder="Договор №">
+        <div class="project-create-stage is-active" data-project-create-panel="1">
+            <div class="project-create-stage__head">
+                <strong>Основные данные</strong>
+                <span>Назовите проект и укажите, для кого он выполняется.</span>
             </div>
-
-            <div class="project-create-field">
-                <label class="project-create-label" for="newProjBudget">Бюджет проекта</label>
-                <input type="number" id="newProjBudget" class="auth-input" placeholder="Сумма в рублях">
-            </div>
-
-            <div class="project-create-field">
-                <label class="project-create-label" for="newProjClient">Заказчик</label>
-                <select id="newProjClient" class="auth-input project-create-select">
-                    <option value="">Свободный ввод или выберите из базы</option>
-                </select>
-            </div>
-
-            <div class="project-create-field">
-                <label class="project-create-label" for="newProjManager">Менеджер</label>
-                <input type="text" id="newProjManager" class="auth-input" placeholder="Ответственный менеджер">
-            </div>
-
-            <div class="project-create-field project-create-field--wide" id="newProjContactWrap" style="display: none;">
-                <label class="project-create-label" for="newProjContact">Контактное лицо заказчика</label>
-                <select id="newProjContact" class="auth-input project-create-select">
-                    <option value="">Выберите контактное лицо</option>
-                </select>
+            <div class="project-create-grid project-create-grid--main">
+                <div class="project-create-field project-create-field--wide">
+                    <label class="project-create-label" for="newProjName">Наименование проекта <span class="form-required">*</span></label>
+                    <input type="text" id="newProjName" class="auth-input" placeholder="Например, Шумозащитные кожухи для линии" required>
+                </div>
+                <div class="project-create-field project-create-field--wide">
+                    <label class="project-create-label" for="newProjClient">Заказчик</label>
+                    <select id="newProjClient" class="auth-input project-create-select">
+                        <option value="">Выберите из CRM / Bitrix24 или введите вручную</option>
+                    </select>
+                    <p class="project-create-help">Поиск работает по названию, ИНН и телефону.</p>
+                </div>
+                <div class="project-create-field project-create-field--wide">
+                    <label class="project-create-label" for="newProjManager">Ответственный</label>
+                    <input type="text" id="newProjManager" class="auth-input" placeholder="Ответственный сотрудник" readonly>
+                </div>
+                <div class="project-create-field project-create-field--wide" id="newProjContactWrap" style="display: none;">
+                    <label class="project-create-label" for="newProjContact">Контактное лицо заказчика</label>
+                    <select id="newProjContact" class="auth-input project-create-select"><option value="">Выберите контактное лицо</option></select>
+                </div>
             </div>
         </div>
 
-        <div class="project-create-section">
-            <div class="project-create-section-head">
-                <div>
-                    <h3 class="project-create-section-title">Состав проекта</h3>
-                    <p class="project-create-section-subtitle">Добавь номенклатуру, чтобы сразу понимать объём и комплект проекта.</p>
+        <div class="project-create-stage" data-project-create-panel="2">
+            <div class="project-create-stage__head">
+                <strong>Договор и бюджет</strong>
+                <span>Эти данные можно изменить в карточке проекта в любой момент.</span>
+            </div>
+            <div class="project-create-grid">
+                <div class="project-create-field">
+                    <label class="project-create-label" for="newProjContract">Номер договора</label>
+                    <input type="text" id="newProjContract" class="auth-input" placeholder="Например, 2026-КРД-006">
+                </div>
+                <div class="project-create-field">
+                    <label class="project-create-label" for="newProjBudget">Бюджет проекта, ₽</label>
+                    <input type="number" id="newProjBudget" class="auth-input" min="0" step="0.01" placeholder="Например, 1 500 000">
                 </div>
             </div>
-            <div class="project-create-nom-controls">
-                <input type="text" id="newProjNomInput" list="nomDataList" class="auth-input" placeholder="Начните вводить название позиции">
-                <datalist id="nomDataList"></datalist>
-                <input type="number" id="newProjNomQty" class="auth-input project-create-qty" placeholder="Кол-во">
-                <button class="btn-secondary" type="button" onclick="addNomToProjectList()">Добавить</button>
-            </div>
-            <div id="newProjNomList" class="project-create-list"></div>
         </div>
 
-        <div class="project-create-section">
-            <div class="project-create-section-head">
-                <div>
-                    <h3 class="project-create-section-title">Доступ и роли</h3>
-                    <p class="project-create-section-subtitle">Определи рабочую группу и ограничь видимость проекта только нужным ролям.</p>
-                </div>
+        <div class="project-create-stage" data-project-create-panel="3">
+            <div class="project-create-stage__head">
+                <strong>Команда и доступ</strong>
+                <span>Выберите участников. Если пропустить, состав можно назначить позже.</span>
             </div>
-
             <div class="project-create-access-grid">
                 <div>
                     <label class="project-create-label">Рабочая группа</label>
                     <div id="newProjTeam" class="project-create-access-box"></div>
-                    <p class="project-create-help">Если никого не выбрать, проект увидят все сотрудники с доступом.</p>
                 </div>
                 <div>
-                    <label class="project-create-label">Роли с доступом</label>
+                    <label class="project-create-label">Роли, которые видят проект</label>
                     <div id="newProjRoles" class="project-create-roles-box"></div>
                 </div>
             </div>
+            <p class="project-create-help">Стандартный план работ будет добавлен автоматически.</p>
         </div>
 
-        <label class="project-create-checklist-toggle">
-            <input type="checkbox" id="isEmptyChecklist">
-            <span>Создать проект без стартового чек-листа</span>
-        </label>
+        <input type="checkbox" id="isEmptyChecklist" class="krd-is-hidden" aria-hidden="true">
+        <input type="text" id="newProjNomInput" class="krd-is-hidden" aria-hidden="true">
+        <input type="number" id="newProjNomQty" class="krd-is-hidden" aria-hidden="true">
+        <div id="newProjNomList" class="krd-is-hidden"></div>
+        <datalist id="nomDataList"></datalist>
 
         <div id="createProjectError" class="form-error krd-is-hidden" role="alert"></div>
         <div class="project-create-actions">
             <button class="btn-secondary" type="button" onclick="closeCreateModal()">Отмена</button>
-            <button id="createProjectSubmit" class="btn-primary" type="submit">Создать проект</button>
+            <div class="project-create-actions__right">
+                <button id="projectCreateBack" class="btn-secondary krd-is-hidden" type="button" onclick="setProjectCreateStep(projectCreateStep - 1)">Назад</button>
+                <button id="projectCreateNext" class="btn-primary" type="button" onclick="nextProjectCreateStep()">Далее</button>
+                <button id="createProjectSubmit" class="btn-primary krd-is-hidden" type="submit">Создать проект</button>
+            </div>
         </div>
     </form>
 </div>
@@ -363,16 +432,17 @@
 </div>
 
 <div id="createChatModal" class="modal-overlay" style="display: none;">
-    <div class="modal-card">
+    <div class="modal-card messenger-create-modal">
         <div class="modal-header modal-header--stack">
             <div>
-                <h2 class="modal-title">Создать новый чат</h2>
-                <p class="modal-subtitle">Новая рабочая беседа для проекта, команды или отдельного потока коммуникации.</p>
+                <h2 class="modal-title">Новый рабочий чат</h2>
+                <p class="modal-subtitle">Укажите понятное название и выберите участников.</p>
             </div>
         </div>
-        <input type="text" id="newChatName" class="auth-input" placeholder="Название беседы *">
-        <label style="font-size: 12px; color: var(--secondary); margin-top: 10px; display: block; text-align: left; font-weight: 600;">ВЫБЕРИТЕ УЧАСТНИКОВ:</label>
-        <div id="newChatUsers" style="text-align: left; max-height: 150px; overflow-y: auto; background: var(--bg); padding: 10px; border-radius: 12px; border: 1px solid var(--border); font-size: 13px; margin-bottom: 15px;"></div>
+        <label class="messenger-modal-label" for="newChatName">Название чата</label>
+        <input type="text" id="newChatName" class="auth-input" placeholder="Например: Проект «Север»">
+        <div class="messenger-modal-label">Участники</div>
+        <div id="newChatUsers" class="messenger-user-picker"></div>
         <div class="modal-actions">
             <button class="btn-secondary" style="flex:1; justify-content:center;" onclick="document.getElementById('createChatModal').style.display='none'">Отмена</button>
             <button class="btn-primary" style="flex:1; justify-content:center;" onclick="submitNewChat()">Создать чат</button>
@@ -405,7 +475,7 @@
         <div class="modal-header modal-header--stack">
             <div>
                 <h2 class="modal-title">Новое поручение</h2>
-                <p class="modal-subtitle">Поставьте задачу, задайте дедлайн, регулярность и приоритет в одном окне.</p>
+                <p class="modal-subtitle">Поставьте задачу, выберите дату выполнения, исполнителя и приоритет.</p>
             </div>
         </div>
         <div id="taskForm" class="form-grid-standard">
@@ -425,8 +495,8 @@
                 <span class="form-error" data-error-for="taskExecutor"></span>
             </label>
             <label class="form-field">
-                <span class="form-label">Дедлайн <span class="form-required">*</span></span>
-                <input type="text" id="taskDeadline" data-field="taskDeadline" class="date-picker auth-input" placeholder="дд.мм.гггг">
+                <span class="form-label">Выполнить до <span class="form-required">*</span></span>
+                <input type="date" id="taskDeadline" data-field="taskDeadline" class="auth-input" aria-label="Выполнить до">
                 <span class="form-error" data-error-for="taskDeadline"></span>
             </label>
         </div>
@@ -604,15 +674,12 @@
     </div>
     
     <script>
-        // Подгрузка списка проектов при клике на селект (Связь Документ -> Проект)
+        // Список сделок заполняется после выбора клиента в форме документа.
         document.addEventListener('DOMContentLoaded', () => {
-            const pIdSel = document.getElementById('docProjectId');
-            if(pIdSel) {
-                pIdSel.addEventListener('focus', () => {
-                    if(typeof projectsDB !== 'undefined' && pIdSel.options.length <= 1) {
-                        pIdSel.innerHTML = '<option value="0">Без привязки к сделке</option>' + 
-                            projectsDB.map(p => `<option value="${p.id}">${p.contract} - ${p.name}</option>`).join('');
-                    }
+            const dealSelect = document.getElementById('docDealId');
+            if (dealSelect) {
+                dealSelect.addEventListener('focus', () => {
+                    if (typeof refreshDocumentDealPicker === 'function') refreshDocumentDealPicker();
                 });
             }
         

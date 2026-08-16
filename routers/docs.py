@@ -2,7 +2,7 @@ import shutil, json, time, os, datetime, hashlib, re, zipfile
 import qrcode
 from fastapi import APIRouter, UploadFile, File, Form, Request
 from fastapi.responses import FileResponse
-from database import audit_log, create_notification, get_connection, is_postgres_backend, notify_entity_watchers
+from database import audit_log, create_notification, create_targeted_notifications, get_connection, is_postgres_backend, notify_entity_watchers
 from permissions import require_approved_user, has_permission
 from settings import PUBLIC_BASE_URL
 from schemas import (
@@ -352,6 +352,35 @@ def _ensure_document_task_link(cursor, document: dict, task_id: int, actor: dict
             now,
             now,
         ),
+    )
+
+
+def _sync_document_production_relation(cursor, document_id: int, production_order_id: int, actor: dict):
+    document_id = int(document_id or 0)
+    cursor.execute(
+        """
+        DELETE FROM document_relations
+        WHERE source_entity_type='document'
+          AND source_entity_id=?
+          AND target_entity_type='production_order'
+          AND relation_type='production_document'
+        """,
+        (document_id,),
+    )
+    production_order_id = int(production_order_id or 0)
+    if not document_id or production_order_id <= 0:
+        return
+    cursor.execute("SELECT id FROM production_orders WHERE id=? LIMIT 1", (production_order_id,))
+    if not cursor.fetchone():
+        return
+    cursor.execute(
+        """
+        INSERT INTO document_relations (
+            source_entity_type, source_entity_id, target_entity_type, target_entity_id,
+            relation_type, package_id, meta_json, created_by, created_at
+        ) VALUES ('document', ?, 'production_order', ?, 'production_document', 0, '{}', ?, ?)
+        """,
+        (document_id, production_order_id, _safe_text(actor.get("email")), int(time.time())),
     )
 
 
@@ -1548,6 +1577,20 @@ def get_documents(request: Request):
         rows = [dict(r) for r in c.fetchall()]
         updated = False
         for row in rows:
+            relation = c.execute(
+                """
+                SELECT target_entity_id
+                FROM document_relations
+                WHERE source_entity_type='document'
+                  AND source_entity_id=?
+                  AND target_entity_type='production_order'
+                  AND relation_type='production_document'
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (int(row.get("id") or 0),),
+            ).fetchone()
+            row["production_order_id"] = int((relation or {}).get("target_entity_id") or 0) if isinstance(relation, dict) else int((relation[0] if relation else 0) or 0)
             prev_qr_code = _safe_text(row.get("qr_code"))
             prev_qr_payload = _safe_text(row.get("qr_payload"))
             qr_state = _ensure_document_qr(c, row, request)
@@ -1577,14 +1620,15 @@ async def create_document(data: DocData, request: Request):
         c.execute(
             """
             INSERT INTO documents (
-                id, type, number, d_date, correspondent, sender_name, recipient_name, source_number, source_date,
+                id, type, document_kind_code, number, d_date, correspondent, sender_name, recipient_name, source_number, source_date,
                 delivery_method, signer_name, executor_name, subject, status, file_url, qr_code, qr_payload,
-                project_id, contract_id, object_id, parent_id, priority, resolution, resolution_author, resolution_deadline, resolution_assignee, resolution_task_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                client_id, client_source, client_source_id, deal_id, project_id, contract_id, object_id, parent_id, priority, resolution, resolution_author, resolution_deadline, resolution_assignee, resolution_task_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 doc_id,
                 data.type,
+                data.document_kind_code,
                 data.number,
                 data.d_date,
                 correspondent,
@@ -1600,6 +1644,10 @@ async def create_document(data: DocData, request: Request):
                 "",
                 qr_code_path,
                 qr_payload,
+                int(data.client_id or 0),
+                str(data.client_source or "").strip(),
+                int(data.client_source_id or 0),
+                int(data.deal_id or 0),
                 project_id,
                 contract_id,
                 object_id,
@@ -1612,13 +1660,18 @@ async def create_document(data: DocData, request: Request):
                 resolution_task_id,
             ),
         )
+        # Preserve the creator for auditing and for the mandatory first upload.
+        # A role with documents:create may attach its own initial file without
+        # receiving permission to edit every document in the company register.
+        c.execute("UPDATE documents SET registered_by=? WHERE id=?", (actor.get("email", ""), doc_id))
+        _sync_document_production_relation(c, doc_id, data.production_order_id, actor)
         _ensure_lifecycle_event(c, doc_id, "", data.status or "draft", "created", actor, "Документ создан")
         conn.commit()
     finally:
         conn.close()
     audit_log("document_created", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="document", entity_id=str(doc_id), details={"subject": data.subject, "type": data.type})
     if data.resolution and data.resolution_assignee:
-        create_notification(
+        create_targeted_notifications(
             "Новая резолюция по документу",
             f"Документ №{data.number}: {data.subject}",
             user_name=data.resolution_assignee,
@@ -1627,7 +1680,7 @@ async def create_document(data: DocData, request: Request):
             entity_id=str(doc_id),
         )
     if task_sync and task_sync["action"] == "created":
-        create_notification(
+        create_targeted_notifications(
             "Новое поручение по резолюции",
             f"По документу №{data.number} создано поручение: {data.subject}",
             user_name=task_sync["recipient_name"],
@@ -1644,7 +1697,7 @@ async def create_document(data: DocData, request: Request):
 @router.post("/api/documents/{doc_id}/upload")
 async def upload_doc_file(doc_id: int, request: Request, file: UploadFile = File(...), comment: str = Form(""), make_current: int = Form(1)):
     actor = require_approved_user(request)
-    if not actor or not has_permission(actor, "documents", "update"):
+    if not actor:
         return {"error": "forbidden"}
     conn = get_connection(row_factory=True)
     try:
@@ -1653,6 +1706,18 @@ async def upload_doc_file(doc_id: int, request: Request, file: UploadFile = File
         document = _row_dict(c.fetchone())
         if not document:
             return {"error": "document_not_found"}
+        existing_revision = c.execute(
+            "SELECT id FROM document_file_revisions WHERE document_id=? LIMIT 1",
+            (doc_id,),
+        ).fetchone()
+        is_initial_creator_upload = (
+            not existing_revision
+            and not _safe_text(document.get("file_url"))
+            and has_permission(actor, "documents", "create")
+            and _safe_text(document.get("registered_by")).lower() == _safe_text(actor.get("email")).lower()
+        )
+        if not has_permission(actor, "documents", "update") and not is_initial_creator_upload:
+            return {"error": "forbidden"}
         access_ok, _, _, _, _ = _document_scope_access(conn, actor, doc_id)
         if not access_ok:
             return {"error": "forbidden"}
@@ -1691,12 +1756,13 @@ async def update_document(doc_id: int, data: DocUpdate, request: Request):
         c.execute(
             """
             UPDATE documents
-            SET type=?, number=?, d_date=?, correspondent=?, sender_name=?, recipient_name=?, source_number=?, source_date=?, delivery_method=?, signer_name=?, executor_name=?, subject=?, status=?, project_id=?, contract_id=?, object_id=?, parent_id=?, priority=?,
+            SET type=?, document_kind_code=?, number=?, d_date=?, correspondent=?, sender_name=?, recipient_name=?, source_number=?, source_date=?, delivery_method=?, signer_name=?, executor_name=?, subject=?, status=?, client_id=?, client_source=?, client_source_id=?, deal_id=?, project_id=?, contract_id=?, object_id=?, parent_id=?, priority=?,
                 resolution=?, resolution_author=?, resolution_deadline=?, resolution_assignee=?, resolution_task_id=?
             WHERE id=?
             """,
             (
                 data.type,
+                data.document_kind_code,
                 data.number,
                 data.d_date,
                 correspondent,
@@ -1709,6 +1775,10 @@ async def update_document(doc_id: int, data: DocUpdate, request: Request):
                 data.executor_name,
                 data.subject,
                 data.status,
+                int(data.client_id or 0),
+                str(data.client_source or "").strip(),
+                int(data.client_source_id or 0),
+                int(data.deal_id or 0),
                 project_id,
                 contract_id,
                 object_id,
@@ -1739,6 +1809,7 @@ async def update_document(doc_id: int, data: DocUpdate, request: Request):
                 resolution_task_id,
                 actor,
             )
+        _sync_document_production_relation(c, doc_id, data.production_order_id, actor)
         if previous and int(previous.get("workflow_started_at") or 0):
             sync_document_workflow(conn, int(doc_id or 0), actor, "Обновление документа в workflow", "workflow_document_sync")
         conn.commit()
@@ -1766,7 +1837,7 @@ async def update_document(doc_id: int, data: DocUpdate, request: Request):
             category="document",
         )
     if should_notify_resolution:
-        create_notification(
+        create_targeted_notifications(
             "Новая резолюция по документу",
             f"Документ №{data.number}: {data.subject}",
             user_name=data.resolution_assignee,
@@ -1775,7 +1846,7 @@ async def update_document(doc_id: int, data: DocUpdate, request: Request):
             entity_id=str(doc_id),
         )
     if task_sync and should_notify_resolution:
-        create_notification(
+        create_targeted_notifications(
             "Поручение по резолюции обновлено" if task_sync["action"] == "updated" else "Новое поручение по резолюции",
             f"По документу №{data.number} назначено поручение: {data.subject}",
             user_name=task_sync["recipient_name"],
@@ -3595,7 +3666,15 @@ def _approval_notify_users(title: str, message: str, approval_id: int, users: li
     for user_name in users:
         if not _safe_text(user_name):
             continue
-        create_notification(title, message, user_name=_safe_text(user_name).split(" (И.О.")[0], category="approval", entity_type="approval", entity_id=str(approval_id))
+        create_targeted_notifications(
+            title,
+            message,
+            user_name=_safe_text(user_name).split(" (И.О.")[0],
+            role=_safe_text(user_name),
+            category="approval",
+            entity_type="approval",
+            entity_id=str(approval_id),
+        )
 
 
 @router.get("/api/approvals")
@@ -4026,6 +4105,22 @@ async def apply_approval_action(a_id: int, data: ApprovalActionData, request: Re
     finally:
         conn.close()
     audit_log("approval_action_applied", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="approval", entity_id=str(a_id), details={"action": action_name, "status": payload.get("status", ""), "current_stage_key": payload.get("current_stage_key", "")})
+    if payload.get("status") in {"completed", "rejected", "rework"}:
+        result_label = {
+            "completed": "согласовано",
+            "rejected": "отклонено",
+            "rework": "возвращено на доработку",
+        }.get(payload.get("status"), "обновлено")
+        create_targeted_notifications(
+            "Результат согласования",
+            f"Согласование «{row.get('title', '')}» {result_label}.",
+            user_name=row.get("author", ""),
+            category="approval",
+            entity_type="approval",
+            entity_id=str(a_id),
+            exclude_email=actor.get("email", ""),
+            fallback_to_director=False,
+        )
     await manager.broadcast({"type": "approvals"})
     await manager.broadcast({"type": "notifications"})
     return {"status": "success", **payload}

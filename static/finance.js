@@ -129,6 +129,8 @@ function financeStatusLabel(status) {
         partially_paid: 'Частично оплачено',
         paid: 'Оплачено',
         overdue: 'Просрочено',
+        approved: 'Согласовано',
+        draft: 'Черновик',
     };
     return map[status] || status || 'Без статуса';
 }
@@ -445,6 +447,28 @@ function resetFinanceForm() {
     if (typeof clearFormDraft === 'function') clearFormDraft('finance_payment');
 }
 
+window.openFinanceOperationForm = function() {
+    const panel = document.getElementById('financeClosePeriodSection');
+    if (!panel) return;
+    panel.classList.add('is-open');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+window.closeFinanceOperationForm = function() {
+    document.getElementById('financeClosePeriodSection')?.classList.remove('is-open');
+};
+
+window.startFinanceOperation = function() {
+    resetFinanceForm();
+    openFinanceOperationForm();
+    window.setTimeout(() => document.getElementById('financeTitle')?.focus(), 250);
+};
+
+window.cancelFinanceOperation = function() {
+    resetFinanceForm();
+    closeFinanceOperationForm();
+};
+
 async function editFinancePayment(paymentId) {
     const payment = financePaymentsDB.find(item => item.id === paymentId);
     if (!payment) return;
@@ -469,7 +493,94 @@ async function editFinancePayment(paymentId) {
     document.getElementById('financeStatus').value = payment.status || 'planned';
     document.getElementById('financeComment').value = payment.comment || '';
     await applyFinanceFieldPermissions();
+    openFinanceOperationForm();
 }
+
+function financePaymentCardField(label, value, options = {}) {
+    const safeValue = String(value || '').trim() || 'Не указано';
+    return `
+        <div class="finance-payment-card__field${options.wide ? ' finance-payment-card__field--wide' : ''}">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(safeValue)}</strong>
+        </div>
+    `;
+}
+
+window.openFinancePaymentCard = function(paymentId) {
+    const payment = financePaymentsDB.find(item => Number(item.id) === Number(paymentId));
+    const modal = document.getElementById('genericModal');
+    const title = document.getElementById('genModalTitle');
+    const body = document.getElementById('genModalBody');
+    const footer = document.getElementById('genModalFooter');
+    if (!payment || !modal || !title || !body || !footer) return;
+
+    const categoryLabels = {
+        payment: 'Оплата',
+        invoice: 'Счёт на оплату',
+        advance: 'Аванс',
+        expense: 'Расход',
+        act: 'Акт / закрытие',
+    };
+    const sourceLabel = payment.source_document_type
+        ? financeTranslateLabel(payment.source_document_type, payment.source_document_type)
+        : 'Не указан';
+    const canUpdate = (currentPermissions.finance || []).includes('update');
+    const isPaid = payment.status === 'paid';
+
+    title.innerText = payment.title || `Финансовая операция №${payment.id}`;
+    body.innerHTML = `
+        <article class="finance-payment-card">
+            <div class="finance-payment-card__hero">
+                <div>
+                    <span>${payment.kind === 'incoming' ? 'Поступление денег' : 'Выплата денег'}</span>
+                    <strong>${formatMoney(payment.amount, payment.currency)}</strong>
+                </div>
+                <span class="status-badge ${financeStatusClass(payment.status)}">${escapeHtml(financeStatusLabel(payment.status))}</span>
+            </div>
+            <section class="finance-payment-card__section">
+                <h3>Все данные операции</h3>
+                <div class="finance-payment-card__grid">
+                    ${financePaymentCardField('Название или номер счёта', payment.title, { wide: true })}
+                    ${financePaymentCardField('Проект', financeDisplayName(payment.project_contract || payment.project_name, 'Без проекта'))}
+                    ${financePaymentCardField('Договор', payment.contract_number || (Number(payment.contract_id || 0) > 0 ? `Договор #${Number(payment.contract_id)}` : 'Без договора'))}
+                    ${financePaymentCardField('Клиент или поставщик', payment.client_name)}
+                    ${financePaymentCardField('Тип движения', payment.kind === 'incoming' ? 'Поступление денег' : 'Выплата денег')}
+                    ${financePaymentCardField('Что фиксируем', categoryLabels[payment.category] || payment.category)}
+                    ${financePaymentCardField('Сумма', formatMoney(payment.amount, payment.currency))}
+                    ${financePaymentCardField('Валюта', payment.currency || 'RUB')}
+                    ${financePaymentCardField('Юридическое лицо', payment.legal_entity_name)}
+                    ${financePaymentCardField('Подразделение', payment.business_unit_name)}
+                    ${financePaymentCardField('Статья ДДС', payment.treasury_article_name)}
+                    ${financePaymentCardField('Ставка НДС', payment.vat_rate_name)}
+                    ${financePaymentCardField('Оплатить до', payment.due_date)}
+                    ${financePaymentCardField('Дата оплаты', payment.paid_date)}
+                    ${financePaymentCardField('Источник документа', sourceLabel)}
+                    ${financePaymentCardField('ID документа-источника', payment.source_document_id)}
+                    ${financePaymentCardField('Статус', financeStatusLabel(payment.status))}
+                    ${financePaymentCardField('Комментарий (необязательно)', payment.comment || 'Комментарий не добавлен.', { wide: true })}
+                </div>
+            </section>
+        </article>
+    `;
+    footer.innerHTML = `
+        ${canUpdate && !isPaid ? `<button class="btn-success" type="button" onclick="markFinancePaymentPaidFromCard(${Number(payment.id)})">Оплачено</button>` : ''}
+        ${Number(payment.contract_id || 0) > 0 ? `<button class="btn-secondary" type="button" onclick="closeGenericModal(); openContractCard(${Number(payment.contract_id)})">Открыть договор</button>` : ''}
+        ${canUpdate ? `<button class="btn-primary" type="button" onclick="editFinancePaymentFromCard(${Number(payment.id)})">Редактировать</button>` : ''}
+        <button class="btn-secondary" type="button" id="genClose">Закрыть</button>
+    `;
+    document.getElementById('genClose').onclick = closeGenericModal;
+    modal.style.display = 'flex';
+};
+
+window.editFinancePaymentFromCard = function(paymentId) {
+    closeGenericModal();
+    editFinancePayment(paymentId);
+};
+
+window.markFinancePaymentPaidFromCard = async function(paymentId) {
+    closeGenericModal();
+    await markFinancePaymentPaid(paymentId);
+};
 
 function syncFinanceArticleOptions(preferredId = 0) {
     const articleSelect = document.getElementById('financeTreasuryArticleId');
@@ -533,7 +644,7 @@ function pruneSelectedFinancePayments() {
 }
 
 function getVisibleFinancePayments() {
-    const searchInput = document.getElementById('searchInput');
+    const searchInput = document.getElementById('financeRegistrySearch');
     const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
     if (!query) return financePaymentsDB.slice();
     return financePaymentsDB.filter(payment => {
@@ -548,6 +659,19 @@ function getVisibleFinancePayments() {
         return haystack.includes(query);
     });
 }
+
+window.clearFinanceRegistrySearch = function() {
+    const input = document.getElementById('financeRegistrySearch');
+    if (input) input.value = '';
+    renderFinancePayments();
+};
+
+window.toggleFinanceExtraFields = function(button) {
+    const form = document.getElementById('financePaymentForm');
+    if (!form) return;
+    const isOpen = form.classList.toggle('finance-show-extra');
+    if (button) button.textContent = isOpen ? 'Скрыть дополнительные реквизиты' : 'Дополнительные реквизиты';
+};
 
 function getSelectedFinanceRows() {
     pruneSelectedFinancePayments();
@@ -895,6 +1019,7 @@ async function saveFinancePayment() {
     }
 
     resetFinanceForm();
+    closeFinanceOperationForm();
     financeFilter = 'all';
     await renderFinance();
     if (currentClient360Id) await loadClient360(currentClient360Id);
@@ -903,6 +1028,7 @@ async function saveFinancePayment() {
 }
 
 window.presetFinanceFlow = function(kind = 'incoming') {
+    openFinanceOperationForm();
     const kindEl = document.getElementById('financeKind');
     const categoryEl = document.getElementById('financeCategory');
     const statusEl = document.getElementById('financeStatus');
@@ -917,34 +1043,28 @@ window.presetFinanceFlow = function(kind = 'incoming') {
     if (typeof focusFieldById === 'function') focusFieldById('financeTitle');
 };
 
+window.presetFinanceInvoice = function() {
+    resetFinanceForm();
+    openFinanceOperationForm();
+    const kindEl = document.getElementById('financeKind');
+    const categoryEl = document.getElementById('financeCategory');
+    const statusEl = document.getElementById('financeStatus');
+    const titleEl = document.getElementById('financeTitle');
+    if (kindEl) kindEl.value = 'incoming';
+    if (categoryEl) categoryEl.value = 'invoice';
+    if (statusEl) statusEl.value = 'planned';
+    if (titleEl) titleEl.value = 'Ожидаемая оплата по счёту';
+    syncFinanceArticleOptions();
+    window.setTimeout(() => document.getElementById('financeClientId')?.focus(), 250);
+};
+
 function setFinanceFilter(filter) {
     financeFilter = filter;
     renderFinance();
 }
 
 function registerFinanceSavedFilters() {
-    if (typeof registerWorkbenchSavedFilterScope !== 'function') return;
-    registerWorkbenchSavedFilterScope('finance', {
-        mountId: 'financeSavedFiltersMount',
-        defaultTitle: financeFilter === 'overdue' ? 'Мои просроченные оплаты' : 'Мой фильтр финансов',
-        getPayload: () => ({
-            financeFilter,
-            query: document.getElementById('searchInput')?.value || '',
-        }),
-        applyPayload: payload => {
-            financeFilter = payload.financeFilter || 'all';
-            const searchInput = document.getElementById('searchInput');
-            if (searchInput) searchInput.value = payload.query || '';
-            renderFinance();
-        },
-        presets: [
-            { id: 'financeFilterAllBtn', key: 'all', label: 'Все', payload: () => ({ financeFilter: 'all', query: document.getElementById('searchInput')?.value || '' }) },
-            { id: 'financeFilterPlannedBtn', key: 'planned', label: 'План', payload: () => ({ financeFilter: 'planned', query: document.getElementById('searchInput')?.value || '' }) },
-            { id: 'financeFilterOverdueBtn', key: 'overdue', label: 'Просрочено', payload: () => ({ financeFilter: 'overdue', query: document.getElementById('searchInput')?.value || '' }) },
-            { id: 'financeFilterPaidBtn', key: 'paid', label: 'Оплачено', payload: () => ({ financeFilter: 'paid', query: document.getElementById('searchInput')?.value || '' }) },
-        ],
-        updateState: setFinanceFilterButtonState,
-    });
+    setFinanceFilterButtonState();
 }
 
 function renderFinanceErpMetrics() {
@@ -1461,16 +1581,19 @@ async function renderFinance() {
     const metricsGrid = document.getElementById('financeMetricsGrid');
     const tbody = document.getElementById('financePaymentsTable');
     if (!metricsGrid || !tbody) return;
+    const canCreateFinance = (currentPermissions.finance || []).includes('create');
+    view.querySelectorAll('.finance-create-trigger').forEach(button => {
+        button.hidden = !canCreateFinance;
+    });
     registerFinanceSavedFilters();
     setFinanceFilterButtonState();
 
     const metrics = financeSummaryDB?.metrics || {};
     renderFinanceRoleWorkbench(metrics);
     metricsGrid.innerHTML = `
-        <div class="metric-card"><div class="metric-title">Открытые поступления</div><div class="metric-value">${formatMoney(metrics.incoming_open || 0)}</div></div>
-        <div class="metric-card warning"><div class="metric-title">Открытые выплаты</div><div class="metric-value">${formatMoney(metrics.outgoing_open || 0)}</div></div>
-        <div class="metric-card success"><div class="metric-title">Просроченная дебиторка</div><div class="metric-value">${formatMoney(metrics.overdue_receivables || 0)}</div></div>
-        <div class="metric-card"><div class="metric-title">Плановый кассовый разрыв</div><div class="metric-value">${formatMoney(metrics.cash_gap || 0)}</div></div>
+        <div class="metric-card"><div class="metric-title">Ожидаем от клиентов</div><div class="metric-value">${formatMoney(metrics.incoming_open || 0)}</div></div>
+        <div class="metric-card"><div class="metric-title">Нужно оплатить</div><div class="metric-value">${formatMoney(metrics.outgoing_open || 0)}</div></div>
+        <div class="metric-card warning"><div class="metric-title">Просрочено</div><div class="metric-value">${formatMoney(metrics.overdue_receivables || 0)}</div></div>
     `;
     renderFinanceErpMetrics();
     renderFinanceAnalytics();
@@ -1487,18 +1610,19 @@ async function renderFinance() {
     if (!visiblePayments.length) {
         tbody.innerHTML = typeof renderTableEmptyRow === 'function'
             ? renderTableEmptyRow(
-                8,
+                6,
                 'Финансовых операций пока нет.',
         'Создай первую операцию, чтобы увидеть платёжный календарь в работе.',
                 `<button class="btn-primary" onclick="presetFinanceFlow('incoming')">Поступление</button><button class="btn-secondary" onclick="presetFinanceFlow('outgoing')">Оплата</button>`
             )
-            : '<tr><td colspan="8" class="nsi-empty-row">Финансовых операций пока нет.</td></tr>';
+            : '<tr><td colspan="6" class="nsi-empty-row">Финансовых операций пока нет.</td></tr>';
         return;
     }
     const renderRows = () => visiblePayments.map(payment => {
         const actionButtons = [];
+        const extraActionButtons = [];
         if (typeof renderEntityFavoriteButton === 'function') {
-            actionButtons.push(renderEntityFavoriteButton(
+            extraActionButtons.push(renderEntityFavoriteButton(
                 'finance_payment',
                 payment.id,
                 payment.title || `Платёж #${payment.id}`,
@@ -1508,7 +1632,7 @@ async function renderFinance() {
             ));
         }
         if (typeof renderEntityWatchButton === 'function') {
-            actionButtons.push(renderEntityWatchButton(
+            extraActionButtons.push(renderEntityWatchButton(
                 'finance_payment',
                 payment.id,
                 payment.title || `Платёж #${payment.id}`,
@@ -1518,51 +1642,51 @@ async function renderFinance() {
                 'paid'
             ));
         }
-        actionButtons.push(`<button class="btn-secondary" style="padding:4px 8px; font-size:11px; min-height:unset;" onclick="openEntityCard('finance_payment', ${payment.id})">Карточка</button>`);
-        actionButtons.push(`<button class="btn-secondary" style="padding:4px 8px; font-size:11px; min-height:unset;" onclick="editFinancePayment(${payment.id})">Редактировать</button>`);
+        actionButtons.push(`<button class="btn-secondary" onclick="openFinancePaymentCard(${payment.id})">Открыть</button>`);
+        if (payment.contract_id) {
+            extraActionButtons.push(`<button class="btn-secondary" onclick="openContractCard(${Number(payment.contract_id)})">Открыть договор</button>`);
+        }
         if (payment.project_id) {
-            actionButtons.push(`<button class="btn-secondary" style="padding:4px 8px; font-size:11px; min-height:unset;" onclick="openFinanceProject(${payment.project_id})">Проект</button>`);
+            extraActionButtons.push(`<button class="btn-secondary" onclick="openFinanceProject(${payment.project_id})">Открыть проект</button>`);
         }
         if (currentPermissions.finance && currentPermissions.finance.includes('create')) {
-            actionButtons.push(`<button class="btn-secondary" style="padding:4px 8px; font-size:11px; min-height:unset;" onclick="duplicateFinancePayment(${payment.id})">Дублировать</button>`);
+            extraActionButtons.push(`<button class="btn-secondary" onclick="duplicateFinancePayment(${payment.id})">Создать копию</button>`);
         }
         if (currentPermissions.finance && currentPermissions.finance.includes('post')) {
-            actionButtons.push(`<button class="btn-secondary" style="padding:4px 8px; font-size:11px; min-height:unset;" onclick="postFinancePayment(${payment.id})">Провести</button>`);
+            extraActionButtons.push(`<button class="btn-secondary" onclick="postFinancePayment(${payment.id})">Провести</button>`);
         }
         if (currentPermissions.finance && currentPermissions.finance.includes('update') && payment.status !== 'paid') {
-            actionButtons.push(`<button class="btn-success" style="padding:4px 8px; font-size:11px; min-height:unset;" onclick="markFinancePaymentPaid(${payment.id})">Оплачено</button>`);
+            actionButtons.push(`<button class="btn-success" onclick="markFinancePaymentPaid(${payment.id})">Оплачено</button>`);
         }
         if (currentPermissions.finance && currentPermissions.finance.includes('update') && payment.status !== 'overdue' && payment.status !== 'paid') {
-            actionButtons.push(`<button class="btn-secondary" style="padding:4px 8px; font-size:11px; min-height:unset;" onclick="markFinancePaymentOverdue(${payment.id})">Просрочить</button>`);
+            extraActionButtons.push(`<button class="btn-secondary" onclick="markFinancePaymentOverdue(${payment.id})">Отметить просрочку</button>`);
         }
         if (currentPermissions.finance && currentPermissions.finance.includes('sign_edo')) {
-            actionButtons.push(`<button class="btn-secondary" style="padding:4px 8px; font-size:11px; min-height:unset;" onclick="signFinancePaymentEdo(${payment.id})">ЭДО</button>`);
+            extraActionButtons.push(`<button class="btn-secondary" onclick="signFinancePaymentEdo(${payment.id})">Подписать в ЭДО</button>`);
         }
         if (currentPermissions.finance && currentPermissions.finance.includes('delete')) {
-            actionButtons.push(`<button class="btn-danger" style="padding:4px 8px; font-size:11px; min-height:unset;" onclick="deleteFinancePayment(${payment.id})">Удалить</button>`);
+            extraActionButtons.push(`<button class="btn-danger" onclick="deleteFinancePayment(${payment.id})">Удалить</button>`);
         }
+        const extraActions = '';
         return `
         <tr data-finance-id="${payment.id}" class="${typeof isWorkflowFocused === 'function' && isWorkflowFocused('finance', payment.id) ? 'workflow-row-highlight' : ''}">
-            <td><input type="checkbox" ${selectedFinancePayments.has(Number(payment.id)) ? 'checked' : ''} onchange="toggleFinanceSelection(${payment.id}, this.checked)"></td>
             <td>
                 <div class="finance-row-title">${payment.title || 'Операция'}</div>
-                <div class="finance-row-meta">${financeTranslateLabel(payment.category || 'payment', 'Платёж')} · ${payment.comment || 'Без комментария'}</div>
-                <div class="finance-row-meta">${payment.legal_entity_name || 'Без юрлица'} · ${payment.business_unit_name || 'Без подразделения'} · ${payment.treasury_article_name || 'Без статьи ДДС'}</div>
+                <div class="finance-row-meta">${financeTranslateLabel(payment.category || 'payment', 'Платёж')} · ${payment.kind === 'incoming' ? 'Поступление' : 'Выплата'}</div>
             </td>
             <td>
-                <div class="finance-row-title">${financeDisplayName(payment.project_contract || payment.project_name, 'Без проекта')}</div>
-                <div class="finance-row-meta">${payment.client_name || 'Без контрагента'} · НДС ${payment.vat_rate_name || 'не задан'}</div>
+                <div class="finance-row-title">${payment.client_name || 'Контрагент не указан'}</div>
+                <div class="finance-row-meta">${financeDisplayName(payment.project_contract || payment.project_name, 'Без проекта')}</div>
             </td>
-            <td>${payment.kind === 'incoming' ? 'Входящий' : 'Исходящий'}</td>
-            <td>${formatMoney(payment.amount, payment.currency)}</td>
-            <td>${payment.due_date || '—'}<div class="finance-row-meta">${payment.paid_date ? `Факт: ${payment.paid_date}` : 'Ожидается'} · 1С ${financeTranslateLabel(payment.exchange_state || 'draft', 'Черновик')}</div></td>
+            <td class="finance-row-amount">${formatMoney(payment.amount, payment.currency)}</td>
+            <td>${payment.due_date || 'Без даты'}<div class="finance-row-meta">${payment.paid_date ? `Оплачено ${payment.paid_date}` : 'Ожидаем оплату'}</div></td>
             <td><span class="status-badge ${financeStatusClass(payment.status)}">${financeStatusLabel(payment.status)}</span></td>
-            <td><div style="display:flex; gap:6px; flex-wrap:wrap;">${actionButtons.join('')}</div></td>
+            <td><div class="finance-row-actions">${actionButtons.join('')}${extraActions}</div></td>
         </tr>
     `;
     }).join('');
     if (typeof renderDeferredHtml === 'function') {
-        renderDeferredHtml(tbody, renderRows, { size: visiblePayments.length, threshold: 90, colspan: 8, loadingMessage: 'Загружаю платёжный календарь...' });
+        renderDeferredHtml(tbody, renderRows, { size: visiblePayments.length, threshold: 90, colspan: 6, loadingMessage: 'Загружаю операции...' });
     } else {
         tbody.innerHTML = renderRows();
     }

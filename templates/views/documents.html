@@ -1,99 +1,99 @@
-<!-- ========================================================================
-     Канцелярия (Documents) — Phase 1 design-system refactor.
-     Layout: view-header → workbench hints → tabs → toolbar → file list (Korda DS).
-     No inline styles; spacing + visuals come from .krd-* utilities in style.css.
-     ======================================================================== -->
-<div id="documentsView" class="view-page">
-    <!-- Page header -->
+<div id="documentsView" class="view-page documents-page" style="display:none;">
     <header class="view-header">
         <div class="view-heading">
-            <span class="view-eyebrow">Документы</span>
-            <h1 class="view-title">Канцелярия</h1>
-            <p class="view-subtitle">Единый реестр входящих, исходящих и внутренних документов с версиями файлов.</p>
+            <span class="view-eyebrow">Канцелярия компании</span>
+            <h1 class="view-title">Общий архив документов</h1>
+            <p class="view-subtitle">Единое место для официальных документов компании. Доступ к записям определяется ролью сотрудника.</p>
         </div>
         <div class="view-actions">
-            <button class="krd-btn krd-btn--primary" onclick="openDocumentModalWithPreset()">
-                <svg class="krd-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                Зарегистрировать документ
+            <button class="btn-primary" type="button" onclick="openDocumentModalWithPreset()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Добавить документ
             </button>
         </div>
     </header>
 
-    <!-- Quick-start workbench (kept for UX continuity) -->
-    <section class="workbench-strip">
-        <article class="workbench-card">
-            <div class="workbench-card-title">Работа с документом</div>
-            <div class="workbench-card-text">Выбери вкладку, зарегистрируй документ и дальше веди его уже в карточке и статусе.</div>
-        </article>
-        <article class="workbench-card">
-            <div class="workbench-card-title">Массовые действия</div>
-            <div class="workbench-card-text">Статусы, архив и выгрузка делаются ниже одной панелью без лишних переходов.</div>
-        </article>
-        <article class="workbench-card">
-            <div class="workbench-card-title">Быстро</div>
-            <div class="workbench-card-actions">
-                <button class="krd-btn krd-btn--primary krd-btn--sm" onclick="openDocumentModalWithPreset({ type: 'incoming' })">Входящий</button>
-                <button class="krd-btn krd-btn--outline krd-btn--sm" onclick="openDocumentModalWithPreset({ type: 'outgoing' })">Исходящий</button>
-                <button class="krd-btn krd-btn--outline krd-btn--sm" onclick="openDocumentModalWithPreset({ type: 'internal_order' })">Внутренний</button>
-            </div>
-        </article>
+    <section class="documents-storage-guide" aria-label="Что хранится в канцелярии">
+        <button class="documents-storage-card documents-storage-card--incoming" type="button" onclick="switchDocTab('incoming')">
+            <span class="documents-storage-card__number">01</span>
+            <strong>Получили от клиента или организации</strong>
+            <small>Письма, запросы, претензии, акты и другие документы, пришедшие в компанию.</small>
+            <span class="documents-storage-card__link">Открыть входящие</span>
+        </button>
+        <button class="documents-storage-card documents-storage-card--outgoing" type="button" onclick="switchDocTab('outgoing')">
+            <span class="documents-storage-card__number">02</span>
+            <strong>Отправили клиенту или партнёру</strong>
+            <small>Ответы, официальные письма, коммерческие предложения и отправленные комплекты.</small>
+            <span class="documents-storage-card__link">Открыть исходящие</span>
+        </button>
+        <button class="documents-storage-card documents-storage-card--internal" type="button" onclick="switchDocTab('internal')">
+            <span class="documents-storage-card__number">03</span>
+            <strong>Используется внутри компании</strong>
+            <small>Приказы, служебные записки, регламенты и инструкции для сотрудников.</small>
+            <span class="documents-storage-card__link">Открыть внутренние</span>
+        </button>
     </section>
 
-    <!-- Saved filters -->
-    <div id="documentsSavedFiltersMount" class="view-actions"></div>
+    <section class="documents-control-panel">
+        <div class="documents-registry-search">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
+            <input id="documentRegistrySearch" class="auth-input" type="search" placeholder="Найти по номеру, названию, клиенту или виду документа" aria-label="Поиск документов" autocomplete="off" oninput="renderDocuments()">
+            <button class="krd-btn krd-btn--ghost krd-btn--sm" type="button" onclick="clearDocumentRegistrySearch()">Сбросить</button>
+        </div>
+        <nav class="krd-tablist documents-tabs" aria-label="Типы документов">
+            <button class="krd-tab is-active" id="tabDocIncoming" role="tab" aria-selected="true" onclick="switchDocTab('incoming')">Входящие документы</button>
+            <button class="krd-tab" id="tabDocOutgoing" role="tab" aria-selected="false" onclick="switchDocTab('outgoing')">Исходящие документы</button>
+            <button class="krd-tab" id="tabDocInternal" role="tab" aria-selected="false" onclick="switchDocTab('internal')">Документы компании</button>
+            <button class="krd-tab" id="tabDocDrafts" role="tab" aria-selected="false" onclick="switchDocTab('drafts')">Не закончено</button>
+        </nav>
+        <details class="documents-filter-more">
+            <summary>Фильтры</summary>
+            <div id="documentsSavedFiltersMount" class="view-actions documents-filter-actions"></div>
+        </details>
+    </section>
 
-    <!-- Operational counters -->
     <div id="documentsOpsCounters" class="metrics-grid documents-ops-counters"></div>
 
-    <!-- Type tabs -->
-    <nav class="krd-tablist" aria-label="Типы документов">
-        <button class="krd-tab is-active" id="tabDocIncoming" role="tab" aria-selected="true" onclick="switchDocTab('incoming')">Входящие</button>
-        <button class="krd-tab" id="tabDocOutgoing" role="tab" aria-selected="false" onclick="switchDocTab('outgoing')">Исходящие</button>
-        <button class="krd-tab" id="tabDocInternal" role="tab" aria-selected="false" onclick="switchDocTab('internal')">Внутренние (приказы)</button>
-        <button class="krd-tab" id="tabDocDrafts" role="tab" aria-selected="false" onclick="switchDocTab('drafts')">Черновики</button>
-    </nav>
-
-    <!-- Bulk actions toolbar -->
-    <section class="krd-toolbar" aria-label="Массовые действия">
-        <div class="krd-toolbar__info" id="documentsBulkSummary">Выделение: 0 документов</div>
+    <section class="krd-toolbar documents-bulk-toolbar" id="documentsBulkToolbar" aria-label="Действия с выбранными документами" hidden>
+        <div class="krd-toolbar__info" id="documentsBulkSummary">Выбрано: 0</div>
         <div class="krd-toolbar__actions">
-            <button id="documentsBulkSelectBtn" class="krd-btn krd-btn--ghost krd-btn--sm" onclick="toggleAllDocumentsOnPage()">Выделить видимые</button>
-            <button id="documentsBulkRegisterBtn" class="krd-btn krd-btn--outline krd-btn--sm" onclick="bulkUpdateDocumentsStatus('registered')">Зарегистрировать</button>
-            <button id="documentsBulkArchiveBtn" class="krd-btn krd-btn--outline krd-btn--sm" onclick="bulkUpdateDocumentsStatus('archived')">В архив</button>
-            <button id="documentsBulkExportBtn" class="krd-btn krd-btn--outline krd-btn--sm" onclick="exportSelectedDocuments()">Экспорт</button>
-            <button id="documentsBulkDeleteBtn" class="krd-btn krd-btn--danger-ghost krd-btn--sm" onclick="bulkDeleteDocuments()">Удалить</button>
-            <button id="documentsBulkClearBtn" class="krd-btn krd-btn--ghost krd-btn--sm" onclick="clearSelectedDocuments()">Снять выделение</button>
+            <button id="documentsBulkRegisterBtn" class="btn-secondary btn-compact" type="button" onclick="bulkUpdateDocumentsStatus('registered')">Зарегистрировать</button>
+            <button id="documentsBulkArchiveBtn" class="btn-secondary btn-compact" type="button" onclick="bulkUpdateDocumentsStatus('archived')">Перенести в архив</button>
+            <button id="documentsBulkExportBtn" class="btn-secondary btn-compact" type="button" onclick="exportSelectedDocuments()">Скачать список</button>
+            <button id="documentsBulkDeleteBtn" class="btn-danger btn-compact" type="button" onclick="bulkDeleteDocuments()">Удалить</button>
+            <button id="documentsBulkClearBtn" class="btn-secondary btn-compact" type="button" onclick="clearSelectedDocuments()">Отмена</button>
         </div>
     </section>
 
-    <!-- Document packages mount -->
-    <div id="documentPackagesMount"></div>
-    <div id="tenderDirectorMount"></div>
-    <div id="receptionDirectorMount"></div>
-
-    <!-- Main document list (div-based, rendered by renderDocuments()) -->
-    <div class="krd-card krd-card--flush">
+    <section class="krd-card krd-card--flush documents-registry-card">
         <header class="krd-card__head">
             <div>
-                <h3 class="krd-card__title">Реестр документов</h3>
-                <p class="krd-card__subtitle">Плотный журнал корреспонденции: регистрация, маршрут, исполнитель, срок ответа и быстрые действия прямо из строки.</p>
+                <h2 class="krd-card__title" id="documentsRegistryTitle">Входящие документы</h2>
+                <p class="krd-card__subtitle" id="documentsRegistryHint">Всё, что компания получила от клиентов, поставщиков и организаций.</p>
             </div>
-            <label class="krd-hstack krd-hstack--sm documents-select-all-label">
+            <label class="documents-select-all-label">
                 <input id="documentsSelectAllCheckbox" type="checkbox" onchange="toggleAllDocumentsOnPage(this.checked)">
-                Выделить всё
+                <span>Выбрать документы</span>
             </label>
         </header>
         <div class="documents-registry-head">
-            <div>Документ и регистрация</div>
-            <div>Маршрут и связи</div>
-            <div>Срок и контроль</div>
-            <div>Исполнитель</div>
+            <div>Документ</div>
+            <div>От кого / кому</div>
+            <div>Дата и срок ответа</div>
+            <div>Ответственный</div>
             <div>Статус</div>
             <div>Действия</div>
         </div>
         <div id="documentsListTable" class="krd-file-list krd-card__body--flush"></div>
-    </div>
+    </section>
 
-    <!-- Deep mount -->
-    <div id="docflowPlusMount"></div>
+    <details class="documents-more-tools">
+        <summary>Инструменты канцелярии и тендеров</summary>
+        <div class="documents-more-tools__body">
+            <div id="documentPackagesMount"></div>
+            <div id="tenderDirectorMount"></div>
+            <div id="receptionDirectorMount"></div>
+            <div id="docflowPlusMount"></div>
+        </div>
+    </details>
 </div>

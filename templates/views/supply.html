@@ -1,30 +1,32 @@
 <div id="supplyView" class="view-page" style="display: none;">
-    <div class="view-header">
+    <div class="view-header supply-page-header">
         <div class="view-heading">
-            <span class="view-eyebrow">Снабжение</span>
+            <span class="view-eyebrow">Материалы</span>
             <h1 class="view-title">Склад и закупки</h1>
-            <p class="view-subtitle">Единое рабочее место для закупок, резервов, реестра поставок и складского контроля.</p>
+            <p class="view-subtitle">Запросите материал, оформите закупку или проверьте, что уже заказано и зарезервировано.</p>
         </div>
     </div>
 
-    <section class="surface-card surface-card--padded supply-workspace-card">
+    <section class="surface-card supply-workspace-card">
         <div class="supply-workspace-hero">
             <div class="supply-workspace-copy">
-                <h2 class="section-title">Рабочее место снабжения</h2>
-                <p class="section-subtitle">Переключай режим сверху: оформляй закупку, ставь резерв под проект, проверяй реестр и следи за отклонениями без длинной прокрутки страницы.</p>
+                <h2 class="section-title">Что нужно сделать?</h2>
+                <p class="section-subtitle">Выберите одно действие. Система покажет только нужные для него поля.</p>
             </div>
-            <div class="view-switcher supply-quick-switch" aria-label="Быстрые действия склада">
-                <button type="button" class="view-switch-btn active" data-supply-quick="purchase" onclick="presetSupplyMode('purchase')">Закупка</button>
-                <button type="button" class="view-switch-btn" data-supply-quick="reservation" onclick="presetSupplyMode('reservation')">Резерв</button>
-                <button type="button" class="view-switch-btn" data-supply-quick="registry" onclick="openSupplyRegistry()">Реестр</button>
+            <div class="supply-primary-nav" role="tablist" aria-label="Действия с материалами">
+                <button type="button" class="supply-primary-nav__button" data-supply-quick="reservation" data-supply-tab-button="reservation" onclick="switchSupplyWorkspaceTab('reservation')">
+                    <span>Запросить материал</span>
+                    <small>Для проекта или заказа</small>
+                </button>
+                <button type="button" class="supply-primary-nav__button active" data-supply-quick="purchase" data-supply-tab-button="purchase" onclick="switchSupplyWorkspaceTab('purchase')">
+                    <span>Оформить закупку</span>
+                    <small>Поставщик, цена и срок</small>
+                </button>
+                <button type="button" class="supply-primary-nav__button" data-supply-quick="registry" data-supply-tab-button="registry" onclick="openSupplyRegistry()">
+                    <span>Посмотреть список</span>
+                    <small>Все запросы и закупки</small>
+                </button>
             </div>
-        </div>
-
-        <div class="tabs supply-workspace-tabs" role="tablist" aria-label="Режимы склада">
-            <button type="button" class="tab active" data-supply-tab-button="purchase" onclick="switchSupplyWorkspaceTab('purchase')">Закупка</button>
-            <button type="button" class="tab" data-supply-tab-button="reservation" onclick="switchSupplyWorkspaceTab('reservation')">Резерв</button>
-            <button type="button" class="tab" data-supply-tab-button="registry" onclick="switchSupplyWorkspaceTab('registry')">Реестр</button>
-            <button type="button" class="tab" data-supply-tab-button="control" onclick="switchSupplyWorkspaceTab('control')">Контроль</button>
         </div>
 
         <div class="supply-workspace-panels">
@@ -32,7 +34,7 @@
                 <div class="section-header supply-panel-header">
                     <div>
                         <h3 id="supplyEditorTitle" class="section-title">Новая закупка</h3>
-                        <p id="supplyEditorSubtitle" class="section-subtitle">Выбери проект и контрагента, затем укажи поставщика, материал, количество и срок поставки.</p>
+                        <p id="supplyEditorSubtitle" class="section-subtitle">Укажите материал, количество, поставщика и срок.</p>
                     </div>
                     <span id="supplyEditorChip" class="ops-section-chip">Закупка</span>
                 </div>
@@ -40,152 +42,138 @@
                 <div id="supplyPolicyBanner" class="form-policy-banner" style="display:none;"></div>
                 <div id="supplyFormModeNote" class="supply-mode-note"></div>
 
-                <form id="purchaseForm" class="finance-form-grid form-grid-standard supply-form-grid" onsubmit="return false;">
-                    <label class="form-field">
-                        <span class="form-label">Проект</span>
-                        <select id="purchaseProjectId" data-field="purchaseProjectId" class="auth-input"><option value="0">Без проекта</option></select>
-                        <span class="form-error" data-error-for="purchaseProjectId"></span>
-                    </label>
-                    <label class="form-field">
-                        <span class="form-label">Контрагент</span>
-                        <select id="purchaseClientId" data-field="purchaseClientId" class="auth-input"><option value="0">Без контрагента</option></select>
-                        <span class="form-error" data-error-for="purchaseClientId"></span>
-                    </label>
-                    <label class="form-field">
-                        <span class="form-label">Юрлицо</span>
-                        <select id="purchaseLegalEntityId" data-field="purchaseLegalEntityId" class="auth-input"><option value="0">Выберите юрлицо</option></select>
-                        <span class="form-error" data-error-for="purchaseLegalEntityId"></span>
-                    </label>
-                    <label class="form-field">
-                        <span class="form-label">Подразделение</span>
-                        <select id="purchaseBusinessUnitId" data-field="purchaseBusinessUnitId" class="auth-input"><option value="0">Выберите подразделение</option></select>
-                        <span class="form-error" data-error-for="purchaseBusinessUnitId"></span>
-                    </label>
-                    <label class="form-field">
-                        <span class="form-label">Позиция / материал <span class="form-required">*</span></span>
-                        <input id="purchaseItemName" data-field="purchaseItemName" class="auth-input" placeholder="Например, кабель ВВГ 3х2.5">
-                        <span class="form-error" data-error-for="purchaseItemName"></span>
-                    </label>
-                    <label class="form-field">
-                        <span class="form-label">Артикул</span>
-                        <input id="purchaseItemArticle" data-field="purchaseItemArticle" class="auth-input" placeholder="Например, VVGH-325">
-                        <span class="form-error" data-error-for="purchaseItemArticle"></span>
-                    </label>
-                    <label class="form-field">
-                        <span class="form-label">Поставщик <span class="form-required">*</span></span>
-                        <input id="purchaseSupplier" data-field="purchaseSupplier" class="auth-input" placeholder="Название поставщика">
-                        <span class="form-error" data-error-for="purchaseSupplier"></span>
-                    </label>
-                    <label class="form-field">
-                        <span class="form-label">Количество <span class="form-required">*</span></span>
-                        <input id="purchaseQty" data-field="purchaseQty" class="auth-input" placeholder="Например, 25">
-                        <span class="form-error" data-error-for="purchaseQty"></span>
-                    </label>
-                    <label class="form-field">
-                        <span class="form-label">Единица измерения</span>
-                        <input id="purchaseUnit" data-field="purchaseUnit" class="auth-input" value="шт" placeholder="шт">
-                        <span class="form-error" data-error-for="purchaseUnit"></span>
-                    </label>
-                    <label class="form-field">
-                        <span class="form-label">Цена за единицу</span>
-                        <input id="purchaseUnitPrice" data-field="purchaseUnitPrice" class="auth-input" placeholder="Например, 1250">
-                        <span class="form-error" data-error-for="purchaseUnitPrice"></span>
-                    </label>
-                    <label class="form-field">
-                        <span class="form-label">Склад / зона</span>
-                        <input id="purchaseWarehouse" data-field="purchaseWarehouse" class="auth-input" placeholder="Например, Основной склад">
-                        <span class="form-error" data-error-for="purchaseWarehouse"></span>
-                    </label>
-                    <label class="form-field">
-                        <span class="form-label">Ячейка</span>
-                        <input id="purchaseBinCode" data-field="purchaseBinCode" class="auth-input" placeholder="Например, A-01">
-                        <span class="form-error" data-error-for="purchaseBinCode"></span>
-                    </label>
-                    <label class="form-field">
-                        <span class="form-label">Партия</span>
-                        <input id="purchaseBatchCode" data-field="purchaseBatchCode" class="auth-input" placeholder="Например, batch-24-18">
-                        <span class="form-error" data-error-for="purchaseBatchCode"></span>
-                    </label>
-                    <label class="form-field">
-                        <span class="form-label">План поставки <span class="form-required">*</span></span>
-                        <input id="purchaseExpectedDate" data-field="purchaseExpectedDate" class="auth-input" placeholder="дд.мм.гггг">
-                        <span class="form-error" data-error-for="purchaseExpectedDate"></span>
-                    </label>
-                    <label class="form-field">
-                        <span class="form-label">Статус</span>
-                        <select id="purchaseStatus" data-field="purchaseStatus" class="auth-input">
-                            <option value="planned">План</option>
-                            <option value="ordered">Заказано</option>
-                            <option value="in_transit">В пути</option>
-                            <option value="received">Получено</option>
-                        </select>
-                        <span class="form-error" data-error-for="purchaseStatus"></span>
-                    </label>
-                    <label class="form-field form-field--full">
-                        <span class="form-label">Комментарий</span>
-                        <textarea id="purchaseComment" data-field="purchaseComment" class="auth-input supply-comment-field" placeholder="Короткое пояснение по сроку, поставщику или резерву"></textarea>
-                        <span class="form-error" data-error-for="purchaseComment"></span>
-                    </label>
+                <form id="purchaseForm" class="supply-simple-form" onsubmit="return false;">
+                    <div class="supply-form-section">
+                        <div class="supply-form-section__head">
+                            <strong>Основное</strong>
+                            <span>Этого достаточно для большинства заявок.</span>
+                        </div>
+                        <div class="supply-form-grid supply-form-grid--main">
+                            <label class="form-field">
+                                <span class="form-label">Проект или заказ</span>
+                                <select id="purchaseProjectId" data-field="purchaseProjectId" class="auth-input"><option value="0">Без проекта</option></select>
+                                <span class="form-error" data-error-for="purchaseProjectId"></span>
+                            </label>
+                            <label class="form-field">
+                                <span class="form-label">Материал <span class="form-required">*</span></span>
+                                <input id="purchaseItemName" data-field="purchaseItemName" class="auth-input" placeholder="Например, кабель ВВГ 3×2,5">
+                                <span class="form-error" data-error-for="purchaseItemName"></span>
+                            </label>
+                            <label class="form-field supply-field--quantity">
+                                <span class="form-label">Количество <span class="form-required">*</span></span>
+                                <input id="purchaseQty" data-field="purchaseQty" class="auth-input" inputmode="decimal" placeholder="25">
+                                <span class="form-error" data-error-for="purchaseQty"></span>
+                            </label>
+                            <label class="form-field supply-field--unit">
+                                <span class="form-label">Единица</span>
+                                <input id="purchaseUnit" data-field="purchaseUnit" class="auth-input" value="шт" placeholder="шт">
+                                <span class="form-error" data-error-for="purchaseUnit"></span>
+                            </label>
+                            <label class="form-field supply-purchase-only">
+                                <span class="form-label">Поставщик <span class="form-required">*</span></span>
+                                <input id="purchaseSupplier" data-field="purchaseSupplier" class="auth-input" placeholder="Название поставщика">
+                                <span class="form-error" data-error-for="purchaseSupplier"></span>
+                            </label>
+                            <label class="form-field supply-purchase-only">
+                                <span class="form-label">Ожидаемая поставка <span class="form-required">*</span></span>
+                                <input id="purchaseExpectedDate" data-field="purchaseExpectedDate" class="auth-input" placeholder="дд.мм.гггг">
+                                <span class="form-error" data-error-for="purchaseExpectedDate"></span>
+                            </label>
+                            <label class="form-field form-field--full">
+                                <span id="supplyCommentLabel" class="form-label">Комментарий</span>
+                                <textarea id="purchaseComment" data-field="purchaseComment" class="auth-input supply-comment-field" placeholder="Для чего нужен материал или важные условия поставки"></textarea>
+                                <span class="form-error" data-error-for="purchaseComment"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <details class="supply-more-fields">
+                        <summary>Дополнительные данные</summary>
+                        <p>Заполняйте только если это действительно нужно.</p>
+                        <div class="supply-form-grid">
+                            <label class="form-field supply-purchase-only">
+                                <span class="form-label">Контрагент</span>
+                                <select id="purchaseClientId" data-field="purchaseClientId" class="auth-input"><option value="0">Без контрагента</option></select>
+                                <span class="form-error" data-error-for="purchaseClientId"></span>
+                            </label>
+                            <label class="form-field supply-purchase-only">
+                                <span class="form-label">Цена за единицу</span>
+                                <input id="purchaseUnitPrice" data-field="purchaseUnitPrice" class="auth-input" inputmode="decimal" placeholder="1250">
+                                <span class="form-error" data-error-for="purchaseUnitPrice"></span>
+                            </label>
+                            <label class="form-field">
+                                <span class="form-label">Артикул</span>
+                                <input id="purchaseItemArticle" data-field="purchaseItemArticle" class="auth-input" placeholder="Например, VVGH-325">
+                                <span class="form-error" data-error-for="purchaseItemArticle"></span>
+                            </label>
+                            <label class="form-field supply-purchase-only">
+                                <span class="form-label">Статус</span>
+                                <select id="purchaseStatus" data-field="purchaseStatus" class="auth-input">
+                                    <option value="planned">Запланировано</option>
+                                    <option value="ordered">Заказано</option>
+                                    <option value="in_transit">В пути</option>
+                                    <option value="received">Получено</option>
+                                </select>
+                                <span class="form-error" data-error-for="purchaseStatus"></span>
+                            </label>
+                            <label class="form-field supply-reservation-only">
+                                <span class="form-label">Склад</span>
+                                <input id="purchaseWarehouse" data-field="purchaseWarehouse" class="auth-input" placeholder="Основной склад">
+                                <span class="form-error" data-error-for="purchaseWarehouse"></span>
+                            </label>
+                            <label class="form-field supply-reservation-only">
+                                <span class="form-label">Ячейка</span>
+                                <input id="purchaseBinCode" data-field="purchaseBinCode" class="auth-input" placeholder="A-01">
+                                <span class="form-error" data-error-for="purchaseBinCode"></span>
+                            </label>
+                            <label class="form-field supply-reservation-only">
+                                <span class="form-label">Партия</span>
+                                <input id="purchaseBatchCode" data-field="purchaseBatchCode" class="auth-input" placeholder="Номер партии">
+                                <span class="form-error" data-error-for="purchaseBatchCode"></span>
+                            </label>
+                            <label class="form-field">
+                                <span class="form-label">Юридическое лицо</span>
+                                <select id="purchaseLegalEntityId" data-field="purchaseLegalEntityId" class="auth-input"><option value="0">Не выбрано</option></select>
+                                <span class="form-error" data-error-for="purchaseLegalEntityId"></span>
+                            </label>
+                            <label class="form-field">
+                                <span class="form-label">Подразделение</span>
+                                <select id="purchaseBusinessUnitId" data-field="purchaseBusinessUnitId" class="auth-input"><option value="0">Не выбрано</option></select>
+                                <span class="form-error" data-error-for="purchaseBusinessUnitId"></span>
+                            </label>
+                        </div>
+                    </details>
                 </form>
 
-                <div class="finance-actions-row form-actions supply-form-actions">
+                <div class="form-actions supply-form-actions">
                     <button type="button" class="btn-secondary" onclick="resetPurchaseForm()">Очистить</button>
-                    <button type="button" class="btn-secondary" onclick="openSupplyRegistry()">Открыть реестр</button>
-                    <button type="button" id="supplyReservationActionBtn" class="btn-secondary" onclick="saveReservation()">Создать резерв</button>
-                    <button type="button" id="supplyPurchaseActionBtn" class="btn-primary" onclick="savePurchase()">Сохранить закупку</button>
+                    <button type="button" id="supplyPrimaryActionBtn" class="btn-primary" onclick="saveSupplyCurrentAction()">Сохранить закупку</button>
                 </div>
             </div>
 
             <div class="supply-workspace-panel" data-supply-panel="registry" hidden>
-                <div class="section-header supply-panel-header">
+                <div class="section-header supply-panel-header supply-registry-header">
                     <div>
-                        <h3 class="section-title">Реестр закупок и резервов</h3>
-                        <p class="section-subtitle">Открытые закупки, сроки поставок, сумма, статус и резервы под проекты в одном реестре.</p>
+                        <h3 class="section-title">Запросы материалов и закупки</h3>
+                        <p class="section-subtitle">Единый список всех операций. Откройте запись, чтобы увидеть полную карточку и при необходимости изменить её.</p>
                     </div>
-                    <div id="supplySavedFiltersMount" class="view-actions"></div>
+                    <button type="button" class="btn-primary" onclick="presetSupplyMode('reservation')">Запросить материал</button>
                 </div>
 
-                <div id="supplyBulkActionsMount"></div>
-
-                <div class="table-shell">
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th class="bulk-select-col">✓</th>
-                                <th>Позиция</th>
-                                <th>Проект / Контрагент</th>
-                                <th>Поставщик</th>
-                                <th>Сумма</th>
-                                <th>Срок</th>
-                                <th>Статус</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody id="purchasesTable"></tbody>
-                    </table>
-                </div>
-
-                <div class="supply-registry-stack">
-                    <div class="ops-inline-section">
-                        <div class="ops-inline-title">Резервы под проекты</div>
-                        <div id="stockReservationsList" class="client360-list supply-reservations-list"></div>
+                <div class="supply-list-tools">
+                    <input id="supplySearchInput" class="auth-input" placeholder="Найти материал, поставщика или проект" oninput="renderSupply()">
+                    <div class="supply-filter-row" aria-label="Фильтр списка">
+                        <button id="supplyFilterAllBtn" class="btn-secondary" onclick="setSupplyListFilter('all')">Все</button>
+                        <button id="supplyFilterReservationsBtn" class="btn-secondary" onclick="setSupplyListFilter('reservations')">Запросы материалов</button>
+                        <button id="supplyFilterPurchasesBtn" class="btn-secondary" onclick="setSupplyListFilter('purchases')">Закупки</button>
+                        <button id="supplyFilterInTransitBtn" class="btn-secondary" onclick="setSupplyListFilter('in_transit')">В пути</button>
+                        <button id="supplyFilterReceivedBtn" class="btn-secondary" onclick="setSupplyListFilter('received')">Получено</button>
                     </div>
                 </div>
-            </div>
 
-            <div class="supply-workspace-panel" data-supply-panel="control" hidden>
-                <div class="section-header supply-panel-header">
-                    <div>
-                        <h3 class="section-title">Контроль поставок и склада</h3>
-                        <p class="section-subtitle">Смотри ключевые показатели, проблемные закупки, поставщиков и расширенный складской контур в одном экране.</p>
-                    </div>
-                    <button type="button" class="btn-secondary" onclick="presetSupplyMode('purchase')">Новая закупка</button>
-                </div>
-
-                <div id="supplyRoleWorkbenchMount" class="supply-control-block"></div>
-                <div id="supplyMetricsGrid" class="metrics-grid metrics-grid--info-rail supply-control-block"></div>
-                <div id="supplyCockpitMount" class="supply-control-block"></div>
-                <div id="supplyExtendedMount" class="secondary-zone supply-control-block"></div>
+                <div id="supplySavedFiltersMount" hidden></div>
+                <div id="supplyBulkActionsMount" hidden></div>
+                <div id="supplyRegistryList" class="supply-registry-list"></div>
             </div>
         </div>
     </section>

@@ -34,7 +34,9 @@ window.__executiveSecondaryExpanded = window.__executiveSecondaryExpanded || fal
 window.__operationsSecondaryExpanded = window.__operationsSecondaryExpanded || false;
 
 let editingExpenseId = 0;
+let selectedExpenseId = 0;
 let editingInternalId = 0;
+let selectedInternalRequestId = 0;
 let editingResourceId = 0;
 let editingServiceId = 0;
 const internalRequestBulkSelection = window.internalRequestBulkSelection || new Set();
@@ -876,8 +878,44 @@ function resetExpenseForm() {
     editingExpenseId = 0;
     [['expenseProjectId', '0'], ['expenseClientId', '0'], ['expenseTitle', ''], ['expenseType', 'payment'], ['expenseAmount', ''], ['expenseDueDate', ''], ['expenseCurrency', 'RUB'], ['expenseApproverRole', 'Директор'], ['expenseApproverName', ''], ['expenseLinkedPayment', '0'], ['expenseStatus', 'draft'], ['expenseComment', '']].forEach(([id, value]) => {
         const el = document.getElementById(id);
-        if (el) el.value = value;
+        if (el) {
+            el.value = value;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+        }
     });
+    const title = document.getElementById('expenseFormTitle');
+    const saveButton = document.getElementById('expenseSaveButton');
+    const cancelButton = document.getElementById('expenseCancelEditButton');
+    if (title) title.textContent = 'Новый запрос';
+    if (saveButton) saveButton.textContent = 'Создать запрос';
+    if (cancelButton) cancelButton.hidden = true;
+}
+
+function activateExpenseWorkspaceTab(title) {
+    const view = document.getElementById('expensesView');
+    if (!view) return false;
+    const tab = Array.from(view.querySelectorAll('.crm-workspace__tab')).find(button =>
+        String(button.textContent || '').trim() === title
+    );
+    if (!tab) return false;
+    tab.click();
+    return true;
+}
+
+function showExpenseForm() {
+    if (activateExpenseWorkspaceTab('Новый запрос')) return;
+    const form = document.querySelector('#expensesView .ops-form-card');
+    const registry = document.querySelector('#expensesView .ops-list-card');
+    if (form) form.hidden = false;
+    if (registry) registry.hidden = true;
+}
+
+function showExpenseRegistry() {
+    if (activateExpenseWorkspaceTab('Реестр согласований')) return;
+    const form = document.querySelector('#expensesView .ops-form-card');
+    const registry = document.querySelector('#expensesView .ops-list-card');
+    if (form) form.hidden = true;
+    if (registry) registry.hidden = false;
 }
 
 function editExpenseRequest(id) {
@@ -896,9 +934,18 @@ function editExpenseRequest(id) {
     document.getElementById('expenseLinkedPayment').value = String(item.linked_payment_id || 0);
     document.getElementById('expenseStatus').value = item.status || 'draft';
     document.getElementById('expenseComment').value = item.comment || '';
+    const title = document.getElementById('expenseFormTitle');
+    const saveButton = document.getElementById('expenseSaveButton');
+    const cancelButton = document.getElementById('expenseCancelEditButton');
+    if (title) title.textContent = 'Редактирование запроса';
+    if (saveButton) saveButton.textContent = 'Сохранить изменения';
+    if (cancelButton) cancelButton.hidden = false;
+    showExpenseForm();
+    document.querySelector('#expensesView .ops-form-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function saveExpenseRequest() {
+    const targetId = Number(editingExpenseId || 0);
     const payload = {
         project_id: Number(document.getElementById('expenseProjectId').value || 0),
         client_id: Number(document.getElementById('expenseClientId').value || 0),
@@ -918,17 +965,26 @@ async function saveExpenseRequest() {
     const method = editingExpenseId ? 'PUT' : 'POST';
     const res = await apiCall(endpoint, method, payload);
     if (!res || res.error) return customAlert(res?.error || 'Не удалось сохранить запрос на затраты.');
+    selectedExpenseId = Number(res.id || targetId || 0);
     resetExpenseForm();
     await renderExpenses();
+    showExpenseRegistry();
+    requestAnimationFrame(() => {
+        showExpenseRegistry();
+        document.getElementById('expenseRequestDetailCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
     if (currentProjectId && typeof renderProjectOpsSummary === 'function') renderProjectOpsSummary();
     showToast('Затраты', 'Запрос сохранён');
 }
 
 async function deleteExpenseRequest(id) {
+    const item = expenseRequestsDB.find(row => Number(row.id) === Number(id));
+    if (!canDeleteExpenseRequest(item)) return customAlert('Удалить запрос может только его автор или директор.');
     if (!(await customConfirm('Удалить запрос на затраты и связанную оплату?'))) return;
     const res = await apiCall(`/expenses/requests/${id}`, 'DELETE');
-    if (!res || res.error) return customAlert(res?.error || 'Не удалось удалить запрос на затраты.');
+    if (!res || res.error) return customAlert(res?.message || (res?.error === 'forbidden' ? 'Удалить запрос может только его автор или директор.' : 'Не удалось удалить запрос на затраты.'));
     if (editingExpenseId === id) resetExpenseForm();
+    if (Number(selectedExpenseId) === Number(id)) selectedExpenseId = 0;
     await renderExpenses();
     if (currentProjectId && typeof renderProjectOpsSummary === 'function') renderProjectOpsSummary();
     showToast('Затраты', 'Запрос удалён');
@@ -936,10 +992,75 @@ async function deleteExpenseRequest(id) {
 
 function resetInternalRequestForm() {
     editingInternalId = 0;
-    [['internalProjectId', '0'], ['internalTitle', ''], ['internalType', 'purchase'], ['internalTargetRole', 'Менеджер'], ['internalAssigneeName', ''], ['internalDeadline', ''], ['internalPriority', 'normal'], ['internalStatus', 'new'], ['internalComment', '']].forEach(([id, value]) => {
+    [['internalProjectId', '0'], ['internalTitle', ''], ['internalType', 'purchase'], ['internalTargetRole', 'Склад'], ['internalAssigneeName', ''], ['internalDeadline', ''], ['internalPriority', 'normal'], ['internalStatus', 'new'], ['internalComment', '']].forEach(([id, value]) => {
         const el = document.getElementById(id);
         if (el) el.value = value;
     });
+    const formTitle = document.getElementById('internalFormTitle');
+    const saveButton = document.getElementById('internalSaveButton');
+    const cancelButton = document.getElementById('internalCancelEditButton');
+    const statusField = document.getElementById('internalStatusField');
+    if (formTitle) formTitle.textContent = 'Новая заявка';
+    if (saveButton) saveButton.textContent = 'Отправить заявку';
+    if (cancelButton) cancelButton.hidden = true;
+    if (statusField) statusField.hidden = true;
+}
+
+function setInternalRequestPreset(requestType, title, targetRole) {
+    const type = document.getElementById('internalType');
+    const titleInput = document.getElementById('internalTitle');
+    const role = document.getElementById('internalTargetRole');
+    if (type) type.value = requestType || 'other';
+    if (titleInput) titleInput.value = title || '';
+    if (role) role.value = targetRole || 'Менеджер';
+    document.getElementById('internalComment')?.focus();
+}
+
+function activateInternalRequestWorkspaceTab(title) {
+    const view = document.getElementById('requestsView');
+    if (!view) return false;
+    const tab = Array.from(view.querySelectorAll('.crm-workspace__tab')).find(button =>
+        String(button.textContent || '').trim() === title
+    );
+    if (!tab) return false;
+    tab.click();
+    return true;
+}
+
+function showInternalRequestForm() {
+    const formTab = document.getElementById('internalRequestFormTab');
+    const registryTab = document.getElementById('internalRequestRegistryTab');
+    if (formTab) {
+        formTab.classList.add('is-active');
+        formTab.setAttribute('aria-selected', 'true');
+    }
+    if (registryTab) {
+        registryTab.classList.remove('is-active');
+        registryTab.setAttribute('aria-selected', 'false');
+    }
+    if (activateInternalRequestWorkspaceTab('Новая заявка')) return;
+    const form = document.getElementById('internalRequestFormCard');
+    const registry = document.querySelector('#requestsView .internal-request-list-card');
+    if (form) form.hidden = false;
+    if (registry) registry.hidden = true;
+}
+
+function showInternalRequestRegistry() {
+    const formTab = document.getElementById('internalRequestFormTab');
+    const registryTab = document.getElementById('internalRequestRegistryTab');
+    if (formTab) {
+        formTab.classList.remove('is-active');
+        formTab.setAttribute('aria-selected', 'false');
+    }
+    if (registryTab) {
+        registryTab.classList.add('is-active');
+        registryTab.setAttribute('aria-selected', 'true');
+    }
+    if (activateInternalRequestWorkspaceTab('Реестр заявок')) return;
+    const form = document.getElementById('internalRequestFormCard');
+    const registry = document.querySelector('#requestsView .internal-request-list-card');
+    if (form) form.hidden = true;
+    if (registry) registry.hidden = false;
 }
 
 function editInternalRequest(id) {
@@ -952,12 +1073,24 @@ function editInternalRequest(id) {
     document.getElementById('internalTargetRole').value = item.target_role || 'Менеджер';
     document.getElementById('internalAssigneeName').value = item.assignee_name || '';
     document.getElementById('internalDeadline').value = item.deadline || '';
+    document.getElementById('internalDeadline').dispatchEvent(new Event('input', { bubbles: true }));
     document.getElementById('internalPriority').value = item.priority || 'normal';
     document.getElementById('internalStatus').value = item.status || 'new';
     document.getElementById('internalComment').value = item.comment || '';
+    const formTitle = document.getElementById('internalFormTitle');
+    const saveButton = document.getElementById('internalSaveButton');
+    const cancelButton = document.getElementById('internalCancelEditButton');
+    const statusField = document.getElementById('internalStatusField');
+    if (formTitle) formTitle.textContent = 'Редактирование заявки';
+    if (saveButton) saveButton.textContent = 'Сохранить изменения';
+    if (cancelButton) cancelButton.hidden = false;
+    if (statusField) statusField.hidden = false;
+    showInternalRequestForm();
+    document.getElementById('internalRequestFormCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function saveInternalRequest() {
+    const targetId = Number(editingInternalId || 0);
     const payload = {
         project_id: Number(document.getElementById('internalProjectId').value || 0),
         title: document.getElementById('internalTitle').value.trim(),
@@ -969,23 +1102,64 @@ async function saveInternalRequest() {
         status: document.getElementById('internalStatus').value,
         comment: document.getElementById('internalComment').value.trim(),
     };
-    if (!payload.title) return customAlert('Заполни название внутренней заявки.');
+    if (!payload.title) return customAlert('Укажите, что нужно сделать.');
+    if (!payload.target_role) return customAlert('Выберите отдел, которому отправляется заявка.');
+    if (!payload.deadline) return customAlert('Укажите срок выполнения.');
+    if (!payload.comment) return customAlert('Опишите ожидаемый результат.');
     const endpoint = editingInternalId ? `/internal_requests/${editingInternalId}` : '/internal_requests';
     const method = editingInternalId ? 'PUT' : 'POST';
+    const wasEditing = Boolean(editingInternalId);
     const res = await apiCall(endpoint, method, payload);
     if (!res || res.error) return customAlert(res?.error || 'Не удалось сохранить внутреннюю заявку.');
+    selectedInternalRequestId = Number(res.id || targetId || 0);
     resetInternalRequestForm();
     await renderInternalRequests();
+    showInternalRequestRegistry();
+    requestAnimationFrame(() => {
+        showInternalRequestRegistry();
+        document.getElementById('internalRequestDetailCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
     if (currentProjectId && typeof renderProjectOpsSummary === 'function') renderProjectOpsSummary();
-    showToast('Заявки', 'Внутренняя заявка сохранена');
+    showToast('Внутренние заявки', wasEditing ? 'Изменения сохранены' : 'Заявка отправлена выбранному отделу');
+}
+
+async function setInternalRequestStatus(id, status) {
+    const item = internalRequestsDB.find(row => Number(row.id) === Number(id));
+    if (!item || !hasCurrentPermission('requests', 'update')) return;
+    const payload = {
+        project_id: Number(item.project_id || 0),
+        contract_id: Number(item.contract_id || 0),
+        object_id: Number(item.object_id || 0),
+        title: item.title || '',
+        request_type: item.request_type || 'other',
+        target_role: item.target_role || '',
+        assignee_name: item.assignee_name || '',
+        deadline: item.deadline || '',
+        priority: item.priority || 'normal',
+        status,
+        comment: item.comment || '',
+    };
+    const res = await apiCall(`/internal_requests/${id}`, 'PUT', payload);
+    if (!res || res.error) return customAlert(res?.error || 'Не удалось изменить статус заявки.');
+    item.status = status;
+    renderInternalRequestMetrics();
+    renderInternalRequestList();
+    renderInternalRequestDetailCard();
+    showToast('Внутренние заявки', status === 'done' ? 'Заявка отмечена выполненной' : 'Заявка взята в работу');
 }
 
 async function deleteInternalRequest(id) {
+    const item = internalRequestsDB.find(row => Number(row.id) === Number(id));
+    if (!canDeleteInternalRequest(item)) return customAlert('Удалить заявку может только её автор или директор.');
     if (!(await customConfirm('Удалить внутреннюю заявку безвозвратно?'))) return;
     const res = await apiCall(`/internal_requests/${id}`, 'DELETE');
-    if (!res || res.error) return customAlert(res?.error || 'Не удалось удалить внутреннюю заявку.');
+    if (!res || res.error) return customAlert(res?.message || (res?.error === 'forbidden' ? 'Удалить заявку может только её автор или директор.' : 'Не удалось удалить внутреннюю заявку.'));
     if (editingInternalId === id) resetInternalRequestForm();
-    await renderInternalRequests();
+    if (Number(selectedInternalRequestId) === Number(id)) selectedInternalRequestId = 0;
+    internalRequestsDB = internalRequestsDB.filter(row => Number(row.id) !== Number(id));
+    renderInternalRequestMetrics();
+    renderInternalRequestList();
+    renderInternalRequestDetailCard();
     if (currentProjectId && typeof renderProjectOpsSummary === 'function') renderProjectOpsSummary();
     showToast('Заявки', 'Внутренняя заявка удалена');
 }
@@ -1167,9 +1341,25 @@ function resetResourceForm() {
         const el = document.getElementById(id);
         if (el) el.value = value;
     });
+    syncResourceEditorState();
+}
+
+function syncResourceEditorState() {
+    const editor = document.getElementById('resourceEditorCard');
+    const title = document.getElementById('resourceEditorTitle');
+    const saveButton = document.getElementById('resourceSaveButton');
+    const canCreate = hasCurrentPermission('resources', 'create');
+    const canUpdate = hasCurrentPermission('resources', 'update');
+    if (editor) editor.hidden = !(canCreate || canUpdate);
+    if (title) title.textContent = editingResourceId ? 'Редактирование загрузки' : 'Новая загрузка ресурса';
+    if (saveButton) {
+        saveButton.hidden = editingResourceId ? !canUpdate : !canCreate;
+        saveButton.textContent = editingResourceId ? 'Сохранить изменения' : 'Добавить в календарь';
+    }
 }
 
 function editResourceAllocation(id) {
+    if (!hasCurrentPermission('resources', 'update')) return customAlert('У вашей роли нет права редактировать календарь ресурсов.');
     const item = resourceAllocationsDB.find(row => row.id === id);
     if (!item) return;
     editingResourceId = id;
@@ -1185,9 +1375,13 @@ function editResourceAllocation(id) {
     document.getElementById('resourceLocation').value = item.location || '';
     document.getElementById('resourceStatus').value = item.status || 'planned';
     document.getElementById('resourceComment').value = item.comment || '';
+    syncResourceEditorState();
+    document.getElementById('resourceEditorCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function saveResourceAllocation() {
+    if (!editingResourceId && !hasCurrentPermission('resources', 'create')) return customAlert('У вашей роли нет права добавлять загрузку в календарь.');
+    if (editingResourceId && !hasCurrentPermission('resources', 'update')) return customAlert('У вашей роли нет права редактировать календарь ресурсов.');
     const payload = {
         project_id: Number(document.getElementById('resourceProjectId').value || 0),
         department: document.getElementById('resourceDepartment').value,
@@ -1206,7 +1400,7 @@ async function saveResourceAllocation() {
     const endpoint = editingResourceId ? `/resources/allocations/${editingResourceId}` : '/resources/allocations';
     const method = editingResourceId ? 'PUT' : 'POST';
     const res = await apiCall(endpoint, method, payload);
-    if (!res || res.error) return customAlert(res?.error || 'Не удалось сохранить загрузку ресурса.');
+    if (!res || res.error) return customAlert(res?.error === 'forbidden' ? 'Недостаточно прав для изменения календаря ресурсов. Обновите страницу и попробуйте ещё раз.' : (res?.error || 'Не удалось сохранить загрузку ресурса.'));
     resetResourceForm();
     await renderResources();
     if (currentProjectId && typeof renderProjectOpsSummary === 'function') renderProjectOpsSummary();
@@ -1214,9 +1408,10 @@ async function saveResourceAllocation() {
 }
 
 async function deleteResourceAllocation(id) {
+    if (!hasCurrentPermission('resources', 'delete')) return customAlert('Удаление записей календаря доступно только сотрудникам с соответствующими правами.');
     if (!(await customConfirm('Удалить размещение ресурса безвозвратно?'))) return;
     const res = await apiCall(`/resources/allocations/${id}`, 'DELETE');
-    if (!res || res.error) return customAlert(res?.error || 'Не удалось удалить размещение ресурса.');
+    if (!res || res.error) return customAlert(res?.error === 'forbidden' ? 'У вашей роли нет права удалять записи календаря.' : (res?.error || 'Не удалось удалить размещение ресурса.'));
     if (editingResourceId === id) resetResourceForm();
     await renderResources();
     if (currentProjectId && typeof renderProjectOpsSummary === 'function') renderProjectOpsSummary();
@@ -1229,9 +1424,25 @@ function resetServiceForm() {
         const el = document.getElementById(id);
         if (el) el.value = value;
     });
+    syncServiceEditorState();
+}
+
+function syncServiceEditorState() {
+    const editor = document.getElementById('serviceEditorCard');
+    const title = document.getElementById('serviceEditorTitle');
+    const saveButton = document.getElementById('serviceSaveButton');
+    const canCreate = hasCurrentPermission('service', 'create');
+    const canUpdate = hasCurrentPermission('service', 'update');
+    if (editor) editor.hidden = !(canCreate || canUpdate);
+    if (title) title.textContent = editingServiceId ? 'Редактирование обращения' : 'Новое сервисное обращение';
+    if (saveButton) {
+        saveButton.hidden = editingServiceId ? !canUpdate : !canCreate;
+        saveButton.textContent = editingServiceId ? 'Сохранить изменения' : 'Создать обращение';
+    }
 }
 
 function editServiceCase(id) {
+    if (!hasCurrentPermission('service', 'update')) return customAlert('У вашей роли нет права редактировать сервисные обращения.');
     const item = serviceCasesDB.find(row => row.id === id);
     if (!item) return;
     editingServiceId = id;
@@ -1247,9 +1458,13 @@ function editServiceCase(id) {
     document.getElementById('serviceResponsible').value = item.responsible || '';
     document.getElementById('serviceDefect').value = item.defect || '';
     document.getElementById('serviceResolution').value = item.resolution || '';
+    syncServiceEditorState();
+    document.getElementById('serviceEditorCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function saveServiceCase() {
+    if (!editingServiceId && !hasCurrentPermission('service', 'create')) return customAlert('У вашей роли нет права создавать сервисные обращения.');
+    if (editingServiceId && !hasCurrentPermission('service', 'update')) return customAlert('У вашей роли нет права редактировать сервисные обращения.');
     const payload = {
         project_id: Number(document.getElementById('serviceProjectId').value || 0),
         client_id: Number(document.getElementById('serviceClientId').value || 0),
@@ -1268,7 +1483,7 @@ async function saveServiceCase() {
     const endpoint = editingServiceId ? `/service/cases/${editingServiceId}` : '/service/cases';
     const method = editingServiceId ? 'PUT' : 'POST';
     const res = await apiCall(endpoint, method, payload);
-    if (!res || res.error) return customAlert(res?.error || 'Не удалось сохранить сервисный кейс.');
+    if (!res || res.error) return customAlert(res?.error === 'forbidden' ? 'Недостаточно прав для этого действия. Обновите страницу и повторите попытку.' : (res?.error || 'Не удалось сохранить сервисное обращение.'));
     resetServiceForm();
     await renderServiceCases();
     if (currentProjectId && typeof renderProjectOpsSummary === 'function') renderProjectOpsSummary();
@@ -1276,13 +1491,106 @@ async function saveServiceCase() {
 }
 
 async function deleteServiceCase(id) {
+    if (!hasCurrentPermission('service', 'delete')) return customAlert('Удаление сервисных обращений доступно только сотрудникам с соответствующими правами.');
     if (!(await customConfirm('Удалить сервисный кейс безвозвратно?'))) return;
     const res = await apiCall(`/service/cases/${id}`, 'DELETE');
-    if (!res || res.error) return customAlert(res?.error || 'Не удалось удалить сервисный кейс.');
+    if (!res || res.error) return customAlert(res?.error === 'forbidden' ? 'У вашей роли нет права удалять сервисные обращения.' : (res?.error || 'Не удалось удалить сервисный кейс.'));
     if (editingServiceId === id) resetServiceForm();
     await renderServiceCases();
     if (currentProjectId && typeof renderProjectOpsSummary === 'function') renderProjectOpsSummary();
     showToast('Сервис', 'Сервисный кейс удалён');
+}
+
+function expenseRequestTypeLabel(value) {
+    return {
+        payment: 'Оплата поставщику',
+        expense: 'Внутренний расход',
+        advance: 'Аванс',
+        budget_shift: 'Сдвиг бюджета',
+    }[value] || 'Расход';
+}
+
+function canDeleteExpenseRequest(item) {
+    if (!item || !currentUser) return false;
+    if (String(currentUser.role || '').trim() === 'Директор') return true;
+    const actorEmail = String(currentUser.email || '').trim().toLowerCase();
+    const authorEmail = String(item.created_by || '').trim().toLowerCase();
+    return !!actorEmail && actorEmail === authorEmail;
+}
+
+function openExpenseRequestCard(id) {
+    selectedExpenseId = Number(id || 0);
+    renderExpenseRequestCard();
+    showExpenseRegistry();
+    document.getElementById('expenseRequestDetailCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function expenseCardValue(value, fallback = 'Не указано') {
+    const text = String(value ?? '').trim();
+    return enterpriseEscape(text || fallback);
+}
+
+function renderExpenseRequestCard() {
+    const card = document.getElementById('expenseRequestDetailCard');
+    const body = document.getElementById('expenseRequestDetailBody');
+    if (!card || !body) return;
+    const item = expenseRequestsDB.find(row => Number(row.id) === Number(selectedExpenseId));
+    if (!item) {
+        card.hidden = true;
+        body.innerHTML = '';
+        return;
+    }
+    card.hidden = false;
+    const canEdit = typeof hasCurrentPermission !== 'function' || hasCurrentPermission('expenses', 'update');
+    const canDelete = canDeleteExpenseRequest(item);
+    const createdAt = Number(item.created_at || 0)
+        ? new Date(Number(item.created_at) * 1000).toLocaleString('ru-RU')
+        : 'Не указана';
+    const paymentText = item.linked_payment_id
+        ? `Оплата №${Number(item.linked_payment_id)} · ${financeStatusLabel(item.linked_payment_status || 'planned')}`
+        : 'Будет создана после согласования';
+    body.innerHTML = `
+        <div class="expense-detail-card">
+            <div class="expense-detail-card__header">
+                <div>
+                    <span class="status-badge ${enterpriseStatusClass(item.status)}">${enterpriseEscape(enterpriseStatusLabel(item.status))}</span>
+                    <h2>${expenseCardValue(item.title, 'Запрос на оплату')}</h2>
+                    <p>Запрос №${Number(item.id)} · создан ${expenseCardValue(createdAt)}</p>
+                </div>
+                <div class="expense-detail-card__actions">
+                    ${canEdit ? `<button class="btn-secondary" onclick="editExpenseRequest(${Number(item.id)})">Редактировать</button>` : ''}
+                    ${canDelete ? `<button class="btn-danger" onclick="deleteExpenseRequest(${Number(item.id)})">Удалить</button>` : ''}
+                </div>
+            </div>
+            <div class="expense-detail-card__facts">
+                <div><span>Сумма</span><strong>${enterpriseEscape(formatMoney(item.amount || 0, item.currency))}</strong></div>
+                <div><span>Тип</span><strong>${enterpriseEscape(expenseRequestTypeLabel(item.request_type))}</strong></div>
+                <div><span>Оплатить до</span><strong>${expenseCardValue(item.due_date, 'Срок не указан')}</strong></div>
+                <div><span>Статус</span><strong>${enterpriseEscape(enterpriseStatusLabel(item.status))}</strong></div>
+            </div>
+            <div class="expense-detail-card__sections">
+                <section class="expense-detail-section">
+                    <div class="expense-detail-section__title"><span>1</span><h3>Основание расхода</h3></div>
+                    <dl>
+                        <div><dt>Название</dt><dd>${expenseCardValue(item.title)}</dd></div>
+                        <div><dt>Проект</dt><dd>${expenseCardValue(item.project_contract || item.project_name, 'Без проекта')}</dd></div>
+                        <div><dt>Клиент / контрагент</dt><dd>${expenseCardValue(item.client_name, 'Не выбран')}</dd></div>
+                        <div><dt>Комментарий</dt><dd>${expenseCardValue(item.comment)}</dd></div>
+                    </dl>
+                </section>
+                <section class="expense-detail-section">
+                    <div class="expense-detail-section__title"><span>2</span><h3>Согласование и оплата</h3></div>
+                    <dl>
+                        <div><dt>Согласующий отдел</dt><dd>${expenseCardValue(item.approver_role)}</dd></div>
+                        <div><dt>Согласующий</dt><dd>${expenseCardValue(item.approver_name, 'Сотрудник роли')}</dd></div>
+                        <div><dt>Создал</dt><dd>${expenseCardValue(item.created_by)}</dd></div>
+                        <div><dt>Согласовал</dt><dd>${expenseCardValue(item.approved_by, 'Ожидает решения')}</dd></div>
+                        <div><dt>Связанная оплата</dt><dd>${expenseCardValue(paymentText)}</dd></div>
+                    </dl>
+                </section>
+            </div>
+        </div>
+    `;
 }
 
 async function renderExpenses() {
@@ -1300,47 +1608,180 @@ async function renderExpenses() {
     `;
     tbody.innerHTML = expenseRequestsDB.length ? expenseRequestsDB.map(item => `
         <tr>
-            <td><div class="finance-row-title">${item.title}</div><div class="finance-row-meta">${enterpriseStatusLabel(item.request_type || 'payment')} · ${item.due_date || 'без срока'}</div></td>
-            <td><div class="finance-row-title">${item.project_contract || item.project_name || 'Без проекта'}</div><div class="finance-row-meta">${item.client_name || 'Без контрагента'}</div></td>
-            <td><div class="finance-row-title">${formatMoney(item.amount || 0, item.currency)}</div><div class="finance-row-meta">${item.comment || 'Без комментария'}</div></td>
-            <td><div class="finance-row-title">${item.approver_name || item.approver_role || 'Не назначен'}</div><div class="finance-row-meta">${item.approved_by ? 'Утверждение зафиксировано' : 'Ожидает решения'}</div></td>
-            <td><span class="status-badge ${enterpriseStatusClass(item.status)}">${enterpriseStatusLabel(item.status)}</span><div class="finance-row-meta">${item.linked_payment_id ? `Оплата #${item.linked_payment_id} · ${financeStatusLabel(item.linked_payment_status || 'planned')} · 1С ${enterpriseStatusLabel(item.linked_payment_exchange_state || 'draft')}` : 'Оплата создаётся автоматически после согласования'}</div></td>
-            <td><div class="view-actions"><button class="btn-secondary" onclick="editExpenseRequest(${item.id})">Редактировать</button><button class="btn-danger" onclick="deleteExpenseRequest(${item.id})">Удалить</button></div></td>
+            <td><div class="finance-row-title">${expenseCardValue(item.title)}</div><div class="finance-row-meta">${enterpriseEscape(expenseRequestTypeLabel(item.request_type))} · ${expenseCardValue(item.due_date, 'без срока')}</div></td>
+            <td><div class="finance-row-title">${expenseCardValue(item.project_contract || item.project_name, 'Без проекта')}</div><div class="finance-row-meta">${expenseCardValue(item.client_name, 'Без контрагента')}</div></td>
+            <td><div class="finance-row-title">${enterpriseEscape(formatMoney(item.amount || 0, item.currency))}</div><div class="finance-row-meta">${expenseCardValue(item.comment, 'Без комментария')}</div></td>
+            <td><div class="finance-row-title">${expenseCardValue(item.approver_name || item.approver_role, 'Не назначен')}</div><div class="finance-row-meta">${item.approved_by ? 'Решение зафиксировано' : 'Ожидает решения'}</div></td>
+            <td><span class="status-badge ${enterpriseStatusClass(item.status)}">${enterpriseEscape(enterpriseStatusLabel(item.status))}</span><div class="finance-row-meta">${item.linked_payment_id ? `Оплата №${Number(item.linked_payment_id)} · ${enterpriseEscape(financeStatusLabel(item.linked_payment_status || 'planned'))}` : 'Оплата появится после согласования'}</div></td>
+            <td><button class="btn-primary" onclick="openExpenseRequestCard(${Number(item.id)})">Открыть карточку</button></td>
         </tr>
     `).join('') : '<tr><td colspan="6" class="nsi-empty-row">Запросов на оплату пока нет.</td></tr>';
+    renderExpenseRequestCard();
 }
 
 async function renderInternalRequests() {
     await loadEnterpriseData();
     populateEnterpriseSelects();
-    renderERPWidgets();
-    const metrics = internalSummaryDB?.metrics || {};
     const metricsGrid = document.getElementById('requestsMetricsGrid');
     const container = document.getElementById('internalRequestsList');
     if (!metricsGrid || !container) return;
+    renderInternalRequestMetrics();
+    const formCard = document.getElementById('internalRequestFormCard');
+    const listCard = document.querySelector('#requestsView .internal-request-list-card');
+    const registryActive = document.getElementById('internalRequestRegistryTab')?.getAttribute('aria-selected') === 'true';
+    const canUseForm = hasCurrentPermission('requests', 'create') || hasCurrentPermission('requests', 'update');
+    if (formCard) formCard.hidden = registryActive || !canUseForm;
+    if (listCard) listCard.hidden = !registryActive;
+    renderInternalRequestList();
+    renderInternalRequestDetailCard();
+}
+
+function renderInternalRequestMetrics() {
+    const metricsGrid = document.getElementById('requestsMetricsGrid');
+    if (!metricsGrid) return;
+    const metrics = {
+        new: internalRequestsDB.filter(item => item.status === 'new').length,
+        in_work: internalRequestsDB.filter(item => item.status === 'in_work').length,
+        done: internalRequestsDB.filter(item => item.status === 'done').length,
+    };
     metricsGrid.innerHTML = `
-        <div class="metric-card"><div class="metric-title">Новые</div><div class="metric-value">${metrics.new || 0}</div></div>
-        <div class="metric-card warning"><div class="metric-title">В работе</div><div class="metric-value">${metrics.in_work || 0}</div></div>
-        <div class="metric-card success"><div class="metric-title">Завершено</div><div class="metric-value">${metrics.done || 0}</div></div>
-        <div class="metric-card"><div class="metric-title">Высокий приоритет</div><div class="metric-value">${metrics.high_priority || 0}</div></div>
+        <div class="metric-card"><div class="metric-title">Ожидают начала</div><div class="metric-value">${metrics.new}</div></div>
+        <div class="metric-card warning"><div class="metric-title">Сейчас в работе</div><div class="metric-value">${metrics.in_work}</div></div>
+        <div class="metric-card success"><div class="metric-title">Выполнено</div><div class="metric-value">${metrics.done}</div></div>
     `;
-    pruneSelectedInternalRequests();
-    renderInternalRequestBulkToolbar();
-    container.innerHTML = internalRequestsDB.length ? internalRequestsDB.map(item => `
-        <div class="client360-item">
-            <div class="bulk-list-select">${renderInternalRequestBulkCheckbox(item.id)}</div>
+}
+
+function internalRequestTypeLabel(value) {
+    return {
+        purchase: 'Материалы или закупка',
+        production: 'Производство',
+        clarification: 'Уточнение информации',
+        document: 'Документ',
+        payment: 'Оплата',
+        service: 'Сервис или ремонт',
+        other: 'Другая задача',
+    }[value] || 'Другая задача';
+}
+
+function canDeleteInternalRequest(item) {
+    if (!item || !currentUser) return false;
+    if (String(currentUser.role || '').trim() === 'Директор') return true;
+    const actorEmail = String(currentUser.email || '').trim().toLowerCase();
+    const authorEmail = String(item.created_by || '').trim().toLowerCase();
+    return !!actorEmail && actorEmail === authorEmail;
+}
+
+function openInternalRequestCard(id) {
+    selectedInternalRequestId = Number(id || 0);
+    renderInternalRequestDetailCard();
+    showInternalRequestRegistry();
+    document.getElementById('internalRequestDetailCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderInternalRequestDetailCard() {
+    const card = document.getElementById('internalRequestDetailCard');
+    const body = document.getElementById('internalRequestDetailBody');
+    if (!card || !body) return;
+    const item = internalRequestsDB.find(row => Number(row.id) === Number(selectedInternalRequestId));
+    if (!item) {
+        card.hidden = true;
+        body.innerHTML = '';
+        return;
+    }
+    const safe = value => enterpriseEscape(String(value ?? ''));
+    const value = (input, fallback = 'Не указано') => safe(String(input ?? '').trim() || fallback);
+    const canUpdate = hasCurrentPermission('requests', 'update');
+    const canDelete = canDeleteInternalRequest(item);
+    const createdAt = Number(item.created_at || 0)
+        ? new Date(Number(item.created_at) * 1000).toLocaleString('ru-RU')
+        : 'Не указана';
+    const project = item.project_contract || item.project_name || 'Без проекта';
+    const quickAction = !canUpdate ? '' : item.status === 'new'
+        ? `<button class="btn-primary" onclick="setInternalRequestStatus(${Number(item.id)}, 'in_work')">Взять в работу</button>`
+        : item.status === 'in_work'
+            ? `<button class="btn-primary" onclick="setInternalRequestStatus(${Number(item.id)}, 'done')">Отметить выполненной</button>`
+            : '';
+    card.hidden = false;
+    body.innerHTML = `
+        <div class="internal-request-detail__header">
             <div>
-                <div class="client360-item-title">${item.title}</div>
-                <div class="client360-item-meta">${item.project_contract || item.project_name || 'Без проекта'} · ${item.target_role || 'Без отдела'} · ${priorityLabel(item.priority)}</div>
-                <div class="client360-item-meta">${item.assignee_name || 'Исполнитель не задан'} · ${item.deadline || 'без дедлайна'}</div>
+                <div class="internal-request-detail__eyebrow">Внутренняя заявка №${Number(item.id)}</div>
+                <h3>${value(item.title)}</h3>
+                <div class="internal-request-detail__badges">
+                    <span class="status-badge ${enterpriseStatusClass(item.status)}">${safe(enterpriseStatusLabel(item.status))}</span>
+                    <span class="internal-request-priority">${safe(priorityLabel(item.priority || 'normal'))}</span>
+                </div>
             </div>
-            <div class="view-actions">
-                <span class="status-badge ${enterpriseStatusClass(item.status)}">${enterpriseStatusLabel(item.status)}</span>
-                <button class="btn-secondary" onclick="editInternalRequest(${item.id})">Редактировать</button>
-                <button class="btn-danger" onclick="deleteInternalRequest(${item.id})">Удалить</button>
-            </div>
+            <button type="button" class="btn-secondary" onclick="selectedInternalRequestId=0; renderInternalRequestDetailCard()">Закрыть карточку</button>
         </div>
-    `).join('') : '<div class="empty-state">Внутренних заявок пока нет.</div>';
+        <section class="internal-request-detail__result">
+            <span>Ожидаемый результат</span>
+            <p>${value(item.comment, 'Описание результата не добавлено')}</p>
+        </section>
+        <div class="internal-request-detail__grid">
+            <div><span>Тип заявки</span><strong>${safe(internalRequestTypeLabel(item.request_type))}</strong></div>
+            <div><span>Получатель</span><strong>${value(item.target_role)}</strong></div>
+            <div><span>Исполнитель</span><strong>${value(item.assignee_name, 'Весь отдел')}</strong></div>
+            <div><span>Выполнить до</span><strong>${value(item.deadline)}</strong></div>
+            <div><span>Проект</span><strong>${value(project)}</strong></div>
+            <div><span>Приоритет</span><strong>${safe(priorityLabel(item.priority || 'normal'))}</strong></div>
+            <div><span>Автор</span><strong>${value(item.created_by)}</strong></div>
+            <div><span>Создана</span><strong>${safe(createdAt)}</strong></div>
+        </div>
+        <div class="internal-request-detail__actions">
+            ${quickAction}
+            ${canUpdate ? `<button class="btn-secondary" onclick="editInternalRequest(${Number(item.id)})">Редактировать</button>` : ''}
+            ${canDelete ? `<button class="btn-danger" onclick="deleteInternalRequest(${Number(item.id)})">Удалить</button>` : ''}
+        </div>
+    `;
+}
+
+function renderInternalRequestList() {
+    const container = document.getElementById('internalRequestsList');
+    if (!container) return;
+    const safe = value => typeof escapeHtml === 'function' ? escapeHtml(String(value ?? '')) : String(value ?? '');
+    const query = (document.getElementById('internalRequestSearch')?.value || '').trim().toLowerCase();
+    const statusFilter = document.getElementById('internalRequestStatusFilter')?.value || 'active';
+    const rows = internalRequestsDB.filter(item => {
+        const matchesStatus = statusFilter === 'all'
+            || (statusFilter === 'active' && ['new', 'in_work'].includes(item.status))
+            || item.status === statusFilter;
+        if (!matchesStatus) return false;
+        if (!query) return true;
+        return [item.title, item.comment, item.project_contract, item.project_name, item.target_role, item.assignee_name]
+            .some(value => String(value || '').toLowerCase().includes(query));
+    });
+
+    container.innerHTML = rows.length ? rows.map(item => {
+        const project = item.project_contract || item.project_name || 'Без проекта';
+        const assignee = item.assignee_name ? `Исполнитель: ${item.assignee_name}` : `Получатель: ${item.target_role || 'отдел не выбран'}`;
+        const deadline = item.deadline || 'Срок не указан';
+        return `
+            <article class="internal-request-card internal-request-card--${safe(item.priority || 'normal')}">
+                <div class="internal-request-card__main">
+                    <div class="internal-request-card__topline">
+                        <span class="status-badge ${enterpriseStatusClass(item.status)}">${enterpriseStatusLabel(item.status)}</span>
+                        ${item.priority === 'normal' ? '' : `<span class="internal-request-priority">${safe(priorityLabel(item.priority))}</span>`}
+                    </div>
+                    <h4>${safe(item.title)}</h4>
+                    <p>${safe(item.comment || 'Описание не добавлено')}</p>
+                    <div class="internal-request-card__meta">
+                        <span>${safe(project)}</span>
+                        <span>${safe(assignee)}</span>
+                        <span>${safe(deadline)}</span>
+                    </div>
+                </div>
+                <div class="internal-request-card__actions">
+                    <button class="btn-primary" onclick="openInternalRequestCard(${Number(item.id)})">Открыть карточку</button>
+                </div>
+            </article>
+        `;
+    }).join('') : `
+        <div class="empty-state internal-request-empty">
+            <strong>${query ? 'Ничего не найдено' : 'В этой очереди заявок нет'}</strong>
+            <span>${query ? 'Измените запрос поиска.' : 'Новая заявка появится здесь сразу после отправки.'}</span>
+        </div>
+    `;
 }
 
 async function renderResources() {
@@ -1353,6 +1794,9 @@ async function renderResources() {
     const metricsGrid = document.getElementById('resourcesMetricsGrid');
     const container = document.getElementById('resourceAllocationsList');
     if (!metricsGrid || !container) return;
+    syncResourceEditorState();
+    const canUpdate = hasCurrentPermission('resources', 'update');
+    const canDelete = hasCurrentPermission('resources', 'delete');
     metricsGrid.innerHTML = `
         <div class="metric-card"><div class="metric-title">Всего размещений</div><div class="metric-value">${metrics.allocations_total || 0}</div></div>
         <div class="metric-card warning"><div class="metric-title">Перегруз</div><div class="metric-value">${metrics.overloaded || 0}</div></div>
@@ -1396,8 +1840,8 @@ async function renderResources() {
             <div class="view-actions">
                 <span class="status-badge ${enterpriseStatusClass(item.status)}">${enterpriseStatusLabel(item.status)}</span>
                 <span class="client360-item-side">${item.load_percent || 0}%</span>
-                <button class="btn-secondary" onclick="editResourceAllocation(${item.id})">Редактировать</button>
-                <button class="btn-danger" onclick="deleteResourceAllocation(${item.id})">Удалить</button>
+                ${canUpdate ? `<button class="btn-secondary" onclick="editResourceAllocation(${item.id})">Редактировать</button>` : ''}
+                ${canDelete ? `<button class="btn-danger" onclick="deleteResourceAllocation(${item.id})">Удалить</button>` : ''}
             </div>
         </div>
     `).join('');
@@ -1411,6 +1855,9 @@ async function renderServiceCases() {
     const metricsGrid = document.getElementById('serviceMetricsGrid');
     const tbody = document.getElementById('serviceCasesTable');
     if (!metricsGrid || !tbody) return;
+    syncServiceEditorState();
+    const canUpdate = hasCurrentPermission('service', 'update');
+    const canDelete = hasCurrentPermission('service', 'delete');
     metricsGrid.innerHTML = `
         <div class="metric-card warning"><div class="metric-title">Открытые кейсы</div><div class="metric-value">${metrics.open || 0}</div></div>
         <div class="metric-card"><div class="metric-title">Гарантийные</div><div class="metric-value">${metrics.warranty || 0}</div></div>
@@ -1424,12 +1871,62 @@ async function renderServiceCases() {
             <td><div class="finance-row-title finance-row-title--compact">${serviceTypeLabel(item.case_type)}</div><div class="finance-row-meta">${priorityLabel(item.priority)}</div></td>
             <td><div class="finance-row-title finance-row-title--compact">${item.sla_deadline || '—'}</div><div class="finance-row-meta">Гарантия до ${item.warranty_until || 'не указана'}</div></td>
             <td><span class="status-badge ${enterpriseStatusClass(item.status)}">${enterpriseStatusLabel(item.status)}</span></td>
-            <td><div class="view-actions view-actions--table-actions"><button class="btn-secondary" onclick="editServiceCase(${item.id})">Редактировать</button><button class="btn-danger" onclick="deleteServiceCase(${item.id})">Удалить</button></div></td>
+            <td><div class="view-actions view-actions--table-actions">${canUpdate ? `<button class="btn-secondary" onclick="editServiceCase(${item.id})">Редактировать</button>` : '<span class="finance-row-meta">Только просмотр</span>'}${canDelete ? `<button class="btn-danger" onclick="deleteServiceCase(${item.id})">Удалить</button>` : ''}</div></td>
         </tr>
     `).join('') : '<tr><td colspan="6" class="nsi-empty-row">Сервисных кейсов пока нет.</td></tr>';
 }
 
+function renderExecutiveSimpleDashboard() {
+    const statusMount = document.getElementById('executiveSimpleStatus');
+    const metricsMount = document.getElementById('executiveSimpleMetrics');
+    const queueMount = document.getElementById('executiveSimpleQueue');
+    if (!statusMount || !metricsMount || !queueMount) return;
+
+    if (!executiveSummaryDB) {
+        statusMount.innerHTML = '<strong>Нет доступа к панели</strong><span>Панель директора доступна только пользователю с соответствующим правом.</span>';
+        metricsMount.innerHTML = '';
+        queueMount.innerHTML = '<div class="executive-simple-empty">Данные для контроля недоступны.</div>';
+        return;
+    }
+
+    const metrics = executiveSummaryDB.metrics || {};
+    const decisionItems = buildExecutiveDecisionQueue(metrics, {}, {}, executiveSummaryDB);
+    const criticalCount = Number(metrics.blocked_approvals || 0)
+        + Number(metrics.production_overdue || 0)
+        + Number(metrics.service_sla_breached || 0)
+        + Number(metrics.integration_incidents || 0);
+    const attentionCount = criticalCount
+        + Number(metrics.resource_overloaded || 0)
+        + Number(metrics.inventory_discrepancies || 0);
+
+    statusMount.className = `executive-simple-status ${criticalCount ? 'is-alert' : attentionCount ? 'is-warning' : 'is-ok'}`;
+    statusMount.innerHTML = criticalCount
+        ? `<div><span>Сейчас</span><strong>Требуется вмешательство</strong><small>Критичных сигналов: ${criticalCount}. Начните с очереди решений ниже.</small></div><button class="btn-primary" type="button" onclick="document.getElementById('executiveSimpleQueue').scrollIntoView({behavior:'smooth',block:'start'})">К решениям</button>`
+        : `<div><span>Сейчас</span><strong>${attentionCount ? 'Есть вопросы для контроля' : 'Критичных проблем нет'}</strong><small>${attentionCount ? `Сигналов внимания: ${attentionCount}.` : 'Основные процессы работают без критичных отклонений.'}</small></div>`;
+
+    metricsMount.innerHTML = `
+        <button type="button" onclick="navigateTo('approvals')"><span>Зависшие согласования</span><strong>${Number(metrics.blocked_approvals || 0)}</strong><small>нужно решение</small></button>
+        <button type="button" onclick="navigateTo('finance')"><span>Деньги под риском</span><strong>${formatMoney((metrics.cash_overdue_receivables || 0) + (metrics.expense_pending || 0))}</strong><small>дебиторка и затраты</small></button>
+        <button type="button" onclick="navigateTo('dashboard')"><span>Рисковые проекты</span><strong>${(executiveSummaryDB.risk_projects || []).filter(item => Number(item.risk_score || 0) > 0).length}</strong><small>требуют контроля</small></button>
+        <button type="button" onclick="navigateTo('production')"><span>Просрочка производства</span><strong>${Number(metrics.production_overdue || 0)}</strong><small>заказов вне срока</small></button>
+    `;
+
+    queueMount.innerHTML = decisionItems.length ? decisionItems.map((item, index) => `
+        <article class="executive-simple-item">
+            <span class="executive-simple-item__number">${index + 1}</span>
+            <div><h3>${enterpriseEscape(enterpriseDisplayText(item.title, 'Требуется решение').replace(/^(\S+)\s+\1(?=\s|$)/i, '$1'))}</h3><p>${enterpriseEscape(enterpriseDisplayText(item.meta, 'Откройте рабочий раздел и проверьте источник.'))}</p></div>
+            <div class="executive-simple-item__action">${item.action}</div>
+        </article>
+    `).join('') : '<div class="executive-simple-empty">Вопросов, требующих решения директора, сейчас нет.</div>';
+}
+
 async function renderExecutiveDashboard() {
+    if (document.getElementById('executiveSimpleDashboard')) {
+        const summary = await apiCall('/executive/summary');
+        executiveSummaryDB = summary && !summary.error ? summary : null;
+        renderExecutiveSimpleDashboard();
+        return;
+    }
     await loadEnterpriseData();
     renderExecutiveRoleWorkbench();
     toggleRoleSecondarySections('executiveView', !!window.__executiveSecondaryExpanded);
