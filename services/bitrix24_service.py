@@ -1,5 +1,6 @@
 import json
 import re
+import socket
 import ssl
 import subprocess
 import time
@@ -24,6 +25,7 @@ from settings import BITRIX24_SYNC_ENTITIES, BITRIX24_SYNC_LIMIT, BITRIX24_WEBHO
 
 BITRIX24_SOURCE_NAME = "Bitrix24 API"
 BITRIX24_FULL_SYNC_LIMIT = 2000
+_BITRIX_IPV4_CACHE: dict[str, str] = {}
 
 
 def _configured_webhook_url(webhook_url: str = "") -> str:
@@ -187,26 +189,52 @@ def _method_url(webhook_url: str, method: str) -> str:
 
 
 def _bitrix_curl_call(url: str, method: str, payload: dict, timeout_seconds: int) -> dict:
+    parsed = urlparse(url)
+    hostname = parsed.hostname or ""
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    resolved_ipv4: list[str] = []
+    if hostname:
+        try:
+            for info in socket.getaddrinfo(hostname, port, socket.AF_INET, socket.SOCK_STREAM):
+                address = str(info[4][0] or "")
+                if address and address not in resolved_ipv4:
+                    resolved_ipv4.append(address)
+        except OSError:
+            pass
+
+    cached_ipv4 = _BITRIX_IPV4_CACHE.get(hostname, "")
+    candidates = ([cached_ipv4] if cached_ipv4 else []) + [ip for ip in resolved_ipv4 if ip != cached_ipv4]
+    if not candidates:
+        candidates = [""]
+
     completed = None
-    for attempt in range(2):
+    last_error = ""
+    for address in candidates:
+        command = [
+            "curl",
+            "-4",
+            "-sS",
+            "--connect-timeout",
+            str(max(3, min(5, timeout_seconds))),
+            "--max-time",
+            str(max(15, min(45, timeout_seconds * 2))),
+        ]
+        if hostname and address:
+            command.extend(["--resolve", f"{hostname}:{port}:{address}"])
+        command.extend(
+            [
+                "-X",
+                "POST",
+                url,
+                "-H",
+                "Content-Type: application/json",
+                "--data-binary",
+                "@-",
+            ]
+        )
         try:
             completed = subprocess.run(
-                [
-                    "curl",
-                    "-4",
-                    "-sS",
-                    "--connect-timeout",
-                    str(max(5, min(8, timeout_seconds))),
-                    "--max-time",
-                    str(max(12, min(24, timeout_seconds * 2))),
-                    "-X",
-                    "POST",
-                    url,
-                    "-H",
-                    "Content-Type: application/json",
-                    "--data-binary",
-                    "@-",
-                ],
+                command,
                 input=json.dumps(payload, ensure_ascii=False),
                 text=True,
                 encoding="utf-8",
@@ -216,17 +244,17 @@ def _bitrix_curl_call(url: str, method: str, payload: dict, timeout_seconds: int
             )
         except FileNotFoundError:
             raise
-        if completed.returncode == 0:
-            break
-        if attempt < 1:
-            time.sleep(1)
-    if completed is None or completed.returncode != 0:
-        stderr = completed.stderr[:200] if completed else ""
-        raise RuntimeError(f"{method}: curl_failed {stderr}")
-    data = json.loads(completed.stdout or "{}")
-    if isinstance(data, dict) and data.get("error"):
-        raise RuntimeError(f"{method}: {data.get('error_description') or data.get('error')}")
-    return data if isinstance(data, dict) else {"result": data}
+        if completed.returncode != 0:
+            last_error = (completed.stderr or "")[:200]
+            continue
+        data = json.loads(completed.stdout or "{}")
+        if isinstance(data, dict) and data.get("error"):
+            raise RuntimeError(f"{method}: {data.get('error_description') or data.get('error')}")
+        if hostname and address:
+            _BITRIX_IPV4_CACHE[hostname] = address
+        return data if isinstance(data, dict) else {"result": data}
+
+    raise RuntimeError(f"{method}: Bitrix24 connection failed ({last_error or 'no reachable endpoint'})")
 
 
 def _bitrix_call(webhook_url: str, method: str, payload: dict, timeout_seconds: int = 30, attempts: int = 2) -> dict:
