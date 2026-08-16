@@ -13,7 +13,7 @@ from psycopg.rows import dict_row
 from utils import hash_password, is_password_hashed, encrypt_secret, is_secret_encrypted
 from db_migrations import apply_sql_migrations, get_migration_status
 from app_logging import get_logger
-from settings import DEFAULT_ADMIN_LOGIN, DEFAULT_ADMIN_PASSWORD, DIRECTOR_EMAIL
+from settings import APP_ENV, DEFAULT_ADMIN_LOGIN, DEFAULT_ADMIN_PASSWORD, DIRECTOR_EMAIL
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 logger = get_logger("database")
@@ -42,6 +42,10 @@ MAX_SAFE_RUNTIME_ID = 2_147_000_000
 _INIT_DB_LOCK = threading.Lock()
 _INIT_DB_DONE = False
 _INSERT_TABLE_RE = re.compile(r"^\s*INSERT\s+INTO\s+([^\s(]+)", re.IGNORECASE)
+DEMO_SEED_ENABLED = os.getenv(
+    "KORDA_SEED_DEMO_DATA",
+    "0" if APP_ENV == "production" else "1",
+).strip() == "1"
 
 
 def is_postgres_backend() -> bool:
@@ -2221,7 +2225,7 @@ def _init_db_once():
         c.executemany("INSERT INTO global_chats VALUES (?, ?, ?, ?, ?)", default_chats)
 
     c.execute("SELECT COUNT(*) FROM calendar_events")
-    if c.fetchone()[0] == 0:
+    if DEMO_SEED_ENABLED and c.fetchone()[0] == 0:
         demo_calendar_events = [
             ('Личный фокус по ключевым лидам', '02.07.2026', '09:30', '10:00', 'personal', 'admin', 'Администратор', '', 0, 0, 'planned', 'Кабинет директора', 'Проверить следующие действия по новым запросам.', 'system', now_ts, now_ts),
             ('План продаж отдела', '02.07.2026', '11:00', '12:00', 'department', '', 'Система', 'Менеджер', 0, 0, 'planned', 'Отдел продаж', 'Сверка воронки, активностей и просроченных касаний.', 'system', now_ts, now_ts),
@@ -2238,7 +2242,7 @@ def _init_db_once():
         )
 
     c.execute("SELECT COUNT(*) FROM crm_leads")
-    if c.fetchone()[0] == 0:
+    if DEMO_SEED_ENABLED and c.fetchone()[0] == 0:
         demo_leads = [
             ('Запрос на термочехлы для блока ТЭЦ', 'АО ЭнергоТепло', 'Виктор Смирнов', 'v.smirnov@energo.example', '+7 911 111-22-33', 'Почта', 'qualified', 48, 1850000, 'RUB', 'Администратор', 'Подтвердить ТЗ и бюджет', '03.07.2026', 'high', '["энергетика","теплоизоляция"]', 'Клиент вернулся после первого КП.', 0, 0, 0, 'system', now_ts, now_ts),
             ('Потенциальный проект по шумозащите', 'ООО ПромШум', 'Мария Лапина', 'lapina@promshum.example', '+7 921 555-77-88', 'Сайт', 'proposal', 62, 940000, 'RUB', 'Администратор', 'Созвон по условиям монтажа', '04.07.2026', 'normal', '["монтаж","сервис"]', 'Нужно показать кейсы и сроки.', 0, 0, 0, 'system', now_ts, now_ts),
@@ -2255,7 +2259,7 @@ def _init_db_once():
         )
 
     c.execute("SELECT COUNT(*) FROM crm_deals")
-    if c.fetchone()[0] == 0:
+    if DEMO_SEED_ENABLED and c.fetchone()[0] == 0:
         demo_deals = [
             (1, 'Сделка: ЭнергоТепло / 2026-КП-014', 0, 'АО ЭнергоТепло', '2026-КП-014', 'negotiation', 1450000, 'RUB', 27, 64, 'Администратор', 'Согласовать скидку и срок поставки', '04.07.2026', '18.07.2026', 'high', 'attention', '["переговоры","горячая"]', 'Клиент ждёт ответ по скидке и графику.', 0, 'system', now_ts, now_ts),
             (2, 'Сделка: ПромШум / пилотный объект', 0, 'ООО ПромШум', '2026-КП-018', 'proposal', 780000, 'RUB', 31, 52, 'Администратор', 'Дослать уточнённое КП', '03.07.2026', '15.07.2026', 'normal', 'accent', '["пилот","сервис"]', 'Нужно приложить условия сервисного выезда.', 0, 'system', now_ts, now_ts),
@@ -2271,7 +2275,7 @@ def _init_db_once():
         )
 
     c.execute("SELECT COUNT(*) FROM crm_activities")
-    if c.fetchone()[0] == 0:
+    if DEMO_SEED_ENABLED and c.fetchone()[0] == 0:
         demo_activities = [
             ('lead', 1, 'call', 'Квалификация лида', 'Подтвердить состав оборудования и срок запуска площадки.', '03.07.2026', 'open', 'Администратор', 'system', now_ts, now_ts),
             ('lead', 2, 'email', 'Отправить кейсы', 'Дослать клиенту 2 кейса по сервису и монтажу.', '04.07.2026', 'open', 'Администратор', 'system', now_ts, now_ts),
@@ -2288,7 +2292,7 @@ def _init_db_once():
         )
 
     c.execute("SELECT COUNT(*) FROM company_feed_posts")
-    if c.fetchone()[0] == 0:
+    if DEMO_SEED_ENABLED and c.fetchone()[0] == 0:
         demo_posts = [
             (
                 1,
@@ -2323,7 +2327,7 @@ def _init_db_once():
         )
 
     c.execute("SELECT COUNT(*) FROM tasks")
-    if c.fetchone()[0] == 0:
+    if DEMO_SEED_ENABLED and c.fetchone()[0] == 0:
         seed_tasks = [
             (1, 'Проверить договор по проекту DEMO-ERP-PROD', 'Сверить сумму, сроки и реквизиты перед отправкой клиенту.', 'Илья Осипов', 'Илья Осипов', '03.07.2026 12:00', 'active', '01.07.2026 09:10', 'none', 'high', 1, '["Создано для демонстрации Task Center"]', '[{"user":"Мария Демо","role":"Менеджер","text":"Договор уже в карточке проекта, нужны только замечания по условиям оплаты.","time":"01.07.2026 09:15","created_at":' + str(now_ts) + '}]', now_ts),
             (2, 'Подтвердить статус оплаты счета', 'Уточнить в бухгалтерии, прошла ли предоплата по счету и нужен ли перенос отгрузки.', 'Мария Демо', 'Илья Осипов', '02.07.2026 17:30', 'active', '01.07.2026 08:40', 'none', 'normal', 1, '[]', '[]', now_ts),
