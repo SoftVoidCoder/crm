@@ -1047,6 +1047,12 @@ async function renderBitrixImport() {
     renderOutreachBitrixPanel();
 }
 
+async function refreshBitrixImportData() {
+    await Promise.all([loadOutreachProspects(), loadOutreachImports()]);
+    renderBitrixImportStats();
+    renderOutreachBitrixPanel();
+}
+
 function canManageBitrixConnection() {
     return typeof hasCurrentPermission === 'function' && hasCurrentPermission('clients', 'import');
 }
@@ -1251,9 +1257,7 @@ async function importSelectedBitrixClients() {
         skipped: Number(res.skipped || 0),
     };
     showToast('Bitrix24', `Загружено: ${Number(res.rows_total || 0)}, создано ${Number(res.created || 0)}, обновлено ${Number(res.updated || 0)}`);
-    await renderProspecting(true);
-    renderBitrixImportStats();
-    renderOutreachBitrixPanel();
+    await refreshBitrixImportData();
 }
 
 function getBitrixSyncLimit() {
@@ -1280,9 +1284,7 @@ async function runBitrixSync(actionLabel) {
         skipped: Number(res.skipped || 0),
     };
     showToast('Bitrix24', `Получено: ${Number(res.rows_total || 0)}, новых ${Number(res.created || 0)}, обновлено ${Number(res.updated || 0)}`);
-    await renderProspecting(true);
-    renderBitrixImportStats();
-    renderOutreachBitrixPanel();
+    await refreshBitrixImportData();
 }
 
 async function syncBitrixClientsNow() {
@@ -1317,9 +1319,7 @@ async function clearBitrixClientList() {
         skipped: 0,
     };
     showToast('Bitrix24', `Очищено записей: ${Number(res.removed || 0)}`);
-    await renderProspecting(true);
-    renderBitrixImportStats();
-    renderOutreachBitrixPanel();
+    await refreshBitrixImportData();
 }
 
 function syncOutreachFilterControls() {
