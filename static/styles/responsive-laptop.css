@@ -1,0 +1,165 @@
+/* Laptop-safe layout overrides.
+   Wide registries scroll inside their card instead of being clipped by the page. */
+
+html,
+body,
+.app-layout {
+    width: 100%;
+    min-width: 0;
+}
+
+.main-wrapper,
+.main-content,
+.main-content > .view-page,
+.main-content .view-page > * {
+    min-width: 0 !important;
+}
+
+.main-content .view-page .view-header,
+.main-content .view-page .view-heading,
+.main-content .view-page .view-actions,
+.main-content .view-page .section-header,
+.main-content .view-page .section-actions,
+.main-content .view-page .toolbar,
+.main-content .view-page .filter-bar,
+.main-content .view-page .filters-row,
+.main-content .view-page .project-toolbar,
+.main-content .view-page .workbench-strip,
+.main-content .view-page .workbench-card-actions,
+.main-content .view-page .modal-actions {
+    flex-wrap: wrap !important;
+    min-width: 0 !important;
+}
+
+/* Registries keep their useful columns and receive their own horizontal scroll. */
+.main-content .table-shell,
+.main-content .table-responsive,
+.main-content .admin-table-wrap,
+.main-content .task-table-wrap,
+.main-content .clients-table-shell,
+.main-content .prospecting-control-table,
+.main-content .finance-registry-panel,
+.main-content .crm-registry-layout,
+.main-content .data-table-wrap,
+.main-content .registry-table-wrap {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: auto !important;
+    overflow-y: visible;
+    overscroll-behavior-inline: contain;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Dialogs must fit a short laptop screen without hiding their actions. */
+.modal,
+.modal-content,
+.dialog,
+.drawer-panel,
+.krd-modal,
+.krd-drawer {
+    max-width: calc(100vw - 24px) !important;
+    max-height: calc(100vh - 24px) !important;
+}
+
+.modal-content,
+.dialog,
+.drawer-panel,
+.krd-modal,
+.krd-drawer {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+@media (min-width: 821px) and (max-width: 1440px) {
+    :root {
+        --sidebar-width: 216px;
+        --krd5-sidebar-w: 216px;
+        --krd5-gutter: 16px;
+    }
+
+    html body .app-layout > .sidebar.sidebar.krd-shell-sidebar {
+        width: var(--sidebar-width) !important;
+        min-width: var(--sidebar-width) !important;
+        max-width: var(--sidebar-width) !important;
+        padding-inline: 10px !important;
+    }
+
+    html body .app-layout > .main-wrapper {
+        width: calc(100% - var(--sidebar-width)) !important;
+        margin-left: var(--sidebar-width) !important;
+    }
+
+    html body .app-layout > .main-wrapper > .topbar.topbar.krd-shell-topbar {
+        grid-template-columns: minmax(260px, 1fr) auto !important;
+        gap: 10px !important;
+        padding: 9px 14px !important;
+    }
+
+    html body .app-layout > .main-wrapper > .main-content {
+        width: 100% !important;
+        padding: 16px 16px 40px !important;
+    }
+
+    .main-content .view-page {
+        gap: 14px !important;
+    }
+
+    .main-content .surface-card--padded,
+    .main-content .krd-card--pad,
+    .main-content .project-panel,
+    .main-content .ops-form-card {
+        padding: 16px !important;
+    }
+
+    .main-content .stats-grid,
+    .main-content .metric-grid,
+    .main-content .summary-grid,
+    .main-content .dashboard-metrics,
+    .main-content .project-metrics-strip,
+    .main-content .ops-summary-grid {
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)) !important;
+    }
+
+    .main-content .smart-tools-grid,
+    .main-content .project-ops-grid,
+    .main-content .system-ops-grid,
+    .main-content .secondary-zone,
+    .main-content .erp-cockpit-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .topbar-user-meta,
+    .notif-bell-meta {
+        display: none !important;
+    }
+
+    .krd-topbar-search {
+        min-width: 180px !important;
+    }
+}
+
+@media (min-width: 821px) and (max-width: 1180px) {
+    :root {
+        --sidebar-width: 204px;
+        --krd5-sidebar-w: 204px;
+    }
+
+    html body .app-layout > .main-wrapper > .main-content {
+        padding: 14px 12px 32px !important;
+    }
+
+    .topbar-action-cluster .topbar-utility-button:not(:last-child),
+    .topbar .search-shortcut-hint {
+        display: none !important;
+    }
+
+    .main-content .smart-tools-grid,
+    .main-content .project-ops-grid,
+    .main-content .system-ops-grid,
+    .main-content .secondary-zone,
+    .main-content .erp-cockpit-grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+}
