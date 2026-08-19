@@ -18,8 +18,13 @@
         nomenclatureDB = Array.isArray(rows) ? rows : [];
     }
     async function loadSimpleContacts() {
-        const rows = await apiCall('/contacts');
-        contactsDB = Array.isArray(rows) ? rows : [];
+        const [crmRows, bitrixRows] = await Promise.all([
+            apiCall('/contacts'),
+            apiCall('/integrations/bitrix24/contacts'),
+        ]);
+        const crm = Array.isArray(crmRows) ? crmRows.map(item => ({ ...item, source: item.source || 'crm' })) : [];
+        const bitrix = Array.isArray(bitrixRows) ? bitrixRows : [];
+        contactsDB = [...crm, ...bitrix];
     }
     async function loadSimpleClients() {
         const rows = await apiCall('/clients');
@@ -28,6 +33,9 @@
     function clientName(clientId) {
         const client = (typeof clientsDB !== 'undefined' ? clientsDB : []).find(item => Number(item.id) === Number(clientId));
         return client?.name || 'Компания не найдена';
+    }
+    function contactCompanyName(item = {}) {
+        return String(item.company_name || '').trim() || clientName(item.client_id);
     }
 
     function filteredNomRows() {
@@ -120,22 +128,23 @@
 
     function filteredContactRows() {
         const query = contactSearch.toLowerCase();
-        return contactsDB.filter(item => !query || [item.name, item.position, item.phone, item.email, clientName(item.client_id)].join(' ').toLowerCase().includes(query));
+        return contactsDB.filter(item => !query || [item.name, item.position, item.phone, item.email, contactCompanyName(item)].join(' ').toLowerCase().includes(query));
     }
     function renderContactMetrics() {
         const target = document.getElementById('contactsSimpleMetrics'); if (!target) return;
-        target.innerHTML = `<div><span>Всего контактов</span><strong>${contactsDB.length}</strong></div><div><span>С телефоном</span><strong>${contactsDB.filter(item => item.phone).length}</strong></div><div><span>С почтой</span><strong>${contactsDB.filter(item => item.email).length}</strong></div><div><span>Компаний</span><strong>${new Set(contactsDB.map(item => item.client_id).filter(Boolean)).size}</strong></div>`;
+        target.innerHTML = `<div><span>Всего контактов</span><strong>${contactsDB.length}</strong></div><div><span>С телефоном</span><strong>${contactsDB.filter(item => item.phone).length}</strong></div><div><span>С почтой</span><strong>${contactsDB.filter(item => item.email).length}</strong></div><div><span>Компаний</span><strong>${new Set(contactsDB.map(item => contactCompanyName(item)).filter(Boolean)).size}</strong></div>`;
     }
     function renderContactList() {
         const target = document.getElementById('contactsSimpleList'); if (!target) return;
         const rows = filteredContactRows();
-        target.innerHTML = rows.length ? rows.map(item => `<article class="nsi-simple-record nsi-simple-record--contact ${Number(selectedContactId) === Number(item.id) ? 'is-selected' : ''}"><div class="nsi-simple-record__identity"><span class="nsi-simple-record__icon">${esc(String(item.name || '?').slice(0,1).toUpperCase())}</span><div><h3>${esc(item.name || 'Без имени')}</h3><p>${esc(item.position || 'Должность не указана')} · ${esc(clientName(item.client_id))}</p></div></div><div class="nsi-simple-record__contact"><span>${esc(item.phone || 'Телефон не указан')}</span><small>${esc(item.email || 'Почта не указана')}</small></div><button class="btn-secondary" onclick="selectSimpleContact(${num(item.id)})">Открыть карточку</button></article>`).join('') : '<div class="nsi-simple-empty">Контакты по этому запросу не найдены.</div>';
+        target.innerHTML = rows.length ? rows.map(item => `<article class="nsi-simple-record nsi-simple-record--contact ${Number(selectedContactId) === Number(item.id) ? 'is-selected' : ''}"><div class="nsi-simple-record__identity"><span class="nsi-simple-record__icon">${esc(String(item.name || '?').slice(0,1).toUpperCase())}</span><div><h3>${esc(item.name || 'Без имени')}</h3><p>${esc(item.position || 'Должность не указана')} · ${esc(contactCompanyName(item))}${item.source === 'bitrix24' ? ' · Bitrix24' : ''}</p></div></div><div class="nsi-simple-record__contact"><span>${esc(item.phone || 'Телефон не указан')}</span><small>${esc(item.email || 'Почта не указана')}</small></div><button class="btn-secondary" onclick="selectSimpleContact(${num(item.id)})">Открыть карточку</button></article>`).join('') : '<div class="nsi-simple-empty">Контакты по этому запросу не найдены.</div>';
     }
     function renderContactDetail() {
         const target = document.getElementById('contactsSimpleDetail'); if (!target) return;
         const item = contactsDB.find(row => Number(row.id) === Number(selectedContactId));
         if (!item) { target.innerHTML = '<div class="nsi-simple-empty">Откройте контакт из списка — здесь появится полная карточка.</div>'; return; }
-        target.innerHTML = `<article class="nsi-simple-card"><header class="nsi-simple-card__head"><div><span class="nsi-simple-badge">${esc(item.position || 'Должность не указана')}</span><h2>${esc(item.name)}</h2><p>${esc(clientName(item.client_id))}</p></div><div class="view-actions">${can('clients','update') ? `<button class="btn-primary" onclick="openSimpleContactEditor(${item.id})">Редактировать</button>` : ''}${can('clients','delete') ? `<button class="btn-danger" onclick="deleteSimpleContact(${item.id})">Удалить</button>` : ''}</div></header><div class="nsi-simple-card__facts nsi-simple-card__facts--contact"><div><span>Компания</span><strong>${esc(clientName(item.client_id))}</strong></div><div><span>Должность</span><strong>${esc(item.position || 'Не указана')}</strong></div><div><span>Телефон</span><strong>${item.phone ? `<a href="tel:${esc(item.phone)}">${esc(item.phone)}</a>` : 'Не указан'}</strong></div><div><span>Почта</span><strong>${item.email ? `<a href="mailto:${esc(item.email)}">${esc(item.email)}</a>` : 'Не указана'}</strong></div></div></article>`;
+        const readOnlyBitrix = item.source === 'bitrix24';
+        target.innerHTML = `<article class="nsi-simple-card"><header class="nsi-simple-card__head"><div><span class="nsi-simple-badge">${readOnlyBitrix ? 'Bitrix24' : esc(item.position || 'Должность не указана')}</span><h2>${esc(item.name)}</h2><p>${esc(contactCompanyName(item))}</p></div><div class="view-actions">${!readOnlyBitrix && can('clients','update') ? `<button class="btn-primary" onclick="openSimpleContactEditor(${item.id})">Редактировать</button>` : ''}${!readOnlyBitrix && can('clients','delete') ? `<button class="btn-danger" onclick="deleteSimpleContact(${item.id})">Удалить</button>` : ''}</div></header><div class="nsi-simple-card__facts nsi-simple-card__facts--contact"><div><span>Компания</span><strong>${esc(contactCompanyName(item))}</strong></div><div><span>Должность</span><strong>${esc(item.position || 'Не указана')}</strong></div><div><span>Телефон</span><strong>${item.phone ? `<a href="tel:${esc(item.phone)}">${esc(item.phone)}</a>` : 'Не указан'}</strong></div><div><span>Почта</span><strong>${item.email ? `<a href="mailto:${esc(item.email)}">${esc(item.email)}</a>` : 'Не указана'}</strong></div></div>${readOnlyBitrix ? '<p class="nsi-simple-help">Контакт обновляется из Bitrix24. Изменения вносите в Bitrix24 и повторите синхронизацию.</p>' : ''}</article>`;
     }
     window.renderContacts = async function () {
         await Promise.all([loadSimpleContacts(), loadSimpleClients()]);
@@ -201,8 +210,9 @@
         try {
             const response = await apiCall('/integrations/bitrix24/sync', 'POST', { limit: 100 });
             if (!response || response.error || response.status === 'failed') return customAlert(response?.error || 'Не удалось синхронизировать Bitrix24.');
-            await loadSimpleClients();
+            await Promise.all([loadSimpleClients(), loadSimpleContacts()]);
             fillContactClients(document.getElementById('simpleContactClientId')?.value || 0);
+            renderContactMetrics(); renderContactList(); renderContactDetail();
             showToast('Bitrix24', `Получено ${num(response.rows_total)}, новых ${num(response.created)}, обновлено ${num(response.updated)}`);
         } finally {
             button.textContent = 'Обновить из Bitrix24';

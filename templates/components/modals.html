@@ -156,7 +156,7 @@
                     </label>
                     <label class="form-field">
                         <span class="form-label">Вид документа <span class="form-required">*</span></span>
-                        <select id="docKind" data-field="docKind" class="auth-input">
+                        <select id="docKind" data-field="docKind" class="auth-input" onchange="generateDocNumber()">
                             <option value="commercial_proposal">Коммерческое предложение (КП)</option>
                             <option value="company_details">Карточка предприятия / реквизиты</option>
                             <option value="technical_proposal">Техническое предложение</option>

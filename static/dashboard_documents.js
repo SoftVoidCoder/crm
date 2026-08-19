@@ -69,6 +69,8 @@ const DOCUMENT_KIND_LABELS = {
     other: 'Другой документ',
 };
 
+const DOCUMENT_KIND_CODES = new Set(Object.keys(DOCUMENT_KIND_LABELS));
+
 function documentKindLabel(code = '') {
     return DOCUMENT_KIND_LABELS[String(code || '').trim()] || 'Документ';
 }
@@ -1758,7 +1760,7 @@ async function submitDocument(status = 'registered') {
     if (typeof bindFormFieldErrorCleanup === 'function') bindFormFieldErrorCleanup('documentForm');
     if (typeof clearFormErrors === 'function') clearFormErrors('createDocModal');
     const type = document.getElementById('docType').value;
-    const documentKindCode = document.getElementById('docKind')?.value || '';
+    const documentKindCode = String(document.getElementById('docKind')?.value || '').trim();
     const number = document.getElementById('docNumber').value.trim();
     const dDate = document.getElementById('docDate').value.trim();
     const senderName = document.getElementById('docSenderName')?.value.trim() || '';
@@ -1781,7 +1783,7 @@ async function submitDocument(status = 'registered') {
     const file = document.getElementById('docFile')?.files?.[0] || null;
 
     const errors = [];
-    if (!documentKindCode) errors.push({ field: 'docKind', message: 'Выберите вид документа.' });
+    if (!DOCUMENT_KIND_CODES.has(documentKindCode)) errors.push({ field: 'docKind', message: 'Выберите вид документа.' });
     if (!number) errors.push({ field: 'docNumber', message: 'Укажите номер документа.' });
     if (!subj) errors.push({ field: 'docSubject', message: 'Укажите тему документа.' });
     if (!file) errors.push({ field: 'docFile', message: 'Прикрепите файл документа.' });

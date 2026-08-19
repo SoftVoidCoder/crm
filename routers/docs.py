@@ -178,6 +178,34 @@ def _doc_type_prefix(doc_type: str) -> str:
     return mapping.get(_normalize_doc_type(doc_type), "DOC")
 
 
+DOCUMENT_KIND_CODES = {
+    "commercial_proposal", "company_details", "technical_proposal", "contract",
+    "contract_specification", "invoice", "act_upd", "technical_task", "drawing",
+    "product_specification", "technology_card", "production_order", "purchase_request",
+    "supplier_order", "waybill", "quality_act", "service_act", "internal_memo", "other",
+}
+
+
+def _normalize_document_kind(value: str, subject: str = "", number: str = "", repair_legacy: bool = False) -> str:
+    """Keep the selected document kind and repair unmistakable legacy KP mislabels."""
+    raw = _safe_text(value).lower()
+    text = f"{_safe_text(subject)} {_safe_text(number)}".lower()
+    inferred = ""
+    if re.search(r"(^|\s)(сч[её]т|invoice)(\s|№|#|[-:]|$)", text):
+        inferred = "invoice"
+    elif re.search(r"(^|\s)(акт|упд)(\s|№|#|[-:]|$)", text):
+        inferred = "act_upd"
+    elif re.search(r"(^|\s)(накладн\w*|торг-?12)(\s|№|#|[-:]|$)", text):
+        inferred = "waybill"
+    elif re.search(r"спецификац", text):
+        inferred = "contract_specification" if "договор" in text else "product_specification"
+    elif re.search(r"(^|\s)договор(\s|№|#|[-:]|$)", text):
+        inferred = "contract"
+    if raw in DOCUMENT_KIND_CODES and not (repair_legacy and raw == "commercial_proposal" and inferred):
+        return raw
+    return inferred or (raw if raw in DOCUMENT_KIND_CODES else "other")
+
+
 def _resolve_public_base_url(request: Request | None = None) -> str:
     if PUBLIC_BASE_URL:
         return PUBLIC_BASE_URL.rstrip("/")
@@ -1577,6 +1605,13 @@ def get_documents(request: Request):
         rows = [dict(r) for r in c.fetchall()]
         updated = False
         for row in rows:
+            normalized_kind = _normalize_document_kind(
+                row.get("document_kind_code", ""), row.get("subject", ""), row.get("number", ""), repair_legacy=True
+            )
+            if normalized_kind != _safe_text(row.get("document_kind_code")):
+                c.execute("UPDATE documents SET document_kind_code=? WHERE id=?", (normalized_kind, int(row.get("id") or 0)))
+                row["document_kind_code"] = normalized_kind
+                updated = True
             relation = c.execute(
                 """
                 SELECT target_entity_id
@@ -1628,7 +1663,7 @@ async def create_document(data: DocData, request: Request):
             (
                 doc_id,
                 data.type,
-                data.document_kind_code,
+                _normalize_document_kind(data.document_kind_code, data.subject, data.number),
                 data.number,
                 data.d_date,
                 correspondent,
@@ -1762,7 +1797,7 @@ async def update_document(doc_id: int, data: DocUpdate, request: Request):
             """,
             (
                 data.type,
-                data.document_kind_code,
+                _normalize_document_kind(data.document_kind_code, data.subject, data.number),
                 data.number,
                 data.d_date,
                 correspondent,

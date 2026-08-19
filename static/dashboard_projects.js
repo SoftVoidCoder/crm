@@ -903,7 +903,7 @@ function generateCardHTML(p) {
             <div><span>Готовность</span><strong>${progress}%</strong></div>
             <div class="card-progress"><div class="card-progress-fill" style="width:${progress}%"></div></div>
         </div>
-        <button class="btn-secondary project-registry-row__open" type="button">Открыть</button>
+        <button class="btn-secondary project-registry-row__open" type="button" onclick="event.stopPropagation(); openProject(${Number(p.id || 0)})">Открыть</button>
         ${archiveHtml}
     </article>`;
 }

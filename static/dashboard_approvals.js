@@ -834,6 +834,9 @@ async function submitApproval() {
         route: smartRouteData, 
         author: currentUser.name 
     });
+    if (!res || res.error) {
+        return customAlert(res?.message || 'Не удалось запустить согласование. Проверьте документ и список согласующих.');
+    }
     if (res && !res.error && typeof markWorkflowFocus === 'function') {
         markWorkflowFocus('approval', Number(res.id || 0));
     }

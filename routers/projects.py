@@ -7831,6 +7831,35 @@ def _decorate_crm_rows(rows: list[dict], entity_type: str) -> list[dict]:
         row["activities"] = activities[:8]
         row["activity_open_count"] = len([item for item in activities if _normalize_match(item.get("status", "")) != "done"])
         row["activity_done_count"] = len([item for item in activities if _normalize_match(item.get("status", "")) == "done"])
+    # Older imported leads sometimes kept the phone/e-mail only in the linked
+    # client card. Hydrate empty fields for display without overwriting values
+    # explicitly stored in the lead/deal.
+    linked_ids = {
+        _safe_int(row.get("linked_client_id") if entity_type == "lead" else row.get("client_id"))
+        for row in rows
+    } - {0}
+    if linked_ids:
+        conn = get_connection(row_factory=True)
+        placeholders = ",".join("?" for _ in linked_ids)
+        client_rows = {
+            _safe_int(item.get("id")): dict(item)
+            for item in [dict(value) for value in conn.execute(f"SELECT id, name, contact FROM clients WHERE id IN ({placeholders})", tuple(linked_ids)).fetchall()]
+        }
+        conn.close()
+        for row in rows:
+            client_id = _safe_int(row.get("linked_client_id") if entity_type == "lead" else row.get("client_id"))
+            client = client_rows.get(client_id) or {}
+            contact_blob = _normalize_spaces(client.get("contact", ""))
+            if not _normalize_spaces(row.get("client_name", "")):
+                row["client_name"] = _normalize_spaces(client.get("name", ""))
+            if contact_blob:
+                parts = [_normalize_spaces(part) for part in contact_blob.split("/") if _normalize_spaces(part)]
+                if not _normalize_spaces(row.get("contact_email", "")):
+                    row["contact_email"] = next((part for part in parts if "@" in part), "")
+                if not _normalize_spaces(row.get("contact_phone", "")):
+                    row["contact_phone"] = next((part for part in parts if re.search(r"\d{6,}", re.sub(r"\D", "", part))), "")
+                if not _normalize_spaces(row.get("contact_name", "")):
+                    row["contact_name"] = next((part for part in parts if "@" not in part and not re.search(r"\d{6,}", re.sub(r"\D", "", part))), "")
     if entity_type == "deal" and rows:
         conn = get_connection(row_factory=True)
         document_rows = [dict(item) for item in conn.execute("SELECT * FROM documents WHERE COALESCE(deal_id, 0) > 0 ORDER BY id DESC").fetchall()]

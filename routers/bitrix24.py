@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Body, Request
 
+from database import get_connection
 from permissions import DIRECTOR_ROLE, MANAGER_ROLE, has_permission, require_approved_user
 from services.bitrix24_service import (
     _bitrix_call,
@@ -76,6 +77,38 @@ def sync_bitrix24(request: Request, payload: dict = Body(default={})):
     except Exception as exc:
         return {"status": "failed", "error": str(exc)[:500], **bitrix24_config_status(webhook_url)}
     return result
+
+
+@router.get("/api/integrations/bitrix24/contacts")
+def get_cached_bitrix24_contacts(request: Request):
+    """Expose already imported Bitrix contacts to the NSI screen without duplicating CRM clients."""
+    actor = require_approved_user(request)
+    if not _can_use_bitrix(actor):
+        return {"error": "forbidden"}
+    conn = get_connection(row_factory=True)
+    try:
+        rows = [dict(row) for row in conn.execute(
+            """
+            SELECT id, company_name, contact_name, position, phone, email, converted_client_id
+            FROM outreach_prospects
+            WHERE source_name='Bitrix24 API'
+              AND (COALESCE(TRIM(contact_name), '')<>'' OR COALESCE(TRIM(phone), '')<>'' OR COALESCE(TRIM(email), '')<>'')
+            ORDER BY company_name COLLATE NOCASE, contact_name COLLATE NOCASE, id DESC
+            """
+        ).fetchall()]
+    finally:
+        conn.close()
+    return [{
+        "id": -int(row.get("id") or 0),
+        "source_id": int(row.get("id") or 0),
+        "source": "bitrix24",
+        "client_id": int(row.get("converted_client_id") or 0),
+        "company_name": str(row.get("company_name") or "").strip(),
+        "name": str(row.get("contact_name") or "").strip() or "Контакт Bitrix24",
+        "position": str(row.get("position") or "").strip(),
+        "phone": str(row.get("phone") or "").strip(),
+        "email": str(row.get("email") or "").strip(),
+    } for row in rows]
 
 
 @router.delete("/api/integrations/bitrix24/outreach")
