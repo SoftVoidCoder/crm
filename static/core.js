@@ -379,7 +379,8 @@ function validateUnifiedField(input) {
     if (/\bbik\b|бик/.test(text)) {
         return /^\d{9}$/.test(value.replace(/\D/g, '')) ? null : { tone: 'error', message: 'БИК должен быть из 9 цифр.' };
     }
-    if (type === 'date' || /\bdate\b|дата|deadline|due|valid_until|finish|start|issued|issue/.test(text)) {
+    const isDateField = type === 'date' || (input.tagName !== 'TEXTAREA' && /\bdate\b|дата|deadline|due|valid_until|finish|start|issued|issue/.test(text));
+    if (isDateField) {
         return isValidUnifiedDate(value) ? null : { tone: 'error', message: 'Дата нужна в формате дд.мм.гггг или гггг-мм-дд.' };
     }
     if (/vat|ндс/.test(text)) {

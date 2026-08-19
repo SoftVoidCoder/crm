@@ -6347,7 +6347,7 @@ html body .app-layout > .main-wrapper > .topbar .topbar-logout-button:hover {
 .nsi-simple-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
 .nsi-simple-metrics > div { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; border:1px solid #dbe3eb; border-radius:12px; background:#fff; }
 .nsi-simple-metrics span { color:#68788d; font-size:13px; }
-.nsi-simple-metrics strong { color:#17243a; font-size:24px; }
+.nsi-simple-metrics strong { flex:0 0 auto; color:#17243a; font-size:22px; white-space:nowrap; }
 .nsi-simple-toolbar { display:grid; grid-template-columns:minmax(280px,1fr) minmax(190px,260px) auto; gap:10px; padding:12px; border:1px solid #dbe3eb; border-radius:12px; background:#f8fafc; }
 .nsi-simple-toolbar--contacts { grid-template-columns:minmax(280px,1fr) auto; }
 .nsi-simple-list { display:grid; gap:10px; }
