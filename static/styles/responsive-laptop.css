@@ -162,6 +162,46 @@ body,
     .main-content .erp-cockpit-grid {
         grid-template-columns: minmax(0, 1fr) !important;
     }
+
+    /* The leads registry is a daily workspace, so its action must remain
+       visible without a hidden horizontal trip to the right edge. */
+    #leadsView .lead-list-card .table-shell {
+        overflow-x: visible !important;
+    }
+
+    #leadsView .lead-list-card .crm-registry-table {
+        width: 100% !important;
+        min-width: 0 !important;
+        table-layout: fixed !important;
+    }
+
+    #leadsView .lead-list-card .lead-table-action {
+        width: 104px !important;
+    }
+
+    #leadsView .lead-list-card .lead-table-action .btn-secondary {
+        width: 100% !important;
+        min-width: 0 !important;
+        padding-inline: 8px !important;
+        white-space: normal !important;
+    }
+
+    /* The application sidebar consumes part of the viewport. Switch project
+       rows to their compact form before the content area becomes too narrow. */
+    .project-registry-row {
+        grid-template-columns: minmax(230px, 1.5fr) minmax(120px, 1fr) minmax(130px, 1fr) auto !important;
+        gap: 12px !important;
+    }
+
+    .project-registry-row__meta:nth-of-type(4),
+    .project-registry-row__progress {
+        display: none !important;
+    }
+
+    .project-registry-row__open {
+        min-width: 92px;
+        pointer-events: auto !important;
+    }
 }
 
 /*
