@@ -93,7 +93,7 @@ def get_cached_bitrix24_contacts(request: Request):
             FROM outreach_prospects
             WHERE source_name='Bitrix24 API'
               AND (COALESCE(TRIM(contact_name), '')<>'' OR COALESCE(TRIM(phone), '')<>'' OR COALESCE(TRIM(email), '')<>'')
-            ORDER BY company_name COLLATE NOCASE, contact_name COLLATE NOCASE, id DESC
+            ORDER BY LOWER(COALESCE(company_name, '')), LOWER(COALESCE(contact_name, '')), id DESC
             """
         ).fetchall()]
     finally:
