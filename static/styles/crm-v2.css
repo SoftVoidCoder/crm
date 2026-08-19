@@ -6351,6 +6351,7 @@ html body .app-layout > .main-wrapper > .topbar .topbar-logout-button:hover {
 .nsi-simple-toolbar { display:grid; grid-template-columns:minmax(280px,1fr) minmax(190px,260px) auto; gap:10px; padding:12px; border:1px solid #dbe3eb; border-radius:12px; background:#f8fafc; }
 .nsi-simple-toolbar--contacts { grid-template-columns:minmax(280px,1fr) auto; }
 .nsi-simple-list { display:grid; gap:10px; }
+.nsi-simple-list-note { padding:11px 14px; border:1px solid #cfe2df; border-radius:11px; color:#496579; background:#f2f8f7; font-size:12px; line-height:1.45; }
 .nsi-simple-record { display:grid; grid-template-columns:minmax(260px,1fr) minmax(120px,160px) minmax(120px,160px) auto; gap:16px; align-items:center; padding:15px 16px; border:1px solid #dbe3eb; border-radius:13px; background:#fff; transition:border-color .15s,box-shadow .15s; }
 .nsi-simple-record--contact { grid-template-columns:minmax(280px,1fr) minmax(220px,320px) auto; }
 .nsi-simple-record:hover,
