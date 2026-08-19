@@ -276,3 +276,117 @@ body,
         min-width: 760px !important;
     }
 }
+
+/* "База развития": пять рабочих колонок всегда помещаются в карточку.
+   Старый общий стиль задавал плотным таблицам ширину 1480px и обрезал
+   правую колонку с действиями на ноутбуках и при открытых DevTools. */
+#prospectingView,
+#prospectingView .outreach-pool-page,
+#prospectingView .outreach-pool-page > *,
+#prospectingView #outreachPoolMount {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+}
+
+#prospectingView .view-header {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 12px 20px !important;
+}
+
+#prospectingView .view-heading {
+    flex: 1 1 560px !important;
+}
+
+#prospectingView .view-actions {
+    flex: 0 1 auto !important;
+    justify-content: flex-end !important;
+}
+
+#prospectingView .outreach-pool-table-shell {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+    scrollbar-gutter: auto !important;
+}
+
+.main-content #prospectingView .outreach-pool-table.admin-table--dense {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+}
+
+.main-content #prospectingView .outreach-pool-table :is(th, td) {
+    min-width: 0 !important;
+    padding: 10px 9px !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+    vertical-align: middle !important;
+}
+
+#prospectingView .outreach-pool-table .crm-inline-pill {
+    max-width: 100% !important;
+    padding-inline: 8px !important;
+    white-space: normal !important;
+    text-align: center !important;
+}
+
+#prospectingView .outreach-claim-button {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    padding-inline: 8px !important;
+    white-space: normal !important;
+}
+
+@media (max-width: 1180px) {
+    #prospectingView .view-actions {
+        flex: 1 1 100% !important;
+        justify-content: flex-start !important;
+    }
+
+    .main-content #prospectingView .outreach-pool-table :is(th, td) {
+        padding: 9px 7px !important;
+        font-size: 12px !important;
+    }
+}
+
+@media (max-width: 700px) {
+    #prospectingView .outreach-pool-toolbar {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    #prospectingView .outreach-pool-toolbar > button,
+    #prospectingView .view-actions > button {
+        width: 100% !important;
+    }
+
+    #prospectingView .outreach-pool-table colgroup,
+    #prospectingView .outreach-pool-table thead {
+        display: none !important;
+    }
+
+    .main-content #prospectingView .outreach-pool-table,
+    .main-content #prospectingView .outreach-pool-table tbody,
+    .main-content #prospectingView .outreach-pool-table tr,
+    .main-content #prospectingView .outreach-pool-table td {
+        display: block !important;
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    .main-content #prospectingView .outreach-pool-table tr {
+        padding: 12px !important;
+        border-bottom: 1px solid var(--border) !important;
+    }
+
+    .main-content #prospectingView .outreach-pool-table td {
+        padding: 7px 0 !important;
+        border: 0 !important;
+    }
+}
