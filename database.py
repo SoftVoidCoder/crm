@@ -300,10 +300,23 @@ class CompatCursor:
             self._conn.execute(f"SAVEPOINT {savepoint_name}")
         try:
             self._inner.execute(translated, params)
-        except Exception:
+        except Exception as exc:
             if savepoint_name:
                 self._conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name}")
                 self._conn.execute(f"RELEASE SAVEPOINT {savepoint_name}")
+            if (
+                self._backend == "postgres"
+                and translated.lstrip().upper().startswith("CREATE INDEX IF NOT EXISTS")
+                and isinstance(exc, psycopg.errors.InsufficientPrivilege)
+            ):
+                # Managed PostgreSQL restores can leave existing tables owned by
+                # the provider's administrative role. The application user still
+                # has normal DML access, but PostgreSQL requires table ownership
+                # even for CREATE INDEX IF NOT EXISTS. Skipping only this optional
+                # startup optimisation keeps the CRM available without widening
+                # database privileges or altering imported data.
+                logger.warning("Skipping optional index creation without table ownership: %s", translated)
+                return self
             raise
         if savepoint_name:
             self._conn.execute(f"RELEASE SAVEPOINT {savepoint_name}")
