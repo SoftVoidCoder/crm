@@ -1360,82 +1360,58 @@ function renderDashboardHero(filteredProjects = []) {
     const totalCosts = activeProjects.reduce((sum, item) => sum + Number(item.costs || 0), 0);
     const totalMargin = totalBudget - totalCosts;
     const avgProgress = activeProjects.length ? Math.round(activeProjects.reduce((sum, item) => sum + Number(item.progress || 0), 0) / activeProjects.length) : 0;
-    const topProject = [...activeProjects].sort((a, b) => Number(b.budget || 0) - Number(a.budget || 0))[0];
     const role = String(currentUser?.role || '').trim();
     const roleLabel = role === 'Директор' ? 'Портфель' : (role === 'Менеджер' ? 'Мой день' : 'Проекты');
     let title = 'Портфель проектов';
     let text = 'Активные проекты, бюджет, затраты и просрочки в одном экране.';
-    // Создание проекта уже доступно в шапке списка ниже. Не дублируем
-    // одинаковое действие в обзорном блоке портфеля.
-    let primaryAction = '';
-    let secondaryAction = currentUser && currentUser.role === 'Директор'
-        ? `<button class="btn-secondary" onclick="navigateTo('executive')">Панель директора</button>`
-        : `<button class="btn-secondary" onclick="setViewMode('kanban')">Доска</button>`;
     if (role === 'Менеджер') {
         title = 'Мой день менеджера';
         text = 'Быстрый вход в проекты, документы, клиентов и реализацию без лишнего ERP-шума.';
-        primaryAction = '';
-        secondaryAction = `<button class="btn-secondary" onclick="navigateAndFocus('sales', 'salesProjectId')">Реализация</button>`;
     } else if (role === 'Сотрудник') {
         title = 'Мой рабочий день';
         text = 'Первый экран для сотрудника должен вести только в задачи, документы и заявки.';
-        primaryAction = `<button class="btn-primary" onclick="navigateTo('tasks')">Поручения</button>`;
-        secondaryAction = `<button class="btn-secondary" onclick="navigateTo('documents')">Документы</button>`;
     } else if (role === 'Бухгалтерия') {
         title = 'Рабочий поток бухгалтерии';
         text = 'Проекты остаются контекстом, но день начинается с платежей, дебиторки и закрытия периода.';
-        primaryAction = `<button class="btn-primary" onclick="navigateTo('finance')">Платежи</button>`;
-        secondaryAction = `<button class="btn-secondary" onclick="navigateTo('accounting')">Учёт</button>`;
     }
+    const progressWidth = Math.max(0, Math.min(100, avgProgress));
     mount.innerHTML = `
-        <section class="dashboard-hero-card">
-            <div class="dashboard-hero-main">
-                <div class="dashboard-hero-eyebrow">${roleLabel}</div>
-                <h2 class="dashboard-hero-title">${title}</h2>
-                <p class="dashboard-hero-text">${text}</p>
-                <div class="dashboard-hero-actions">
-                    ${primaryAction}
-                    ${secondaryAction}
-                </div>
+        <section class="portfolio-overview" aria-label="Сводка проектов">
+            <div class="portfolio-overview__heading">
+                <div><h2>${title}</h2><p>${text}</p></div>
+                <span class="portfolio-overview__scope">${roleLabel} · активные проекты</span>
             </div>
-            <div class="dashboard-hero-side">
-                <div class="dashboard-hero-stat">
-                    <div class="dashboard-hero-stat-label">Активные проекты</div>
-                    <div class="dashboard-hero-stat-value">${activeProjects.length}</div>
-                    <div class="dashboard-hero-stat-meta">в работе</div>
+            <div class="portfolio-metrics">
+                <div class="portfolio-metric">
+                    <span class="portfolio-metric__label">Активные проекты</span>
+                    <strong class="portfolio-metric__value">${activeProjects.length}</strong>
+                    <span class="portfolio-metric__note">В работе</span>
                 </div>
-                <div class="dashboard-hero-stat">
-                    <div class="dashboard-hero-stat-label">Средний прогресс</div>
-                    <div class="dashboard-hero-stat-value">${avgProgress}%</div>
-                    <div class="dashboard-hero-stat-meta">среднее значение</div>
+                <div class="portfolio-metric">
+                    <span class="portfolio-metric__label">Средний прогресс</span>
+                    <strong class="portfolio-metric__value">${avgProgress}%</strong>
+                    <div class="portfolio-progress" role="progressbar" aria-label="Средний прогресс проектов" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressWidth}"><span style="width:${progressWidth}%"></span></div>
                 </div>
-            </div>
-            <div class="dashboard-hero-grid">
-                <div class="dashboard-hero-metric">
-                    <div class="dashboard-hero-metric-label">Портфель бюджета</div>
-                    <div class="dashboard-hero-metric-value">${formatMoney(totalBudget)}</div>
+                <div class="portfolio-metric">
+                    <span class="portfolio-metric__label">Бюджет проектов</span>
+                    <strong class="portfolio-metric__value">${formatMoney(totalBudget)}</strong>
+                    <span class="portfolio-metric__note">По активным проектам</span>
                 </div>
-                <div class="dashboard-hero-metric">
-                    <div class="dashboard-hero-metric-label">Текущие затраты</div>
-                    <div class="dashboard-hero-metric-value">${formatMoney(totalCosts)}</div>
+                <div class="portfolio-metric">
+                    <span class="portfolio-metric__label">Текущие затраты</span>
+                    <strong class="portfolio-metric__value">${formatMoney(totalCosts)}</strong>
+                    <span class="portfolio-metric__note">Учтённые расходы</span>
                 </div>
-                <div class="dashboard-hero-metric">
-                    <div class="dashboard-hero-metric-label">Валовая дельта</div>
-                    <div class="dashboard-hero-metric-value">${formatMoney(totalMargin)}</div>
+                <div class="portfolio-metric ${totalMargin < 0 ? 'portfolio-metric--attention' : ''}">
+                    <span class="portfolio-metric__label">Бюджет − затраты</span>
+                    <strong class="portfolio-metric__value">${formatMoney(totalMargin)}</strong>
+                    <span class="portfolio-metric__note">Разница по портфелю</span>
                 </div>
-                <div class="dashboard-hero-metric">
-                    <div class="dashboard-hero-metric-label">Просрочки</div>
-                    <div class="dashboard-hero-metric-value">${overdueProjects.length}</div>
+                <div class="portfolio-metric ${overdueProjects.length ? 'portfolio-metric--attention' : ''}">
+                    <span class="portfolio-metric__label">Просроченные проекты</span>
+                    <strong class="portfolio-metric__value">${overdueProjects.length}</strong>
+                    <span class="portfolio-metric__note">${overdueProjects.length ? 'Требуют внимания' : 'Без просрочек'}</span>
                 </div>
-            </div>
-            <div class="dashboard-hero-callout">
-                <div class="dashboard-hero-callout-title">Фокус</div>
-                <div class="dashboard-hero-callout-text">
-                    ${topProject
-                        ? `${topProject.contract || topProject.name}: бюджет ${formatMoney(topProject.budget || 0)}, прогресс ${Number(topProject.progress || 0)}%.`
-                        : 'Главный проектный акцент появится здесь, когда в системе будут активные данные.'}
-                </div>
-                <div class="dashboard-hero-callout-text">В текущем фильтре: ${filteredProjects.length} проектов.</div>
             </div>
         </section>
     `;

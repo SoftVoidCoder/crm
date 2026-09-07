@@ -29,13 +29,13 @@
     }
 
     function isDateField(input) {
-        if (!(input instanceof HTMLInputElement) || input.dataset.calendarEnhanced === '1') return false;
+        if (!(input instanceof HTMLInputElement) || input.dataset.calendarEnhanced === '1' || input.classList.contains('ui-date-field__native')) return false;
         const type = String(input.type || 'text').toLowerCase();
-        if (['hidden', 'file', 'checkbox', 'radio', 'button', 'submit', 'number', 'email', 'tel', 'search', 'time', 'datetime-local'].includes(type)) return false;
+        if (['hidden', 'password', 'file', 'checkbox', 'radio', 'button', 'submit', 'number', 'email', 'tel', 'search', 'time', 'datetime-local'].includes(type)) return false;
         if (type === 'date') return true;
         const identity = `${input.id || ''} ${input.name || ''}`.trim();
         const hint = `${input.placeholder || ''} ${input.getAttribute('aria-label') || ''}`;
-        return DATE_ID_PATTERN.test(identity) || DATE_HINT_PATTERN.test(hint);
+        return input.classList.contains('date-picker') || DATE_ID_PATTERN.test(identity) || DATE_HINT_PATTERN.test(hint);
     }
 
     function enhanceNativeDate(input) {
@@ -68,21 +68,38 @@
 
         function syncPickerValue() {
             picker.value = ruDateToIso(input.value);
-            button.disabled = input.disabled || input.readOnly;
+            button.disabled = input.disabled || (input.readOnly && !input._flatpickr?.config);
         }
 
         button.addEventListener('click', () => {
             syncPickerValue();
             if (button.disabled) return;
-            if (typeof picker.showPicker === 'function') picker.showPicker();
-            else picker.click();
+            if (input._flatpickr?.config) {
+                input._flatpickr.setDate(input.value, false);
+                input._flatpickr.open();
+            } else {
+                try {
+                    if (typeof picker.showPicker === 'function') picker.showPicker();
+                    else picker.click();
+                } catch (_) {
+                    input.focus();
+                }
+            }
         });
         picker.addEventListener('change', () => {
+            if (input._flatpickr?.config) {
+                input._flatpickr.setDate(isoDateToRu(picker.value), true);
+                return;
+            }
             input.value = isoDateToRu(picker.value);
             input.dispatchEvent(new Event('input', { bubbles: true }));
             input.dispatchEvent(new Event('change', { bubbles: true }));
         });
         input.addEventListener('input', syncPickerValue);
+        input.addEventListener('change', syncPickerValue);
+        new MutationObserver(syncPickerValue).observe(input, {
+            attributes: true, attributeFilter: ['disabled', 'readonly']
+        });
         wrapper.appendChild(picker);
         wrapper.appendChild(button);
         syncPickerValue();

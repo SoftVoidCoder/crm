@@ -16,16 +16,19 @@
                 <div>
                     <span class="view-eyebrow">Подключение</span>
                     <h3 class="section-title">Связь с Bitrix24</h3>
-                    <p class="section-subtitle">Вебхук хранится в базе CRM и не зависит от обновления файлов проекта.</p>
+                    <p class="section-subtitle">Сохранённое подключение используется для поиска и загрузки клиентов.</p>
                 </div>
                 <div id="bitrixConnectionStatus" class="bitrix-connection-status"></div>
             </div>
+            <details id="bitrixConnectionSettings" class="bitrix-connection-settings">
+                <summary>Настройки подключения</summary>
             <div class="bitrix-connection-form">
                 <input id="bitrixWebhookInput" class="auth-input" type="password" autocomplete="off" placeholder="https://ваш-портал.bitrix24.ru/rest/.../.../" aria-label="Входящий вебхук Bitrix24">
                 <button id="bitrixTestButton" class="btn-secondary" type="button" onclick="testBitrixConnection()">Проверить</button>
                 <button id="bitrixSaveButton" class="btn-primary" type="button" onclick="saveBitrixConnection()">Сохранить подключение</button>
             </div>
             <p class="bitrix-connection-hint">Адрес скрыт после сохранения. Для замены подключения вставьте новый вебхук.</p>
+            </details>
         </section>
 
         <div id="bitrixImportStats" class="crm-summary-strip"></div>
@@ -37,17 +40,22 @@
                     <p class="section-subtitle">Выбери объём, нажми выгрузку или найди одного клиента по названию, телефону или email.</p>
                 </div>
             </div>
-            <div class="prospecting-inline-grid prospecting-bitrix-grid bitrix-import-grid">
-                    <input id="outreachBitrixSearch" class="auth-input" type="search" placeholder="Название, контакт или реквизиты">
+            <div class="bitrix-client-search" role="search" aria-label="Поиск в Bitrix24">
+                <label class="form-field"><span class="form-label">Компания, контакт или реквизиты</span>
+                    <input id="outreachBitrixSearch" class="auth-input" type="search" placeholder="Введите минимум 3 символа" onkeydown="if(event.key==='Enter'){event.preventDefault();searchBitrixClients();}">
+                </label>
                 <button id="outreachBitrixSearchButton" class="btn-primary" onclick="searchBitrixClients()">Найти клиента</button>
                 <button id="outreachBitrixImportButton" class="btn-secondary" onclick="importSelectedBitrixClients()">Загрузить выбранных</button>
+            </div>
+            <div class="bitrix-batch-actions" aria-label="Массовая выгрузка">
+                <label for="outreachBitrixSyncLimit">Объём выгрузки</label>
                 <select id="outreachBitrixSyncLimit" class="auth-input">
                     <option value="0">Все клиенты</option>
                     <option value="100">100 последних</option>
                     <option value="50">50 последних</option>
                     <option value="25">25 последних</option>
                 </select>
-                <button id="outreachBitrixSyncButton" class="btn-primary" onclick="syncBitrixClientsNow()">Выгрузить сейчас</button>
+                <button id="outreachBitrixSyncButton" class="btn-secondary" onclick="syncBitrixClientsNow()">Выгрузить сейчас</button>
                 <button id="outreachBitrixUpdateButton" class="btn-secondary" onclick="updateBitrixClientsNow()">Обновить новых</button>
                 <button id="outreachBitrixClearButton" class="btn-secondary" onclick="clearBitrixClientList()">Очистить список</button>
             </div>

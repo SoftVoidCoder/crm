@@ -850,8 +850,9 @@ function renderCalendarMonthBoard(items) {
         const dayKey = calendarFormatDate(day);
         const dayItems = items.filter(item => item.date === dayKey);
         const isForeign = day.getMonth() !== currentCalendarAnchorDate.getMonth();
+        const isToday = dayKey === calendarFormatDate(new Date());
         cells.push(`
-            <div class="calendar-month-cell ${isForeign ? 'is-foreign' : ''}">
+            <div class="calendar-month-cell ${isForeign ? 'is-foreign' : ''} ${isToday ? 'is-today' : ''}">
                 <div class="calendar-month-cell__head">
                     <span>${day.getDate()}</span>
                     <span>${dayItems.length ? dayItems.length : ''}</span>
@@ -1043,8 +1044,11 @@ function openCalendarEventModal(eventId = 0) {
     document.getElementById('calendarEventLocation').value = row.location || '';
     document.getElementById('calendarEventStatus').value = row.status || 'planned';
     document.getElementById('calendarEventDescription').value = row.description || '';
+    document.getElementById('calendarEventDeleteBtn').hidden = !editingCalendarEventId;
     document.getElementById('calendarEventDeleteBtn').style.display = editingCalendarEventId ? 'inline-flex' : 'none';
-    flatpickr('#calendarEventDate', { locale: 'ru', dateFormat: 'd.m.Y' });
+    if (typeof flatpickr === 'function') {
+        flatpickr('#calendarEventDate', { locale: 'ru', dateFormat: 'd.m.Y', allowInput: true, disableMobile: true });
+    }
     document.getElementById('calendarEventModal').style.display = 'flex';
 }
 
@@ -1109,7 +1113,9 @@ window.deleteCalendarEvent = deleteCalendarEvent;
 window.openCalendarItem = openCalendarItem;
 
 function openMeetingModal() { 
-    flatpickr("#meetDate", { locale: "ru", dateFormat: "d.m.Y" }); 
+    if (typeof flatpickr === 'function') {
+        flatpickr("#meetDate", { locale: "ru", dateFormat: "d.m.Y", allowInput: true, disableMobile: true });
+    }
     const uDiv = document.getElementById('meetUsers'); 
     if (uDiv) { 
         uDiv.innerHTML = allUsersDB.map(u => 

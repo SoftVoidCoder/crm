@@ -416,9 +416,13 @@
             </div>
         </div>
         <input type="text" id="meetTitle" class="auth-input" placeholder="Тема совещания *">
-        <div style="display: flex; gap: 10px;">
-            <input type="text" id="meetDate" class="date-picker auth-input" placeholder="Дата">
-            <input type="time" id="meetTime" class="auth-input" style="cursor: text;">
+        <div class="meeting-datetime-row">
+            <label class="form-field"><span class="form-label">Дата *</span>
+                <input type="text" id="meetDate" class="date-picker auth-input" placeholder="дд.мм.гггг">
+            </label>
+            <label class="form-field"><span class="form-label">Время *</span>
+                <input type="time" id="meetTime" class="auth-input">
+            </label>
         </div>
         <label style="font-size: 12px; color: var(--secondary); margin-top: 10px; display: block; text-align: left; font-weight: 600;">УЧАСТНИКИ:</label>
         <div id="meetUsers" style="text-align: left; max-height: 150px; overflow-y: auto; background: var(--bg); padding: 10px; border-radius: 12px; border: 1px solid var(--border); font-size: 13px; margin-bottom: 15px;"></div>

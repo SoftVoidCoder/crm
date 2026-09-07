@@ -58,30 +58,30 @@
     </div>
 
     <div id="calendarEventModal" class="modal-overlay" style="display:none;">
-        <div class="modal-content modal-content--wide">
+        <div class="modal-content modal-content--wide" role="dialog" aria-modal="true" aria-labelledby="calendarEventModalTitle">
             <div class="modal-header">
                 <h3 id="calendarEventModalTitle">Новое событие</h3>
-                <button class="modal-close" onclick="closeCalendarEventModal()">×</button>
+                <button class="modal-close" aria-label="Закрыть" onclick="closeCalendarEventModal()">×</button>
             </div>
             <div class="calendar-event-form">
                 <div>
-                    <label class="field-label">Название</label>
+                    <label class="field-label" for="calendarEventTitle">Название</label>
                     <input id="calendarEventTitle" class="auth-input" type="text">
                 </div>
                 <div>
-                    <label class="field-label">Дата</label>
+                    <label class="field-label" for="calendarEventDate">Дата</label>
                     <input id="calendarEventDate" class="auth-input" type="text" placeholder="дд.мм.гггг">
                 </div>
                 <div>
-                    <label class="field-label">Начало</label>
+                    <label class="field-label" for="calendarEventStartTime">Начало</label>
                     <input id="calendarEventStartTime" class="auth-input" type="time">
                 </div>
                 <div>
-                    <label class="field-label">Окончание</label>
+                    <label class="field-label" for="calendarEventEndTime">Окончание</label>
                     <input id="calendarEventEndTime" class="auth-input" type="time">
                 </div>
                 <div>
-                    <label class="field-label">Календарь</label>
+                    <label class="field-label" for="calendarEventScope">Календарь</label>
                     <select id="calendarEventScope" class="auth-input">
                         <option value="personal">Личный</option>
                         <option value="shared">Общий</option>
@@ -89,23 +89,23 @@
                     </select>
                 </div>
                 <div>
-                    <label class="field-label">Отдел</label>
+                    <label class="field-label" for="calendarEventDepartment">Отдел</label>
                     <input id="calendarEventDepartment" class="auth-input" type="text" placeholder="Например, Менеджер">
                 </div>
                 <div>
-                    <label class="field-label">Связанный проект</label>
+                    <label class="field-label" for="calendarEventProject">Связанный проект</label>
                     <select id="calendarEventProject" class="auth-input"></select>
                 </div>
                 <div>
-                    <label class="field-label">Связанное совещание</label>
+                    <label class="field-label" for="calendarEventMeeting">Связанное совещание</label>
                     <select id="calendarEventMeeting" class="auth-input"></select>
                 </div>
                 <div>
-                    <label class="field-label">Локация</label>
+                    <label class="field-label" for="calendarEventLocation">Локация</label>
                     <input id="calendarEventLocation" class="auth-input" type="text">
                 </div>
                 <div>
-                    <label class="field-label">Статус</label>
+                    <label class="field-label" for="calendarEventStatus">Статус</label>
                     <select id="calendarEventStatus" class="auth-input">
                         <option value="planned">Запланировано</option>
                         <option value="in_progress">В работе</option>
@@ -113,12 +113,12 @@
                     </select>
                 </div>
                 <div class="calendar-event-form__full">
-                    <label class="field-label">Описание</label>
+                    <label class="field-label" for="calendarEventDescription">Описание</label>
                     <textarea id="calendarEventDescription" class="auth-input" rows="4"></textarea>
                 </div>
             </div>
             <div class="modal-actions">
-                <button id="calendarEventDeleteBtn" class="btn-danger" style="display:none;" onclick="deleteCalendarEvent()">Удалить</button>
+                <button id="calendarEventDeleteBtn" hidden class="btn-danger" style="display:none;" onclick="deleteCalendarEvent()">Удалить</button>
                 <button class="btn-secondary" onclick="closeCalendarEventModal()">Отмена</button>
                 <button class="btn-primary" onclick="saveCalendarEvent()">Сохранить</button>
             </div>

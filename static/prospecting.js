@@ -19,12 +19,15 @@ let outreachReportExpanded = false;
 let outreachLastImportResult = null;
 let outreachImportPreview = null;
 let outreachBitrixResults = [];
+let outreachBitrixRows = null;
 let outreachBitrixSelected = new Set();
 let outreachBitrixLoading = false;
 let outreachBitrixImporting = false;
 let outreachBitrixAction = '';
 let outreachBitrixConnection = null;
 let outreachBitrixConnectionBusy = false;
+let outreachBitrixStatusLoading = false;
+let outreachBitrixStatusRequest = null;
 let outreachLoadedScope = '';
 let outreachPoolRows = [];
 let outreachPoolSearch = '';
@@ -1019,19 +1022,28 @@ function bitrixSelectionKey(item) {
     return `${String(item?.type || '')}:${String(item?.id || '')}`;
 }
 
+async function loadBitrixImportRows() {
+    const data = await apiCall('/outreach/prospects');
+    if (Array.isArray(data)) outreachBitrixRows = data;
+    // The personal client screen uses its own scope; it must not overwrite these totals.
+    renderBitrixImportStats();
+    return outreachBitrixRows;
+}
+
 function renderBitrixImportStats() {
     const mount = document.getElementById('bitrixImportStats');
     if (!mount) return;
-    const rows = (Array.isArray(outreachProspectsDB) ? outreachProspectsDB : []).filter(row => String(row.source_name || '') === 'Bitrix24 API');
+    const loaded = Array.isArray(outreachBitrixRows);
+    const rows = (loaded ? outreachBitrixRows : []).filter(row => String(row.source_name || '') === 'Bitrix24 API');
     const withContacts = rows.filter(row => String(row.phone || row.email || row.contact_name || '').trim()).length;
     const emptyContacts = rows.length - withContacts;
     const lastImport = (Array.isArray(outreachImportsDB) ? outreachImportsDB : [])
         .filter(row => String(row.source_name || '') === 'Bitrix24 API')
         .sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))[0];
     mount.innerHTML = `
-        <div class="crm-summary-card"><div class="crm-summary-label">В базе из Bitrix24</div><div class="crm-summary-value">${rows.length}</div></div>
-        <div class="crm-summary-card"><div class="crm-summary-label">С контактами</div><div class="crm-summary-value">${withContacts}</div></div>
-        <div class="crm-summary-card"><div class="crm-summary-label">Без контактов</div><div class="crm-summary-value">${emptyContacts}</div></div>
+        <div class="crm-summary-card"><div class="crm-summary-label">Доступно из Bitrix24</div><div class="crm-summary-value">${loaded ? rows.length : '—'}</div></div>
+        <div class="crm-summary-card"><div class="crm-summary-label">С контактами</div><div class="crm-summary-value">${loaded ? withContacts : '—'}</div></div>
+        <div class="crm-summary-card"><div class="crm-summary-label">Без контактов</div><div class="crm-summary-value">${loaded ? emptyContacts : '—'}</div></div>
         <div class="crm-summary-card"><div class="crm-summary-label">Последний импорт</div><div class="crm-summary-value">${lastImport ? Number(lastImport.rows_total || 0) : 0}</div></div>
     `;
 }
@@ -1042,13 +1054,13 @@ async function renderBitrixImport() {
         view.style.display = 'block';
         view.classList.add('fade-in');
     }
-    await Promise.all([loadOutreachProspects(), loadOutreachImports(), loadBitrixConnectionStatus()]);
+    await Promise.all([loadBitrixImportRows(), loadOutreachImports(), loadBitrixConnectionStatus()]);
     renderBitrixImportStats();
     renderOutreachBitrixPanel();
 }
 
 async function refreshBitrixImportData() {
-    await Promise.all([loadOutreachProspects(), loadOutreachImports()]);
+    await Promise.all([loadBitrixImportRows(), loadOutreachImports()]);
     renderBitrixImportStats();
     renderOutreachBitrixPanel();
 }
@@ -1059,7 +1071,8 @@ function canManageBitrixConnection() {
 
 function canUseBitrixImport() {
     return typeof hasCurrentPermission === 'function'
-        && (hasCurrentPermission('clients', 'update') || hasCurrentPermission('clients', 'import'));
+        && ['Директор', 'Менеджер'].includes(String(currentUser?.role || ''))
+        && hasCurrentPermission('clients', 'read');
 }
 
 function renderBitrixConnectionStatus() {
@@ -1073,6 +1086,8 @@ function renderBitrixConnectionStatus() {
     const allowed = canManageBitrixConnection();
     const canUse = canUseBitrixImport();
     const configured = Boolean(outreachBitrixConnection?.configured);
+    const settings = document.getElementById('bitrixConnectionSettings');
+    if (settings) settings.hidden = !allowed;
     const portal = String(outreachBitrixConnection?.portal || '');
     if (form) {
         if (allowed) form.style.removeProperty('display');
@@ -1085,24 +1100,71 @@ function renderBitrixConnectionStatus() {
     if (testButton) testButton.disabled = !allowed || outreachBitrixConnectionBusy;
     if (saveButton) saveButton.disabled = !allowed || outreachBitrixConnectionBusy;
     if (!canUse) {
+        const poolStatus = document.getElementById('outreachBitrixStatus');
+        if (poolStatus) poolStatus.hidden = true;
         mount.innerHTML = '<span class="crm-inline-pill crm-inline-pill--neutral">Нет доступа</span>';
         return;
     }
-    mount.innerHTML = configured
-        ? `<span class="crm-inline-pill crm-inline-pill--positive">Подключено</span><small>${outreachEscape(portal)}${allowed ? '' : ' · настройка защищена'}</small>`
-        : '<span class="crm-inline-pill crm-inline-pill--critical">Не подключено</span><small>Сохраните входящий вебхук</small>';
+    let portalLink = '';
+    try {
+        const url = new URL(portal);
+        if (url.protocol === 'https:') portalLink = `<a class="bitrix-portal-link" href="${outreachEscape(url.origin)}" target="_blank" rel="noopener noreferrer">${outreachEscape(url.hostname)} ↗</a>`;
+    } catch (_) { /* A missing portal must not create a broken link. */ }
+    let statusHtml;
+    if (outreachBitrixStatusLoading) {
+        statusHtml = '<span class="crm-inline-pill crm-inline-pill--neutral">Проверяем подключение…</span>' + portalLink;
+    } else if (outreachBitrixConnection?.error) {
+        statusHtml = '<span class="crm-inline-pill crm-inline-pill--warning">Статус не обновлён</span>' + portalLink
+            + '<button class="btn-secondary bitrix-status-retry" type="button" onclick="loadBitrixConnectionStatus()">Повторить</button>';
+    } else if (configured) {
+        statusHtml = '<span class="crm-inline-pill crm-inline-pill--positive">Подключено</span>' + portalLink;
+    } else if (!outreachBitrixConnection) {
+        statusHtml = '<span class="crm-inline-pill crm-inline-pill--neutral">Проверяем подключение…</span>';
+    } else {
+        statusHtml = '<span class="crm-inline-pill crm-inline-pill--critical">Не подключено</span><small>Сохраните входящий вебхук</small>';
+    }
+    mount.innerHTML = statusHtml;
+    const poolStatus = document.getElementById('outreachBitrixStatus');
+    if (poolStatus) {
+        poolStatus.hidden = !canUse;
+        poolStatus.innerHTML = statusHtml;
+    }
 }
 
 async function loadBitrixConnectionStatus() {
+    if (outreachBitrixStatusRequest) return outreachBitrixStatusRequest;
     if (!canUseBitrixImport()) {
         outreachBitrixConnection = { configured: false, forbidden: true };
         renderBitrixConnectionStatus();
         return outreachBitrixConnection;
     }
-    const res = await apiCall('/integrations/bitrix24/status');
-    outreachBitrixConnection = (!res || res.error) ? { configured: false, error: res?.error || 'status_failed' } : res;
+    outreachBitrixStatusLoading = true;
     renderBitrixConnectionStatus();
-    return outreachBitrixConnection;
+    outreachBitrixStatusRequest = (async () => {
+        let timeout;
+        try {
+            const res = await Promise.race([
+                apiCall('/integrations/bitrix24/status'),
+                new Promise(resolve => { timeout = window.setTimeout(() => resolve({ error: 'status_timeout' }), 12000); }),
+            ]);
+            if (!res || res.error || typeof res.configured !== 'boolean') {
+                // Network failures do not mean the saved integration was disconnected.
+                outreachBitrixConnection = { ...outreachBitrixConnection, error: res?.error || 'status_failed' };
+            } else {
+                outreachBitrixConnection = res;
+            }
+        } catch (_) {
+            outreachBitrixConnection = { ...outreachBitrixConnection, error: 'status_failed' };
+        } finally {
+            window.clearTimeout(timeout);
+            outreachBitrixStatusLoading = false;
+            outreachBitrixStatusRequest = null;
+            renderBitrixConnectionStatus();
+            renderOutreachBitrixPanel();
+        }
+        return outreachBitrixConnection;
+    })();
+    return outreachBitrixStatusRequest;
 }
 
 function bitrixWebhookValue() {
@@ -1120,6 +1182,9 @@ async function testBitrixConnection() {
     outreachBitrixConnectionBusy = false;
     renderBitrixConnectionStatus();
     if (!res || res.error || res.status === 'failed') return customAlert(res?.error || 'Не удалось подключиться к Bitrix24.');
+    outreachBitrixConnection = res;
+    renderBitrixConnectionStatus();
+    renderOutreachBitrixPanel();
     showToast('Bitrix24', 'Подключение работает');
 }
 
@@ -1153,7 +1218,10 @@ function renderOutreachBitrixPanel() {
     const configured = Boolean(outreachBitrixConnection?.configured);
     const busy = outreachBitrixLoading || outreachBitrixImporting || Boolean(outreachBitrixAction);
     if (searchButton) searchButton.disabled = busy || !configured;
-    if (importButton) importButton.disabled = busy || !configured || !outreachBitrixSelected.size;
+    if (importButton) {
+        importButton.disabled = busy || !configured || !outreachBitrixSelected.size;
+        importButton.textContent = outreachBitrixSelected.size ? `Загрузить выбранных (${outreachBitrixSelected.size})` : 'Загрузить выбранных';
+    }
     if (syncButton) syncButton.disabled = busy || !configured;
     if (updateButton) updateButton.disabled = busy || !configured;
     if (clearButton) {
@@ -1173,7 +1241,12 @@ function renderOutreachBitrixPanel() {
         return;
     }
     if (!configured) {
-        mount.innerHTML = '<div class="empty-state">Сначала сохраните подключение Bitrix24 выше.</div>';
+        const message = outreachBitrixStatusLoading || !outreachBitrixConnection
+            ? 'Проверяем сохранённое подключение Bitrix24…'
+            : outreachBitrixConnection.error
+                ? 'Не удалось получить статус подключения. Нажмите «Повторить» выше.'
+                : 'Сначала сохраните подключение Bitrix24 выше.';
+        mount.innerHTML = `<div class="empty-state">${message}</div>`;
         return;
     }
     if (!Array.isArray(outreachBitrixResults) || !outreachBitrixResults.length) {
@@ -1198,8 +1271,8 @@ function renderOutreachBitrixPanel() {
                         const key = bitrixSelectionKey(item);
                         return `
                             <tr>
-                                <td><input type="checkbox" ${outreachBitrixSelected.has(key) ? 'checked' : ''} onchange="toggleBitrixClientSelection('${outreachEscape(key)}', this.checked)"></td>
-                                <td><span class="crm-inline-pill crm-inline-pill--neutral">${outreachEscape(item.type || '')}</span></td>
+                                <td><input type="checkbox" aria-label="Выбрать ${outreachEscape(item.title || 'клиента')}" ${outreachBitrixSelected.has(key) ? 'checked' : ''} onchange="toggleBitrixClientSelection('${outreachEscape(key)}', this.checked)"></td>
+                                <td><span class="crm-inline-pill crm-inline-pill--neutral">${outreachEscape(({company: 'Компания', contact: 'Контакт', lead: 'Лид'})[item.type] || item.type || '')}</span></td>
                                 <td class="crm-title-cell"><strong>${outreachEscape(item.title || 'Без названия')}</strong><div class="table-subtext">Bitrix ID ${outreachEscape(item.id || '')}</div></td>
                                 <td>${outreachEscape(item.contact_name || '—')}</td>
                                 <td class="crm-contact-cell">${outreachEscape(item.phone || '—')}<div class="table-subtext">${outreachEscape(item.email || '—')}</div></td>
@@ -1236,6 +1309,11 @@ function toggleBitrixClientSelection(key, checked) {
     if (!key) return;
     if (checked) outreachBitrixSelected.add(key);
     else outreachBitrixSelected.delete(key);
+    const button = document.getElementById('outreachBitrixImportButton');
+    if (button) {
+        button.disabled = !outreachBitrixSelected.size || !outreachBitrixConnection?.configured || outreachBitrixLoading || outreachBitrixImporting || Boolean(outreachBitrixAction);
+        button.textContent = outreachBitrixSelected.size ? `Загрузить выбранных (${outreachBitrixSelected.size})` : 'Загрузить выбранных';
+    }
 }
 
 async function importSelectedBitrixClients() {
@@ -2185,7 +2263,20 @@ async function refreshOutreachPool(showLoading = false) {
     const mount = document.getElementById('outreachPoolMount');
     if (showLoading && mount) mount.innerHTML = '<div class="empty-state">Обновляю свободную базу...</div>';
     const data = await apiCall('/outreach/prospects?scope=free');
-    outreachPoolRows = Array.isArray(data) ? data : [];
+    if (!Array.isArray(data)) {
+        if (showLoading && mount) {
+            renderOutreachPool();
+            const notice = document.getElementById('outreachPoolNotice');
+            if (notice) {
+                notice.hidden = false;
+                notice.textContent = outreachPoolRows.length ? 'Не удалось обновить список. Показаны ранее загруженные клиенты. Нажмите «Обновить», чтобы повторить.' : 'Не удалось загрузить клиентов. Нажмите «Обновить», чтобы повторить.';
+            }
+        }
+        return outreachPoolRows;
+    }
+    outreachPoolRows = data;
+    const notice = document.getElementById('outreachPoolNotice');
+    if (notice) notice.hidden = true;
     renderOutreachPoolSummary();
     renderOutreachPool();
     return outreachPoolRows;
@@ -2219,7 +2310,7 @@ async function claimOutreachProspect(prospectId, button = null) {
 async function renderOutreachPoolPage() {
     const bitrixButton = document.getElementById('outreachBitrixNavButton');
     if (bitrixButton) bitrixButton.style.display = canUseBitrixImport() ? '' : 'none';
-    await refreshOutreachPool(false);
+    await Promise.all([refreshOutreachPool(!outreachPoolRows.length), loadBitrixConnectionStatus()]);
     if (!outreachPoolRefreshTimer) {
         outreachPoolRefreshTimer = window.setInterval(() => {
             if (window.__navCurrentView === 'prospecting') refreshOutreachPool(false);

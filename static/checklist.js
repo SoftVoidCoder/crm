@@ -160,7 +160,7 @@ function renderChecklist(forceRedraw = false) {
     }
     
     container.innerHTML = secHtmlAll;
-    flatpickr(".date-picker", { locale: "ru", dateFormat: "d.m.Y", disableMobile: "true", onChange: function(s, d, i) { saveDeadline(i.element.id.split('_')[1], d); appendLog(`Установил дедлайн этапа на ${d}`); }});
+    flatpickr(container.querySelectorAll(".date-picker"), { locale: "ru", dateFormat: "d.m.Y", disableMobile: true, onChange: function(s, d, i) { saveDeadline(i.element.id.split('_')[1], d); appendLog(`Установил дедлайн этапа на ${d}`); }});
     updateChecklistUI(); 
 }
 

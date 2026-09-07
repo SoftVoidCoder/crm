@@ -1,0 +1,220 @@
+/* Shared date controls, including dialogs outside the main workspace. */
+html body .ui-date-field {
+    position: relative;
+    display: block;
+    width: 100%;
+    min-width: 0;
+}
+
+html body .ui-date-field__input {
+    width: 100% !important;
+    padding-right: 42px !important;
+}
+
+html body .ui-date-field__native {
+    position: absolute;
+    right: 8px;
+    bottom: 1px;
+    width: 1px;
+    height: 1px;
+    border: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+html body .ui-date-field__button {
+    position: absolute;
+    top: 50%;
+    right: 5px;
+    width: 32px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: #617289;
+    cursor: pointer;
+    transform: translateY(-50%);
+    transition: color .15s ease, background .15s ease;
+}
+
+html body .ui-date-field__button:hover {
+    background: #edf6f4;
+    color: #087f73;
+}
+
+html body .ui-date-field__button:focus-visible {
+    outline: 2px solid rgba(8, 127, 115, .28);
+    outline-offset: 1px;
+}
+
+html body .ui-date-field__button:disabled {
+    opacity: .4;
+    cursor: default;
+}
+
+html body .ui-date-field__button svg {
+    width: 17px;
+    height: 17px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.75;
+}
+
+
+/* Global CRM input rules must not resize Flatpickr's month/year navigation. */
+html body .flatpickr-calendar .numInputWrapper { width: 6ch; }
+html body .flatpickr-calendar input.cur-year {
+    width: 100% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 0 0 0 .5ch !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: inherit !important;
+    line-height: inherit !important;
+}
+html body .flatpickr-calendar select.flatpickr-monthDropdown-months {
+    width: auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 0 .5ch 0 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: inherit !important;
+}
+html body .ui-date-field__native {
+    min-height: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+}
+html body .ui-date-field__input { margin-bottom: 0 !important; }
+html body .ui-date-field { margin-bottom: 10px; }
+html body .form-field .ui-date-field,
+html body .project-create-field .ui-date-field,
+html body .calendar-event-form .ui-date-field { margin-bottom: 0; }
+
+/* A finished entrance animation must not trap fixed dialogs inside a page. */
+html body .view-page:has(.modal-overlay) {
+    animation: none !important;
+    transform: none !important;
+}
+html body .form-error:empty { display: none !important; }
+html body .modal-overlay .form-grid-standard {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+html body .modal-overlay .form-field--full { grid-column: 1 / -1; }
+html body .modal-overlay .modal-actions { gap: 10px; flex-wrap: wrap; }
+html body .modal-overlay .modal-actions > button { min-height: 40px; }
+html body #calendarEventModal .modal-content { width: 720px !important; }
+html body #calendarEventModal .calendar-event-form { gap: 14px 16px; }
+html body #calendarEventModal .calendar-event-form > div {
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+html body #calendarEventModal .field-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 12px !important;
+}
+html body #calendarEventModal .auth-input {
+    min-height: 40px !important;
+    margin: 0 !important;
+}
+html body #calendarEventModal textarea.auth-input { min-height: 88px !important; }
+html body #meetingModal .modal-card { width: 620px !important; }
+html body #meetingModal .meeting-datetime-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 14px;
+    margin-top: 14px;
+}
+html body #meetingModal .meeting-datetime-row .auth-input {
+    height: 40px !important;
+    margin: 0 !important;
+}
+html body #meetingModal .meeting-datetime-row .ui-date-field { margin: 0; }
+
+/* Keep the month readable and make selected controls visible. */
+html body .main-content #meetingsView .calendar-toolbar { gap: 12px; }
+html body .main-content #meetingsView .calendar-filter-row { flex: 1 1 100%; gap: 8px; }
+html body .main-content #meetingsView .calendar-department-filter {
+    width: auto !important;
+    min-width: 160px;
+    flex: 1 1 170px;
+    margin: 0;
+}
+html body .main-content #meetingsView .calendar-mode-switch { gap: 4px; }
+html body .main-content #meetingsView .calendar-toolbar button.active {
+    color: #fff !important;
+    background: var(--primary) !important;
+    border-color: var(--primary) !important;
+}
+html body .main-content #meetingsView .calendar-range-controls { gap: 8px; }
+html body .main-content #meetingsView .calendar-range-label { min-width: 150px; }
+html body .main-content #meetingsView .calendar-summary-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 10px;
+}
+html body .main-content #meetingsView .calendar-summary-strip .crm-summary-card { padding: 12px !important; }
+html body .main-content #meetingsView .calendar-summary-strip .crm-summary-label { font-size: 12px !important; }
+html body .main-content #meetingsView .calendar-summary-strip .crm-summary-value { font-size: 24px !important; }
+html body .main-content #meetingsView .calendar-workspace {
+    grid-template-columns: minmax(0, 1fr) 250px;
+    gap: 16px;
+}
+html body .main-content #meetingsView .calendar-board,
+html body .main-content #meetingsView .calendar-sidebar { min-height: 0; }
+html body .main-content #meetingsView .calendar-month-grid { gap: 5px; }
+html body .main-content #meetingsView .calendar-month-grid__day { padding: 8px 4px; text-align: center; }
+html body .main-content #meetingsView .calendar-month-cell {
+    min-height: 92px !important;
+    padding: 8px !important;
+    border-radius: 8px !important;
+}
+html body .main-content #meetingsView .calendar-month-cell.is-today {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+}
+html body .main-content #meetingsView .calendar-month-cell.is-today .calendar-month-cell__head { color: var(--primary); }
+@media (max-width: 1200px) {
+    html body .main-content #meetingsView .calendar-workspace { grid-template-columns: minmax(0, 1fr) !important; }
+}
+@media (max-width: 600px) {
+    html body .modal-overlay .form-grid-standard,
+    html body #calendarEventModal .calendar-event-form { grid-template-columns: minmax(0, 1fr) !important; }
+    html body .main-content #meetingsView .calendar-summary-strip { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    html body .main-content #meetingsView .calendar-range-controls { width: 100%; flex-wrap: wrap; }
+    html body .main-content #meetingsView .calendar-range-label { min-width: 0; flex: 1; }
+    html body .main-content #meetingsView .calendar-mode-switch { width: 100%; }
+    html body .main-content #meetingsView .calendar-mode-switch button { flex: 1; padding-inline: 8px !important; }
+    html body .main-content #meetingsView .calendar-month-grid { min-width: 630px !important; }
+    html body .modal-overlay { padding: 12px !important; }
+    html body .modal-overlay > .modal-card,
+    html body .modal-overlay > .modal-content {
+        max-width: calc(100vw - 24px) !important;
+        max-height: calc(100dvh - 24px) !important;
+        padding: 16px !important;
+    }
+}
+
+/* Preserve conditional actions despite legacy button display overrides. */
+html body #calendarEventDeleteBtn[hidden] { display: none !important; }
+html body .modal-overlay { z-index: 1500 !important; }
+html body .flatpickr-calendar.open { z-index: 1600 !important; }
