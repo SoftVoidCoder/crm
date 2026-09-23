@@ -2276,7 +2276,7 @@ function setOutreachQuickFilter(value) {
     renderProspecting();
 }
 
-function resetOutreachFilters() {
+function clearOutreachFiltersState() {
     outreachSearch = '';
     outreachStatusFilter = '';
     outreachPriorityFilter = '';
@@ -2286,6 +2286,10 @@ function resetOutreachFilters() {
     outreachOnlyToday = false;
     outreachOnlyProblems = false;
     outreachQuickFilter = '';
+}
+
+function resetOutreachFilters() {
+    clearOutreachFiltersState();
     const searchInput = document.getElementById('outreachSearchInput');
     if (searchInput) searchInput.value = '';
     renderProspecting();
@@ -2652,8 +2656,10 @@ async function claimOutreachProspect(prospectId, button = null) {
     renderOutreachPoolSummary();
     renderOutreachPool();
     outreachSelectedId = id;
-    await ensureOutreachData(true, 'mine');
-    navigateTo('myProspecting');
+    clearOutreachFiltersState();
+    navigateTo('myProspecting', false);
+    await renderProspecting(true);
+    selectOutreachRow(id);
     showToast('База развития', 'Клиент ваш. Рабочая карточка уже открыта');
 }
 

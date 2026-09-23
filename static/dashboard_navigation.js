@@ -349,7 +349,7 @@ function navigateTo(view, triggerRender = true) {
         clearDepartmentFilter(false);
         const nav = document.getElementById('navMyProspecting');
         if (nav) nav.classList.add('active');
-        if (typeof renderMyProspecting === 'function') renderMyProspecting();
+        if (triggerRender && typeof renderMyProspecting === 'function') renderMyProspecting();
     }
     else if (nextView === 'bitrixImport') {
         clearDepartmentFilter(false);
