@@ -1190,8 +1190,8 @@ const COMMAND_PALETTE_NAV_BY_ICON = Object.freeze({
     MFG: 'navProduction',
     HOME: 'navDashboard',
     PIPE: 'navProspecting',
-    LEAD: 'navLeads',
-    DEAL: 'navDeals',
+    LEAD: 'navMyProspecting',
+    DEAL: 'navMyProspecting',
     INT: 'navIntegrations',
     FIN: 'navFinance',
     CLN: 'navClients',
@@ -1227,8 +1227,7 @@ function commandPaletteStaticCommands() {
         { group: 'Создать', icon: 'MFG', title: 'Производственный заказ', desc: 'Открыть форму нового заказа производства', keywords: 'производство заказ цех очередь', action: commandCreateProductionOrder },
         { group: 'Перейти', icon: 'HOME', title: 'Открыть дашборд', desc: 'Портфель и рабочий день', keywords: 'главная dashboard портфель', action: () => { if (typeof navigateTo === 'function') navigateTo('dashboard'); } },
         { group: 'Перейти', icon: 'PIPE', title: 'Открыть базу развития', desc: 'Обзвон, прогрев и клиентский пул', keywords: 'база развития prospecting обзвон клиенты', action: () => { if (typeof navigateTo === 'function') navigateTo('prospecting'); } },
-        { group: 'Перейти', icon: 'LEAD', title: 'Открыть лиды', desc: 'Новые запросы и первичная воронка', keywords: 'лиды входящие crm', action: () => { if (typeof navigateTo === 'function') navigateTo('leads'); } },
-        { group: 'Перейти', icon: 'DEAL', title: 'Открыть сделки', desc: 'Коммерческий pipeline и переговоры', keywords: 'сделки продажи crm', action: () => { if (typeof navigateTo === 'function') navigateTo('deals'); } },
+        { group: 'Перейти', icon: 'LEAD', title: 'Открыть моих клиентов', desc: 'Клиенты, лиды и сделки в одном рабочем месте', keywords: 'лиды сделки клиенты входящие crm', action: () => { if (typeof navigateTo === 'function') navigateTo('myProspecting'); } },
         { group: 'Перейти', icon: 'DOC', title: 'Открыть документы', desc: 'Канцелярия и СЭД', keywords: 'документы сед сканы', action: () => { if (typeof navigateTo === 'function') navigateTo('documents'); } },
         { group: 'Перейти', icon: 'INT', title: 'Открыть интеграции', desc: 'Перенос из 1С и контроль обмена', keywords: 'интеграции 1с обмен перенос документы оплаты', action: () => { if (typeof navigateTo === 'function') navigateTo('integrations'); } },
         { group: 'Перейти', icon: 'TSK', title: 'Открыть задачи', desc: 'Поручения и контроль сроков', keywords: 'задачи поручения tasks', action: () => { if (typeof navigateTo === 'function') navigateTo('tasks'); } },
@@ -1747,21 +1746,15 @@ window.openOmniSearchResult = async function(entityType, entityId, viewName = ''
 
     if (type === 'lead' && id) {
         if (typeof loadCrmLeads === 'function') await loadCrmLeads();
-        navigateTo('leads');
-        window.setTimeout(() => {
-            if (typeof selectLeadRow === 'function') selectLeadRow(id);
-            focusSearchResultRow(type, id, 80);
-        }, 180);
+        if (typeof openOutreachJourneyByLead === 'function') await openOutreachJourneyByLead(id);
+        else navigateTo('myProspecting');
         return;
     }
 
     if (type === 'deal' && id) {
         if (typeof loadCrmDeals === 'function') await loadCrmDeals();
-        navigateTo('deals');
-        window.setTimeout(() => {
-            if (typeof selectDealRow === 'function') selectDealRow(id);
-            focusSearchResultRow(type, id, 80);
-        }, 180);
+        if (typeof openOutreachJourneyByDeal === 'function') await openOutreachJourneyByDeal(id);
+        else navigateTo('myProspecting');
         return;
     }
 

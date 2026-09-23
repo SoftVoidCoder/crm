@@ -1442,13 +1442,136 @@ function outreachActivityTypeLabel(value) {
     }[String(value || '')] || 'Контакт';
 }
 
+function outreachJourneyRecords(row) {
+    const leadId = Number(row?.converted_lead_id || 0);
+    const lead = (typeof crmLeadsDB !== 'undefined' ? crmLeadsDB : []).find(item => Number(item.id || 0) === leadId) || null;
+    const dealId = Number(lead?.linked_deal_id || 0);
+    const deal = (typeof crmDealsDB !== 'undefined' ? crmDealsDB : []).find(item => Number(item.id || 0) === dealId || Number(item.lead_id || 0) === leadId) || null;
+    return { lead, deal };
+}
+
+function outreachJourneyState(row, lead, deal) {
+    if (String(row?.status || '') === 'do_not_contact' || String(lead?.stage || '') === 'lost' || String(deal?.stage || '') === 'lost') return 'result';
+    if (String(deal?.stage || '') === 'won') return 'result';
+    if (deal) return 'deal';
+    if (lead) return 'lead';
+    return 'contact';
+}
+
+function outreachJourneyHeader(row, lead = null, deal = null) {
+    const current = outreachJourneyState(row, lead, deal);
+    const order = ['contact', 'lead', 'deal', 'result'];
+    const activeIndex = order.indexOf(current);
+    const labels = {
+        contact: ['1', 'Первый контакт'],
+        lead: ['2', 'Квалификация'],
+        deal: ['3', 'Сделка'],
+        result: ['4', 'Результат'],
+    };
+    return `<nav class="client-journey" aria-label="Путь клиента">
+        ${order.map((key, index) => `<div class="client-journey__step ${index < activeIndex ? 'is-complete' : ''} ${index === activeIndex ? 'is-active' : ''}"><i>${labels[key][0]}</i><span>${labels[key][1]}</span></div>`).join('')}
+    </nav>`;
+}
+
+function outreachLeadPayload(row, overrides = {}) {
+    return {
+        title: row.title || '', client_name: row.client_name || '', contact_name: row.contact_name || '',
+        contact_email: row.contact_email || '', contact_phone: row.contact_phone || '', source: row.source || '',
+        stage: row.stage || 'qualified', responsible: row.responsible || '', next_action: row.next_action || '',
+        next_action_date: row.next_action_date || '', budget: Number(row.budget || 0), probability: Number(row.probability || 0),
+        tags: Array.isArray(row.tags) ? row.tags : [], comment: row.comment || '', currency: row.currency || 'RUB',
+        priority: row.priority || 'normal', linked_client_id: Number(row.linked_client_id || 0),
+        linked_project_id: Number(row.linked_project_id || 0), linked_deal_id: Number(row.linked_deal_id || 0),
+        ...overrides,
+    };
+}
+
+function outreachDealPayload(row, overrides = {}) {
+    return {
+        lead_id: Number(row.lead_id || 0), title: row.title || row.client_name || '', client_id: Number(row.client_id || 0),
+        client_name: row.client_name || '', contact_name: row.contact_name || '', contact_position: row.contact_position || '',
+        contact_phone: row.contact_phone || '', contact_email: row.contact_email || '', source: row.source || '',
+        contract_number: row.contract_number || '', stage: row.stage || 'qualification', amount: Number(row.amount || 0),
+        currency: row.currency || 'RUB', margin_percent: Number(row.margin_percent || 0), probability: Number(row.probability || 0),
+        responsible: row.responsible || '', next_action: row.next_action || '', next_action_date: row.next_action_date || '',
+        expected_close_date: row.expected_close_date || '', priority: row.priority || 'normal', status_color: row.status_color || '',
+        tags: Array.isArray(row.tags) ? row.tags : [], comment: row.comment || '', project_id: Number(row.project_id || 0),
+        products: typeof crmDealProducts === 'function' ? crmDealProducts(row) : (Array.isArray(row.products) ? row.products : []),
+        co_executors: row.co_executors || '', actual_close_date: row.actual_close_date || '', loss_reason: row.loss_reason || '',
+        ...overrides,
+    };
+}
+
+function outreachMoney(value, currency = 'RUB') {
+    return typeof crmFormatMoney === 'function'
+        ? crmFormatMoney(value, currency)
+        : `${Number(value || 0).toLocaleString('ru-RU')} ₽`;
+}
+
+function outreachActivityHistory(activities = []) {
+    if (!activities.length) return '<div class="empty-state">История пока пуста.</div>';
+    return activities.map(item => `<div class="client360-item"><div><div class="client360-item-title">${outreachEscape(item.subject || outreachActivityTypeLabel(item.activity_type))}</div><div class="client360-item-meta">${outreachEscape(item.owner_name || item.manager_name || '')} · ${outreachEscape(item.due_date || item.next_action_date || 'без даты')}</div><div class="client360-item-meta">${outreachEscape(item.summary || 'без комментария')}</div></div></div>`).join('');
+}
+
+function renderOutreachLeadJourney(row, lead, activities) {
+    const isLost = String(lead.stage || '') === 'lost';
+    const need = typeof crmLeadVisibleComment === 'function' ? crmLeadVisibleComment(lead.comment) : String(lead.comment || '');
+    return `<article class="unified-client-card">
+        ${outreachJourneyHeader(row, lead)}
+        <header class="unified-client-card__head"><div><span class="view-eyebrow">Квалификация клиента</span><h2>${outreachEscape(row.company_name || lead.client_name || 'Без компании')}</h2><p>${outreachEscape(row.contact_name || lead.contact_name || 'Контакт не указан')} · ${outreachEscape(row.phone || lead.contact_phone || 'телефон не указан')}</p></div><span class="crm-inline-pill ${isLost ? 'crm-inline-pill--neutral' : 'crm-inline-pill--attention'}">${isLost ? 'Закрыт без сделки' : 'Нужно принять решение'}</span></header>
+        ${isLost ? `<section class="unified-client-outcome"><h3>Работа завершена без сделки</h3><p>${outreachEscape(need || 'Причина сохранена в истории клиента.')}</p></section>` : `
+        <section class="unified-next-action"><div><span>Что сделать сейчас</span><strong>${outreachEscape(lead.next_action || 'Уточнить потребность клиента')}</strong><small>${outreachEscape(lead.next_action_date ? `Выполнить до ${lead.next_action_date}` : 'Назначьте срок следующего действия')}</small></div><button class="btn-primary" type="button" onclick="toggleUnifiedPanel('unifiedLeadContactPanel', true)">Зафиксировать контакт</button></section>
+        <section class="unified-work-section"><div class="unified-work-section__head"><div><h3>Квалификация</h3><p>Заполните четыре рабочих поля. Остальные данные уже перенесены из первого контакта.</p></div></div>
+            <div class="unified-form-grid">
+                <label class="unified-field unified-field--wide"><span>Потребность и договорённости *</span><textarea id="unifiedLeadNeed" class="auth-input" rows="3" placeholder="Что нужно клиенту, объём и важные условия">${outreachEscape(need)}</textarea></label>
+                <label class="unified-field"><span>Ожидаемая сумма</span><input id="unifiedLeadBudget" class="auth-input" type="number" min="0" value="${Number(lead.budget || 0)}"></label>
+                <label class="unified-field"><span>Состояние</span><select id="unifiedLeadStage" class="auth-input"><option value="qualified" ${lead.stage === 'qualified' ? 'selected' : ''}>Потребность подтверждена</option><option value="proposal" ${lead.stage === 'proposal' ? 'selected' : ''}>Готовится предложение</option></select></label>
+                <label class="unified-field"><span>Следующий шаг *</span><input id="unifiedLeadNextAction" class="auth-input" value="${outreachEscape(lead.next_action || '')}" placeholder="Например: подготовить расчёт"></label>
+                <label class="unified-field"><span>Выполнить до *</span><input id="unifiedLeadNextDate" class="auth-input date-picker" value="${outreachEscape(lead.next_action_date || '')}" placeholder="дд.мм.гггг"></label>
+            </div>
+            <div class="unified-actions"><button class="btn-secondary" type="button" onclick="saveUnifiedLead(${Number(lead.id)})">Сохранить изменения</button><button class="btn-primary" type="button" onclick="convertUnifiedLeadToDeal(${Number(lead.id)})">Создать сделку</button><button class="btn-danger" type="button" onclick="toggleUnifiedPanel('unifiedLeadLossPanel', true)">Закрыть без сделки</button></div>
+        </section>
+        <section id="unifiedLeadContactPanel" class="unified-inline-panel" hidden><div class="unified-inline-panel__head"><div><h3>Результат контакта</h3><p>Запись попадёт в общую историю и обновит следующий шаг.</p></div><button class="btn-ghost" type="button" onclick="toggleUnifiedPanel('unifiedLeadContactPanel', false)">Закрыть</button></div><div class="unified-form-grid"><label class="unified-field"><span>Как связались</span><select id="unifiedLeadActivityType" class="auth-input"><option value="call">Звонок</option><option value="email">Письмо</option><option value="meeting">Встреча</option><option value="note">Заметка</option></select></label><label class="unified-field"><span>Следующий шаг *</span><input id="unifiedLeadActivityNext" class="auth-input" value="${outreachEscape(lead.next_action || '')}"></label><label class="unified-field"><span>Выполнить до *</span><input id="unifiedLeadActivityDate" class="auth-input date-picker" value="${outreachEscape(lead.next_action_date || '')}" placeholder="дд.мм.гггг"></label><label class="unified-field unified-field--wide"><span>Итог контакта *</span><textarea id="unifiedLeadActivitySummary" class="auth-input" rows="3"></textarea></label></div><button class="btn-primary" type="button" onclick="saveUnifiedLeadContact(${Number(lead.id)})">Сохранить контакт</button></section>
+        <section id="unifiedLeadLossPanel" class="unified-inline-panel unified-inline-panel--danger" hidden><h3>Почему работа прекращается?</h3><textarea id="unifiedLeadLossReason" class="auth-input" rows="3" placeholder="Причина обязательна"></textarea><div class="unified-actions"><button class="btn-secondary" type="button" onclick="toggleUnifiedPanel('unifiedLeadLossPanel', false)">Отмена</button><button class="btn-danger" type="button" onclick="closeUnifiedLead(${Number(lead.id)})">Подтвердить закрытие</button></div></section>`}
+        <details class="my-client-details"><summary>Данные клиента и история <span>${activities.length + (lead.activities || []).length}</span></summary><div class="my-client-data-grid"><div><span>Компания</span><strong>${outreachEscape(row.company_name || lead.client_name || '—')}</strong></div><div><span>Контакт</span><strong>${outreachEscape(row.contact_name || lead.contact_name || '—')}</strong></div><div><span>Телефон</span><strong>${outreachEscape(row.phone || lead.contact_phone || '—')}</strong></div><div><span>Почта</span><strong>${outreachEscape(row.email || lead.contact_email || '—')}</strong></div></div><div class="client360-list">${outreachActivityHistory([...(lead.activities || []), ...activities])}</div></details>
+    </article>`;
+}
+
+function renderOutreachDealJourney(row, lead, deal, activities) {
+    const isClosed = ['won', 'lost'].includes(String(deal.stage || ''));
+    const won = String(deal.stage || '') === 'won';
+    const products = typeof crmDealProducts === 'function' ? crmDealProducts(deal) : [];
+    const documents = Array.isArray(deal.documents) ? deal.documents : [];
+    return `<article class="unified-client-card">
+        ${outreachJourneyHeader(row, lead, deal)}
+        <header class="unified-client-card__head"><div><span class="view-eyebrow">${isClosed ? 'Результат работы' : 'Сделка в работе'}</span><h2>${outreachEscape(deal.client_name || row.company_name || 'Без компании')}</h2><p>${outreachEscape(deal.contact_name || row.contact_name || 'Контакт не указан')} · ${outreachMoney(deal.amount, deal.currency)}</p></div><span class="crm-inline-pill crm-inline-pill--${won ? 'positive' : isClosed ? 'neutral' : 'attention'}">${outreachEscape(typeof crmDealStageInfo === 'function' ? crmDealStageInfo(deal.stage).label : deal.stage)}</span></header>
+        ${isClosed ? `<section class="unified-client-outcome ${won ? 'is-won' : ''}"><h3>${won ? 'Продажа состоялась' : 'Клиент отказался'}</h3><p>${outreachEscape(deal.loss_reason || 'Итог сохранён.')}</p><small>Дата завершения: ${outreachEscape(deal.actual_close_date || 'не указана')}</small></section>` : `
+        <section class="unified-next-action"><div><span>Что сделать сейчас</span><strong>${outreachEscape(deal.next_action || 'Назначить следующий шаг')}</strong><small>${outreachEscape(deal.next_action_date ? `Выполнить до ${deal.next_action_date}` : 'Срок не назначен')}</small></div><button class="btn-primary" type="button" onclick="toggleUnifiedPanel('unifiedDealContactPanel', true)">Зафиксировать контакт</button></section>
+        <section class="unified-work-section"><div class="unified-work-section__head"><div><h3>Управление сделкой</h3><p>Этап, ближайшее действие и деньги обновляются без большой формы.</p></div></div><div class="unified-form-grid">
+            <label class="unified-field"><span>Этап сделки</span><select id="unifiedDealStage" class="auth-input"><option value="qualification" ${deal.stage === 'qualification' ? 'selected' : ''}>Уточняем заказ</option><option value="proposal" ${deal.stage === 'proposal' ? 'selected' : ''}>Расчёт, КП и документы</option><option value="negotiation" ${deal.stage === 'negotiation' ? 'selected' : ''}>Согласовываем условия</option></select></label>
+            <label class="unified-field"><span>Сумма</span><input id="unifiedDealAmount" class="auth-input" type="number" min="0" value="${Number(deal.amount || 0)}"></label>
+            <label class="unified-field unified-field--wide"><span>Следующий шаг *</span><input id="unifiedDealNextAction" class="auth-input" value="${outreachEscape(deal.next_action || '')}" placeholder="Например: согласовать договор"></label>
+            <label class="unified-field"><span>Выполнить до</span><input id="unifiedDealNextDate" class="auth-input date-picker" value="${outreachEscape(deal.next_action_date || '')}" placeholder="дд.мм.гггг"></label>
+            <label class="unified-field"><span>План завершения</span><input id="unifiedDealCloseDate" class="auth-input date-picker" value="${outreachEscape(deal.expected_close_date || '')}" placeholder="дд.мм.гггг"></label>
+        </div><div class="unified-actions"><button class="btn-primary" type="button" onclick="saveUnifiedDeal(${Number(deal.id)})">Сохранить и продолжить</button><button class="btn-secondary" type="button" onclick="toggleUnifiedPanel('unifiedDealDetailsPanel', true)">Данные сделки</button><button class="btn-success" type="button" onclick="openUnifiedDealOutcome('won')">Продажа состоялась</button><button class="btn-danger" type="button" onclick="openUnifiedDealOutcome('lost')">Клиент отказался</button></div></section>
+        <section id="unifiedDealContactPanel" class="unified-inline-panel" hidden><div class="unified-inline-panel__head"><div><h3>Результат контакта</h3><p>Зафиксируйте договорённость и новый следующий шаг.</p></div><button class="btn-ghost" type="button" onclick="toggleUnifiedPanel('unifiedDealContactPanel', false)">Закрыть</button></div><div class="unified-form-grid"><label class="unified-field"><span>Как связались</span><select id="unifiedDealActivityType" class="auth-input"><option value="call">Звонок</option><option value="email">Письмо</option><option value="meeting">Встреча</option><option value="note">Заметка</option></select></label><label class="unified-field"><span>Следующий шаг *</span><input id="unifiedDealActivityNext" class="auth-input" value="${outreachEscape(deal.next_action || '')}"></label><label class="unified-field"><span>Выполнить до</span><input id="unifiedDealActivityDate" class="auth-input date-picker" value="${outreachEscape(deal.next_action_date || '')}" placeholder="дд.мм.гггг"></label><label class="unified-field unified-field--wide"><span>Итог контакта *</span><textarea id="unifiedDealActivitySummary" class="auth-input" rows="3"></textarea></label></div><button class="btn-primary" type="button" onclick="saveUnifiedDealContact(${Number(deal.id)})">Сохранить контакт</button></section>
+        <section id="unifiedDealDetailsPanel" class="unified-inline-panel" hidden><div class="unified-inline-panel__head"><div><h3>Данные сделки</h3><p>Реквизиты, которые меняются реже рабочего статуса.</p></div><button class="btn-ghost" type="button" onclick="toggleUnifiedPanel('unifiedDealDetailsPanel', false)">Закрыть</button></div><div class="unified-form-grid"><label class="unified-field"><span>Контактное лицо</span><input id="unifiedDealContactName" class="auth-input" value="${outreachEscape(deal.contact_name || '')}"></label><label class="unified-field"><span>Телефон</span><input id="unifiedDealContactPhone" class="auth-input" value="${outreachEscape(deal.contact_phone || '')}"></label><label class="unified-field"><span>Почта</span><input id="unifiedDealContactEmail" class="auth-input" value="${outreachEscape(deal.contact_email || '')}"></label><label class="unified-field"><span>№ КП / договора</span><input id="unifiedDealContract" class="auth-input" value="${outreachEscape(deal.contract_number || '')}"></label><label class="unified-field unified-field--wide"><span>Товары и услуги</span><textarea id="unifiedDealProducts" class="auth-input" rows="4" placeholder="Название | количество | цена">${outreachEscape(products.map(item => `${item.name || ''} | ${Number(item.quantity || 1)} | ${Number(item.unit_price || 0)}`).join('\n'))}</textarea></label><label class="unified-field unified-field--wide"><span>Комментарий</span><textarea id="unifiedDealComment" class="auth-input" rows="3">${outreachEscape(deal.comment || '')}</textarea></label></div><button class="btn-primary" type="button" onclick="saveUnifiedDealDetails(${Number(deal.id)})">Сохранить данные сделки</button></section>
+        <section id="unifiedDealOutcomePanel" class="unified-inline-panel unified-inline-panel--danger" hidden><h3 id="unifiedDealOutcomeTitle">Завершение сделки</h3><input id="unifiedDealOutcomeType" type="hidden"><textarea id="unifiedDealOutcomeReason" class="auth-input" rows="3" placeholder="Укажите причину результата"></textarea><div class="unified-actions"><button class="btn-secondary" type="button" onclick="toggleUnifiedPanel('unifiedDealOutcomePanel', false)">Отмена</button><button class="btn-primary" type="button" onclick="closeUnifiedDeal(${Number(deal.id)})">Сохранить результат</button></div></section>`}
+        <details class="my-client-details"><summary>История и документы <span>${(lead.activities || []).length + (deal.activities || []).length + documents.length}</span></summary><div class="client360-list">${outreachActivityHistory([...(deal.activities || []), ...(lead.activities || []), ...activities])}${documents.map(doc => `<div class="client360-item"><div><div class="client360-item-title">Документ ${outreachEscape(doc.number || `#${doc.id}`)}</div><div class="client360-item-meta">${outreachEscape(doc.subject || 'Без названия')}</div></div>${doc.file_url ? `<a class="btn-secondary" href="${outreachEscape(doc.file_url)}" target="_blank" rel="noopener">Открыть</a>` : ''}</div>`).join('')}</div></details>
+    </article>`;
+}
+
 function renderOutreachSavedClientCard(row, activities) {
+    const { lead, deal } = outreachJourneyRecords(row);
+    if (deal) return renderOutreachDealJourney(row, lead, deal, activities);
+    if (lead) return renderOutreachLeadJourney(row, lead, activities);
     const isConverted = String(row.status || '') === 'converted';
     const isRejected = String(row.status || '') === 'do_not_contact';
     const lastActivity = activities[0] || null;
     const tags = Array.isArray(row.tags) ? row.tags : [];
     return `
         <article id="myClientCardStep" class="my-client-result-card ${isConverted ? 'is-complete' : ''}">
+            ${outreachJourneyHeader(row)}
             <div class="my-client-result-card__head">
                 <div>
                     <span class="my-client-card__step-label">Карточка клиента</span>
@@ -1517,6 +1640,17 @@ function renderOutreachSavedClientCard(row, activities) {
                 </div>
             </details>
 
+            ${!isConverted && !isRejected ? `<section id="outreachFollowupPanel" class="unified-inline-panel" hidden>
+                <div class="unified-inline-panel__head"><div><h3>Новый контакт</h3><p>Зафиксируйте результат и сразу назначьте следующий шаг.</p></div><button class="btn-ghost" type="button" onclick="toggleUnifiedPanel('outreachFollowupPanel', false)">Закрыть</button></div>
+                <div class="unified-form-grid">
+                    <label class="unified-field"><span>Как связались</span><select id="outreachActivityType" class="auth-input"><option value="call">Звонок</option><option value="email">Письмо</option><option value="message">Сообщение</option><option value="meeting">Встреча</option></select></label>
+                    <label class="unified-field"><span>Результат *</span><select id="outreachActivityResult" class="auth-input" onchange="applyOutreachActivityResult(this.value)"><option value="">Выберите результат</option><option value="no_answer">Нет ответа</option><option value="follow_up">Перезвонить позже</option><option value="warm">Есть интерес</option><option value="meeting">Назначена встреча</option><option value="do_not_contact">Не интересно / больше не звонить</option></select></label>
+                    <label class="unified-field"><span>Что сделать дальше</span><input id="outreachActivityNextAction" class="auth-input" value="${outreachEscape(row.next_action || '')}"></label>
+                    <label class="unified-field"><span>До какого числа</span><input id="outreachActivityNextDate" class="auth-input date-picker" value="${outreachEscape(row.next_action_date || '')}" placeholder="дд.мм.гггг"></label>
+                    <label class="unified-field unified-field--wide"><span>Итог контакта *</span><textarea id="outreachActivitySummary" class="auth-input" rows="3"></textarea></label>
+                </div><button class="btn-primary" type="button" onclick="saveOutreachActivity(${Number(row.id || 0)})">Сохранить контакт</button>
+            </section>` : ''}
+
             <div id="outreachRejectPanel" class="my-client-reject-panel" hidden>
                 <div>
                     <h3>Укажите причину отказа</h3>
@@ -1531,8 +1665,9 @@ function renderOutreachSavedClientCard(row, activities) {
 
             <div class="my-client-result-card__actions">
                 <button class="btn-secondary" type="button" onclick="editOutreachClient(${Number(row.id || 0)})">Изменить</button>
+                ${!isConverted && !isRejected ? '<button class="btn-secondary" type="button" onclick="toggleUnifiedPanel(\'outreachFollowupPanel\', true)">Зафиксировать контакт</button>' : ''}
                 ${isConverted
-                    ? '<button class="btn-primary" type="button" onclick="navigateTo(\'leads\')">Открыть в лидах</button>'
+                    ? '<button class="btn-primary" type="button" onclick="renderProspecting(true)">Продолжить работу</button>'
                     : (!isRejected ? `<button class="btn-primary" type="button" onclick="convertOutreachProspect(${Number(row.id || 0)})">Перевести в лид</button>` : '')}
                 ${!isConverted && !isRejected ? '<button class="btn-danger" type="button" onclick="toggleOutreachRejectForm(true)">Отказ клиента</button>' : ''}
             </div>
@@ -1553,14 +1688,16 @@ function renderOutreachDetail(row) {
         `;
     }
     const activities = Array.isArray(row.activities) ? row.activities : [];
+    const journey = outreachJourneyRecords(row);
     const isConverted = String(row.status || '') === 'converted';
     const cleanPhone = String(row.phone || '').replace(/[^\d+]/g, '');
     const managerName = row.manager_name || row.manager_email || currentUser?.name || 'Не назначен';
-    if (!outreachClientEditMode && activities.length > 0) {
+    if (!outreachClientEditMode && (journey.lead || journey.deal || activities.length > 0)) {
         return renderOutreachSavedClientCard(row, activities);
     }
     return `
         <div class="my-client-workspace">
+            ${outreachJourneyHeader(row)}
             <section id="myClientProfileStep" class="my-client-work-step my-client-profile-step">
                 <div class="my-client-work-step__head my-client-work-step__head--spread">
                     <div class="my-client-work-step__title">
@@ -1689,7 +1826,7 @@ function renderOutreachRegistry() {
                             <tr class="${Number(row.id) === Number(outreachSelectedId) ? 'is-selected' : ''}" onclick="selectOutreachRow(${Number(row.id || 0)})">
                                 <td class="crm-title-cell">
                                     <strong>${outreachEscape(row.company_name || '—')}</strong>
-                                    <div class="table-subtext">${outreachEscape(outreachStatusLabel(row.status))}</div>
+                                    <div class="table-subtext">${outreachEscape(outreachJourneyListLabel(row))}</div>
                                 </td>
                                 <td class="crm-contact-cell"><strong>${outreachEscape(row.phone || 'Не указан')}</strong><div class="table-subtext">${outreachEscape(row.email || '')}</div></td>
                                 <td><strong>${outreachEscape(row.contact_name || 'Не указан')}</strong><div class="table-subtext">${outreachEscape(row.position || 'Должность не указана')}</div></td>
@@ -1790,11 +1927,203 @@ function selectOutreachRow(id) {
 
 function initOutreachDatePicker() {
     if (typeof flatpickr !== 'function') return;
-    ['outreachFormPlannedDate', 'outreachActivityNextDate'].forEach(id => {
+    ['outreachFormPlannedDate', 'outreachActivityNextDate', 'unifiedLeadNextDate', 'unifiedLeadActivityDate', 'unifiedDealNextDate', 'unifiedDealCloseDate', 'unifiedDealActivityDate'].forEach(id => {
         const input = document.getElementById(id);
         if (!input || input._flatpickr) return;
         flatpickr(input, { locale: 'ru', dateFormat: 'd.m.Y', disableMobile: true, allowInput: true });
     });
+}
+
+function outreachJourneyListLabel(row) {
+    const { lead, deal } = outreachJourneyRecords(row);
+    if (deal) {
+        if (deal.stage === 'won') return 'Продажа состоялась';
+        if (deal.stage === 'lost') return 'Сделка закрыта';
+        return `Сделка: ${typeof crmDealStageInfo === 'function' ? crmDealStageInfo(deal.stage).label : deal.stage}`;
+    }
+    if (lead) return lead.stage === 'lost' ? 'Закрыт без сделки' : 'Квалификация';
+    return outreachStatusLabel(row.status);
+}
+
+function toggleUnifiedPanel(id, show) {
+    const panel = document.getElementById(id);
+    if (!panel) return;
+    panel.hidden = !show;
+    if (show) {
+        initOutreachDatePicker();
+        panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+async function refreshUnifiedJourney(reloadOutreach = false) {
+    await Promise.all([
+        typeof loadCrmLeads === 'function' ? loadCrmLeads() : Promise.resolve(),
+        typeof loadCrmDeals === 'function' ? loadCrmDeals() : Promise.resolve(),
+    ]);
+    await renderProspecting(reloadOutreach);
+}
+
+async function saveUnifiedLead(leadId) {
+    const lead = (crmLeadsDB || []).find(item => Number(item.id || 0) === Number(leadId || 0));
+    if (!lead) return customAlert('Лид не найден. Обновите страницу.');
+    const comment = String(document.getElementById('unifiedLeadNeed')?.value || '').trim();
+    const nextAction = String(document.getElementById('unifiedLeadNextAction')?.value || '').trim();
+    const nextDate = String(document.getElementById('unifiedLeadNextDate')?.value || '').trim();
+    if (!comment) return customAlert('Опишите потребность клиента и договорённости.');
+    if (!nextAction) return customAlert('Укажите конкретный следующий шаг.');
+    if (!nextDate) return customAlert('Выберите срок следующего действия.');
+    const res = await apiCall(`/crm/leads/${Number(leadId)}`, 'PUT', outreachLeadPayload(lead, {
+        comment,
+        stage: document.getElementById('unifiedLeadStage')?.value || 'qualified',
+        budget: Number(document.getElementById('unifiedLeadBudget')?.value || 0),
+        next_action: nextAction,
+        next_action_date: nextDate,
+    }));
+    if (!res || res.error) return customAlert(res?.message || 'Не удалось сохранить квалификацию.');
+    await refreshUnifiedJourney();
+    showToast('Мои клиенты', 'Квалификация и следующий шаг сохранены');
+}
+
+async function saveUnifiedLeadContact(leadId) {
+    const lead = (crmLeadsDB || []).find(item => Number(item.id || 0) === Number(leadId || 0));
+    if (!lead) return customAlert('Лид не найден.');
+    const subject = String(document.getElementById('unifiedLeadActivityNext')?.value || '').trim();
+    const dueDate = String(document.getElementById('unifiedLeadActivityDate')?.value || '').trim();
+    const summary = String(document.getElementById('unifiedLeadActivitySummary')?.value || '').trim();
+    if (!summary) return customAlert('Запишите итог контакта.');
+    if (!subject) return customAlert('Укажите, что сделать дальше.');
+    if (!dueDate) return customAlert('Выберите срок следующего действия.');
+    const activity = await apiCall('/crm/activities', 'POST', {
+        entity_type: 'lead', entity_id: Number(leadId), activity_type: document.getElementById('unifiedLeadActivityType')?.value || 'call',
+        subject, summary, due_date: dueDate, owner_name: currentUser?.name || '', status: 'open',
+    });
+    if (!activity || activity.error) return customAlert(activity?.message || 'Не удалось сохранить контакт.');
+    const update = await apiCall(`/crm/leads/${Number(leadId)}`, 'PUT', outreachLeadPayload(lead, { next_action: subject, next_action_date: dueDate }));
+    if (!update || update.error) return customAlert(update?.message || 'Контакт сохранён, но следующий шаг не обновился.');
+    await refreshUnifiedJourney();
+    showToast('Мои клиенты', 'Контакт и следующий шаг сохранены');
+}
+
+async function convertUnifiedLeadToDeal(leadId) {
+    const lead = (crmLeadsDB || []).find(item => Number(item.id || 0) === Number(leadId || 0));
+    if (!lead) return customAlert('Лид не найден.');
+    const need = String(document.getElementById('unifiedLeadNeed')?.value || '').trim();
+    const nextAction = String(document.getElementById('unifiedLeadNextAction')?.value || '').trim();
+    const nextDate = String(document.getElementById('unifiedLeadNextDate')?.value || '').trim();
+    if (!need || !nextAction || !nextDate) return customAlert('Перед созданием сделки заполните потребность, следующий шаг и срок.');
+    const save = await apiCall(`/crm/leads/${Number(leadId)}`, 'PUT', outreachLeadPayload(lead, {
+        comment: need, stage: document.getElementById('unifiedLeadStage')?.value || 'qualified',
+        budget: Number(document.getElementById('unifiedLeadBudget')?.value || 0), next_action: nextAction, next_action_date: nextDate,
+    }));
+    if (!save || save.error) return customAlert(save?.message || 'Не удалось сохранить данные перед созданием сделки.');
+    const res = await apiCall(`/crm/leads/${Number(leadId)}/convert`, 'POST');
+    if (!res || res.error) return customAlert(res?.message || 'Не удалось создать сделку.');
+    await refreshUnifiedJourney();
+    showToast('Мои клиенты', 'Сделка создана и открыта в этой карточке');
+}
+
+async function closeUnifiedLead(leadId) {
+    const lead = (crmLeadsDB || []).find(item => Number(item.id || 0) === Number(leadId || 0));
+    if (!lead) return customAlert('Лид не найден.');
+    const reason = String(document.getElementById('unifiedLeadLossReason')?.value || '').trim();
+    if (reason.length < 3) return customAlert('Укажите причину закрытия.');
+    const date = outreachToday();
+    const res = await apiCall(`/crm/leads/${Number(leadId)}`, 'PUT', outreachLeadPayload(lead, {
+        stage: 'lost', next_action: '', next_action_date: '', comment: `${lead.comment || ''}\n[Закрыт без сделки ${date}] Причина: ${reason}`.trim(),
+    }));
+    if (!res || res.error) return customAlert(res?.message || 'Не удалось закрыть клиента без сделки.');
+    await apiCall('/crm/activities', 'POST', { entity_type: 'lead', entity_id: Number(leadId), activity_type: 'note', subject: 'Закрыт без сделки', summary: reason, due_date: date, owner_name: currentUser?.name || '', status: 'done' });
+    await refreshUnifiedJourney();
+    showToast('Мои клиенты', 'Результат и причина сохранены');
+}
+
+function unifiedDealProductsFromInput() {
+    return String(document.getElementById('unifiedDealProducts')?.value || '').split('\n').map(line => {
+        const [name = '', quantityText = '1', priceText = '0'] = line.split('|').map(item => item.trim());
+        return { name, quantity: Math.max(1, Number(quantityText || 1)), unit_price: Math.max(0, Number(priceText || 0)) };
+    }).filter(item => item.name);
+}
+
+async function saveUnifiedDeal(dealId) {
+    const deal = (crmDealsDB || []).find(item => Number(item.id || 0) === Number(dealId || 0));
+    if (!deal) return customAlert('Сделка не найдена.');
+    const nextAction = String(document.getElementById('unifiedDealNextAction')?.value || '').trim();
+    if (!nextAction) return customAlert('Укажите конкретный следующий шаг по сделке.');
+    const res = await apiCall(`/crm/deals/${Number(dealId)}`, 'PUT', outreachDealPayload(deal, {
+        stage: document.getElementById('unifiedDealStage')?.value || 'qualification', amount: Number(document.getElementById('unifiedDealAmount')?.value || 0),
+        next_action: nextAction, next_action_date: document.getElementById('unifiedDealNextDate')?.value || '', expected_close_date: document.getElementById('unifiedDealCloseDate')?.value || '',
+    }));
+    if (!res || res.error) return customAlert(res?.message || 'Не удалось сохранить сделку.');
+    await refreshUnifiedJourney();
+    showToast('Мои клиенты', 'Этап и следующий шаг сделки сохранены');
+}
+
+async function saveUnifiedDealDetails(dealId) {
+    const deal = (crmDealsDB || []).find(item => Number(item.id || 0) === Number(dealId || 0));
+    if (!deal) return customAlert('Сделка не найдена.');
+    const res = await apiCall(`/crm/deals/${Number(dealId)}`, 'PUT', outreachDealPayload(deal, {
+        contact_name: document.getElementById('unifiedDealContactName')?.value || '', contact_phone: document.getElementById('unifiedDealContactPhone')?.value || '',
+        contact_email: document.getElementById('unifiedDealContactEmail')?.value || '', contract_number: document.getElementById('unifiedDealContract')?.value || '',
+        products: unifiedDealProductsFromInput(), comment: document.getElementById('unifiedDealComment')?.value || '',
+    }));
+    if (!res || res.error) return customAlert(res?.message || 'Не удалось сохранить данные сделки.');
+    await refreshUnifiedJourney();
+    showToast('Мои клиенты', 'Данные сделки сохранены');
+}
+
+async function saveUnifiedDealContact(dealId) {
+    const deal = (crmDealsDB || []).find(item => Number(item.id || 0) === Number(dealId || 0));
+    if (!deal) return customAlert('Сделка не найдена.');
+    const subject = String(document.getElementById('unifiedDealActivityNext')?.value || '').trim();
+    const summary = String(document.getElementById('unifiedDealActivitySummary')?.value || '').trim();
+    const dueDate = String(document.getElementById('unifiedDealActivityDate')?.value || '').trim();
+    if (!summary) return customAlert('Запишите итог контакта.');
+    if (!subject) return customAlert('Укажите следующий шаг.');
+    const activity = await apiCall('/crm/activities', 'POST', { entity_type: 'deal', entity_id: Number(dealId), activity_type: document.getElementById('unifiedDealActivityType')?.value || 'call', subject, summary, due_date: dueDate, owner_name: currentUser?.name || '', status: 'open' });
+    if (!activity || activity.error) return customAlert(activity?.message || 'Не удалось сохранить контакт.');
+    const update = await apiCall(`/crm/deals/${Number(dealId)}`, 'PUT', outreachDealPayload(deal, { next_action: subject, next_action_date: dueDate }));
+    if (!update || update.error) return customAlert(update?.message || 'Контакт сохранён, но следующий шаг не обновился.');
+    await refreshUnifiedJourney();
+    showToast('Мои клиенты', 'Контакт и следующий шаг сделки сохранены');
+}
+
+function openUnifiedDealOutcome(type) {
+    const won = String(type || '') === 'won';
+    const input = document.getElementById('unifiedDealOutcomeType');
+    const title = document.getElementById('unifiedDealOutcomeTitle');
+    const panel = document.getElementById('unifiedDealOutcomePanel');
+    if (input) input.value = won ? 'won' : 'lost';
+    if (title) title.textContent = won ? 'Почему продажа состоялась?' : 'Почему клиент отказался?';
+    panel?.classList.toggle('unified-inline-panel--danger', !won);
+    toggleUnifiedPanel('unifiedDealOutcomePanel', true);
+}
+
+async function closeUnifiedDeal(dealId) {
+    const deal = (crmDealsDB || []).find(item => Number(item.id || 0) === Number(dealId || 0));
+    if (!deal) return customAlert('Сделка не найдена.');
+    const stage = document.getElementById('unifiedDealOutcomeType')?.value || '';
+    const reason = String(document.getElementById('unifiedDealOutcomeReason')?.value || '').trim();
+    if (!['won', 'lost'].includes(stage)) return customAlert('Выберите результат сделки.');
+    if (reason.length < 3) return customAlert('Укажите причину результата.');
+    const res = await apiCall(`/crm/deals/${Number(dealId)}`, 'PUT', outreachDealPayload(deal, { stage, loss_reason: reason, actual_close_date: outreachToday(), next_action: '', next_action_date: '' }));
+    if (!res || res.error) return customAlert(res?.message || 'Не удалось завершить сделку.');
+    await refreshUnifiedJourney();
+    showToast('Мои клиенты', stage === 'won' ? 'Продажа успешно завершена' : 'Отказ клиента сохранён');
+}
+
+async function openOutreachJourneyByLead(leadId) {
+    await ensureOutreachData(false, 'mine');
+    const row = (outreachProspectsDB || []).find(item => Number(item.converted_lead_id || 0) === Number(leadId || 0));
+    if (row) outreachSelectedId = Number(row.id || 0);
+    navigateTo('myProspecting');
+}
+
+async function openOutreachJourneyByDeal(dealId) {
+    await Promise.all([loadCrmLeads(), loadCrmDeals(), ensureOutreachData(false, 'mine')]);
+    const deal = (crmDealsDB || []).find(item => Number(item.id || 0) === Number(dealId || 0));
+    const row = (outreachProspectsDB || []).find(item => Number(item.converted_lead_id || 0) === Number(deal?.lead_id || 0));
+    if (row) outreachSelectedId = Number(row.id || 0);
+    navigateTo('myProspecting');
 }
 
 function scrollToMyClientStep(id) {
@@ -2062,11 +2391,12 @@ async function convertOutreachProspect(prospectId) {
     const id = Number(prospectId || 0);
     if (!id) return customAlert('\u041d\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u0430 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430.');
     outreachSelectedId = id;
+    if (!(await customConfirm('Перевести клиента к квалификации? Карточка останется на этой странице, а все заполненные данные сохранятся.'))) return;
     const res = await apiCall(`/outreach/prospects/${id}/convert`, 'POST');
     if (!res || res.error) return customAlert(res?.message || '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u0435\u0440\u0435\u0432\u0435\u0441\u0442\u0438 \u043a\u043b\u0438\u0435\u043d\u0442\u0430 \u0432 \u043b\u0438\u0434.');
-    await Promise.all([loadOutreachProspects(), loadCrmLeads()]);
+    await Promise.all([loadOutreachProspects(), loadCrmLeads(), loadCrmDeals()]);
     await renderProspecting(true);
-    showToast('\u0411\u0430\u0437\u0430 \u0440\u0430\u0437\u0432\u0438\u0442\u0438\u044f', `\u041a\u043b\u0438\u0435\u043d\u0442 \u043f\u0435\u0440\u0435\u0432\u0435\u0434\u0451\u043d \u0432 \u043b\u0438\u0434 #${Number(res.lead_id || 0) || ''}`.trim());
+    showToast('Мои клиенты', 'Квалификация открыта в карточке клиента');
 }
 
 async function quickOutreachAction(event, prospectId, action) {
@@ -2304,7 +2634,10 @@ async function claimOutreachProspect(prospectId, button = null) {
     outreachPoolRows = outreachPoolRows.filter(row => Number(row.id) !== id);
     renderOutreachPoolSummary();
     renderOutreachPool();
-    showToast('База развития', 'Клиент добавлен в раздел «Мои клиенты»');
+    outreachSelectedId = id;
+    await ensureOutreachData(true, 'mine');
+    navigateTo('myProspecting');
+    showToast('База развития', 'Клиент ваш. Рабочая карточка уже открыта');
 }
 
 async function renderOutreachPoolPage() {
@@ -2319,7 +2652,11 @@ async function renderOutreachPoolPage() {
 }
 
 async function renderProspecting(forceReload = false) {
-    await ensureOutreachData(forceReload, 'mine');
+    await Promise.all([
+        ensureOutreachData(forceReload, 'mine'),
+        typeof loadCrmLeads === 'function' ? loadCrmLeads() : Promise.resolve(),
+        typeof loadCrmDeals === 'function' ? loadCrmDeals() : Promise.resolve(),
+    ]);
     renderOutreachManagerSelects();
     renderOutreachImportPreview();
     renderOutreachImportResult();
@@ -2395,3 +2732,15 @@ window.markOutreachProcessed = markOutreachProcessed;
 window.convertOutreachProspect = convertOutreachProspect;
 window.toggleOutreachReportPanel = toggleOutreachReportPanel;
 window.quickOutreachAction = quickOutreachAction;
+window.toggleUnifiedPanel = toggleUnifiedPanel;
+window.saveUnifiedLead = saveUnifiedLead;
+window.saveUnifiedLeadContact = saveUnifiedLeadContact;
+window.convertUnifiedLeadToDeal = convertUnifiedLeadToDeal;
+window.closeUnifiedLead = closeUnifiedLead;
+window.saveUnifiedDeal = saveUnifiedDeal;
+window.saveUnifiedDealDetails = saveUnifiedDealDetails;
+window.saveUnifiedDealContact = saveUnifiedDealContact;
+window.openUnifiedDealOutcome = openUnifiedDealOutcome;
+window.closeUnifiedDeal = closeUnifiedDeal;
+window.openOutreachJourneyByLead = openOutreachJourneyByLead;
+window.openOutreachJourneyByDeal = openOutreachJourneyByDeal;
