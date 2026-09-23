@@ -1524,7 +1524,7 @@ function renderOutreachLeadJourney(row, lead, activities) {
         ${outreachJourneyHeader(row, lead)}
         <header class="unified-client-card__head"><div><span class="view-eyebrow">Квалификация клиента</span><h2>${outreachEscape(row.company_name || lead.client_name || 'Без компании')}</h2><p>${outreachEscape(row.contact_name || lead.contact_name || 'Контакт не указан')} · ${outreachEscape(row.phone || lead.contact_phone || 'телефон не указан')}</p></div><span class="crm-inline-pill ${isLost ? 'crm-inline-pill--neutral' : 'crm-inline-pill--attention'}">${isLost ? 'Закрыт без сделки' : 'Нужно принять решение'}</span></header>
         ${isLost ? `<section class="unified-client-outcome"><h3>Работа завершена без сделки</h3><p>${outreachEscape(need || 'Причина сохранена в истории клиента.')}</p></section>` : `
-        <section class="unified-next-action"><div><span>Что сделать сейчас</span><strong>${outreachEscape(lead.next_action || 'Уточнить потребность клиента')}</strong><small>${outreachEscape(lead.next_action_date ? `Выполнить до ${lead.next_action_date}` : 'Назначьте срок следующего действия')}</small></div><button class="btn-primary" type="button" onclick="toggleUnifiedPanel('unifiedLeadContactPanel', true)">Зафиксировать контакт</button></section>
+        <section class="unified-next-action"><div><span>Что сделать сейчас</span><strong>${outreachEscape(lead.next_action || 'Уточнить потребность клиента')}</strong><small>${outreachEscape(lead.next_action_date ? `Выполнить до ${lead.next_action_date}` : 'Назначьте срок следующего действия')}</small></div></section>
         <section class="unified-work-section"><div class="unified-work-section__head"><div><h3>Квалификация</h3><p>Заполните четыре рабочих поля. Остальные данные уже перенесены из первого контакта.</p></div></div>
             <div class="unified-form-grid">
                 <label class="unified-field unified-field--wide"><span>Потребность и договорённости *</span><textarea id="unifiedLeadNeed" class="auth-input" rows="3" placeholder="Что нужно клиенту, объём и важные условия">${outreachEscape(need)}</textarea></label>
@@ -1535,9 +1535,8 @@ function renderOutreachLeadJourney(row, lead, activities) {
             </div>
             <div class="unified-actions"><button class="btn-secondary" type="button" onclick="saveUnifiedLead(${Number(lead.id)})">Сохранить изменения</button><button class="btn-primary" type="button" onclick="convertUnifiedLeadToDeal(${Number(lead.id)})">Создать сделку</button><button class="btn-danger" type="button" onclick="toggleUnifiedPanel('unifiedLeadLossPanel', true)">Закрыть без сделки</button></div>
         </section>
-        <section id="unifiedLeadContactPanel" class="unified-inline-panel" hidden><div class="unified-inline-panel__head"><div><h3>Результат контакта</h3><p>Запись попадёт в общую историю и обновит следующий шаг.</p></div><button class="btn-ghost" type="button" onclick="toggleUnifiedPanel('unifiedLeadContactPanel', false)">Закрыть</button></div><div class="unified-form-grid"><label class="unified-field"><span>Как связались</span><select id="unifiedLeadActivityType" class="auth-input"><option value="call">Звонок</option><option value="email">Письмо</option><option value="meeting">Встреча</option><option value="note">Заметка</option></select></label><label class="unified-field"><span>Следующий шаг *</span><input id="unifiedLeadActivityNext" class="auth-input" value="${outreachEscape(lead.next_action || '')}"></label><label class="unified-field"><span>Выполнить до *</span><input id="unifiedLeadActivityDate" class="auth-input date-picker" value="${outreachEscape(lead.next_action_date || '')}" placeholder="дд.мм.гггг"></label><label class="unified-field unified-field--wide"><span>Итог контакта *</span><textarea id="unifiedLeadActivitySummary" class="auth-input" rows="3"></textarea></label></div><button class="btn-primary" type="button" onclick="saveUnifiedLeadContact(${Number(lead.id)})">Сохранить контакт</button></section>
         <section id="unifiedLeadLossPanel" class="unified-inline-panel unified-inline-panel--danger" hidden><h3>Почему работа прекращается?</h3><textarea id="unifiedLeadLossReason" class="auth-input" rows="3" placeholder="Причина обязательна"></textarea><div class="unified-actions"><button class="btn-secondary" type="button" onclick="toggleUnifiedPanel('unifiedLeadLossPanel', false)">Отмена</button><button class="btn-danger" type="button" onclick="closeUnifiedLead(${Number(lead.id)})">Подтвердить закрытие</button></div></section>`}
-        <details class="my-client-details"><summary>Данные клиента и история <span>${activities.length + (lead.activities || []).length}</span></summary><div class="my-client-data-grid"><div><span>Компания</span><strong>${outreachEscape(row.company_name || lead.client_name || '—')}</strong></div><div><span>Контакт</span><strong>${outreachEscape(row.contact_name || lead.contact_name || '—')}</strong></div><div><span>Телефон</span><strong>${outreachEscape(row.phone || lead.contact_phone || '—')}</strong></div><div><span>Почта</span><strong>${outreachEscape(row.email || lead.contact_email || '—')}</strong></div></div><div class="client360-list">${outreachActivityHistory([...(lead.activities || []), ...activities])}</div></details>
+        <details class="my-client-details"><summary>Данные клиента</summary><div class="my-client-data-grid"><div><span>Компания</span><strong>${outreachEscape(row.company_name || lead.client_name || '—')}</strong></div><div><span>Контакт</span><strong>${outreachEscape(row.contact_name || lead.contact_name || '—')}</strong></div><div><span>Телефон</span><strong>${outreachEscape(row.phone || lead.contact_phone || '—')}</strong></div><div><span>Почта</span><strong>${outreachEscape(row.email || lead.contact_email || '—')}</strong></div></div></details>
     </article>`;
 }
 
@@ -1550,7 +1549,7 @@ function renderOutreachDealJourney(row, lead, deal, activities) {
         ${outreachJourneyHeader(row, lead, deal)}
         <header class="unified-client-card__head"><div><span class="view-eyebrow">${isClosed ? 'Результат работы' : 'Сделка в работе'}</span><h2>${outreachEscape(deal.client_name || row.company_name || 'Без компании')}</h2><p>${outreachEscape(deal.contact_name || row.contact_name || 'Контакт не указан')} · ${outreachMoney(deal.amount, deal.currency)}</p></div><span class="crm-inline-pill crm-inline-pill--${won ? 'positive' : isClosed ? 'neutral' : 'attention'}">${outreachEscape(typeof crmDealStageInfo === 'function' ? crmDealStageInfo(deal.stage).label : deal.stage)}</span></header>
         ${isClosed ? `<section class="unified-client-outcome ${won ? 'is-won' : ''}"><h3>${won ? 'Продажа состоялась' : 'Клиент отказался'}</h3><p>${outreachEscape(deal.loss_reason || 'Итог сохранён.')}</p><small>Дата завершения: ${outreachEscape(deal.actual_close_date || 'не указана')}</small></section>` : `
-        <section class="unified-next-action"><div><span>Что сделать сейчас</span><strong>${outreachEscape(deal.next_action || 'Назначить следующий шаг')}</strong><small>${outreachEscape(deal.next_action_date ? `Выполнить до ${deal.next_action_date}` : 'Срок не назначен')}</small></div><button class="btn-primary" type="button" onclick="toggleUnifiedPanel('unifiedDealContactPanel', true)">Зафиксировать контакт</button></section>
+        <section class="unified-next-action"><div><span>Что сделать сейчас</span><strong>${outreachEscape(deal.next_action || 'Назначить следующий шаг')}</strong><small>${outreachEscape(deal.next_action_date ? `Выполнить до ${deal.next_action_date}` : 'Срок не назначен')}</small></div></section>
         <section class="unified-work-section"><div class="unified-work-section__head"><div><h3>Управление сделкой</h3><p>Этап, ближайшее действие и деньги обновляются без большой формы.</p></div></div><div class="unified-form-grid">
             <label class="unified-field"><span>Этап сделки</span><select id="unifiedDealStage" class="auth-input"><option value="qualification" ${deal.stage === 'qualification' ? 'selected' : ''}>Уточняем заказ</option><option value="proposal" ${deal.stage === 'proposal' ? 'selected' : ''}>Расчёт, КП и документы</option><option value="negotiation" ${deal.stage === 'negotiation' ? 'selected' : ''}>Согласовываем условия</option></select></label>
             <label class="unified-field"><span>Сумма</span><input id="unifiedDealAmount" class="auth-input" type="number" min="0" value="${Number(deal.amount || 0)}"></label>
@@ -1558,10 +1557,9 @@ function renderOutreachDealJourney(row, lead, deal, activities) {
             <label class="unified-field"><span>Выполнить до</span><input id="unifiedDealNextDate" class="auth-input date-picker" value="${outreachEscape(deal.next_action_date || '')}" placeholder="дд.мм.гггг"></label>
             <label class="unified-field"><span>План завершения</span><input id="unifiedDealCloseDate" class="auth-input date-picker" value="${outreachEscape(deal.expected_close_date || '')}" placeholder="дд.мм.гггг"></label>
         </div><div class="unified-actions"><button class="btn-primary" type="button" onclick="saveUnifiedDeal(${Number(deal.id)})">Сохранить и продолжить</button><button class="btn-secondary" type="button" onclick="toggleUnifiedPanel('unifiedDealDetailsPanel', true)">Данные сделки</button><button class="btn-success" type="button" onclick="openUnifiedDealOutcome('won')">Продажа состоялась</button><button class="btn-danger" type="button" onclick="openUnifiedDealOutcome('lost')">Клиент отказался</button></div></section>
-        <section id="unifiedDealContactPanel" class="unified-inline-panel" hidden><div class="unified-inline-panel__head"><div><h3>Результат контакта</h3><p>Зафиксируйте договорённость и новый следующий шаг.</p></div><button class="btn-ghost" type="button" onclick="toggleUnifiedPanel('unifiedDealContactPanel', false)">Закрыть</button></div><div class="unified-form-grid"><label class="unified-field"><span>Как связались</span><select id="unifiedDealActivityType" class="auth-input"><option value="call">Звонок</option><option value="email">Письмо</option><option value="meeting">Встреча</option><option value="note">Заметка</option></select></label><label class="unified-field"><span>Следующий шаг *</span><input id="unifiedDealActivityNext" class="auth-input" value="${outreachEscape(deal.next_action || '')}"></label><label class="unified-field"><span>Выполнить до</span><input id="unifiedDealActivityDate" class="auth-input date-picker" value="${outreachEscape(deal.next_action_date || '')}" placeholder="дд.мм.гггг"></label><label class="unified-field unified-field--wide"><span>Итог контакта *</span><textarea id="unifiedDealActivitySummary" class="auth-input" rows="3"></textarea></label></div><button class="btn-primary" type="button" onclick="saveUnifiedDealContact(${Number(deal.id)})">Сохранить контакт</button></section>
         <section id="unifiedDealDetailsPanel" class="unified-inline-panel" hidden><div class="unified-inline-panel__head"><div><h3>Данные сделки</h3><p>Реквизиты, которые меняются реже рабочего статуса.</p></div><button class="btn-ghost" type="button" onclick="toggleUnifiedPanel('unifiedDealDetailsPanel', false)">Закрыть</button></div><div class="unified-form-grid"><label class="unified-field"><span>Контактное лицо</span><input id="unifiedDealContactName" class="auth-input" value="${outreachEscape(deal.contact_name || '')}"></label><label class="unified-field"><span>Телефон</span><input id="unifiedDealContactPhone" class="auth-input" value="${outreachEscape(deal.contact_phone || '')}"></label><label class="unified-field"><span>Почта</span><input id="unifiedDealContactEmail" class="auth-input" value="${outreachEscape(deal.contact_email || '')}"></label><label class="unified-field"><span>№ КП / договора</span><input id="unifiedDealContract" class="auth-input" value="${outreachEscape(deal.contract_number || '')}"></label><label class="unified-field unified-field--wide"><span>Товары и услуги</span><textarea id="unifiedDealProducts" class="auth-input" rows="4" placeholder="Название | количество | цена">${outreachEscape(products.map(item => `${item.name || ''} | ${Number(item.quantity || 1)} | ${Number(item.unit_price || 0)}`).join('\n'))}</textarea></label><label class="unified-field unified-field--wide"><span>Комментарий</span><textarea id="unifiedDealComment" class="auth-input" rows="3">${outreachEscape(deal.comment || '')}</textarea></label></div><button class="btn-primary" type="button" onclick="saveUnifiedDealDetails(${Number(deal.id)})">Сохранить данные сделки</button></section>
         <section id="unifiedDealOutcomePanel" class="unified-inline-panel unified-inline-panel--danger" hidden><h3 id="unifiedDealOutcomeTitle">Завершение сделки</h3><input id="unifiedDealOutcomeType" type="hidden"><textarea id="unifiedDealOutcomeReason" class="auth-input" rows="3" placeholder="Укажите причину результата"></textarea><div class="unified-actions"><button class="btn-secondary" type="button" onclick="toggleUnifiedPanel('unifiedDealOutcomePanel', false)">Отмена</button><button class="btn-primary" type="button" onclick="closeUnifiedDeal(${Number(deal.id)})">Сохранить результат</button></div></section>`}
-        <details class="my-client-details"><summary>История и документы <span>${(lead?.activities || []).length + (deal.activities || []).length + documents.length}</span></summary><div class="client360-list">${outreachActivityHistory([...(deal.activities || []), ...(lead?.activities || []), ...activities])}${documents.map(doc => `<div class="client360-item"><div><div class="client360-item-title">Документ ${outreachEscape(doc.number || `#${doc.id}`)}</div><div class="client360-item-meta">${outreachEscape(doc.subject || 'Без названия')}</div></div>${doc.file_url ? `<a class="btn-secondary" href="${outreachEscape(doc.file_url)}" target="_blank" rel="noopener">Открыть</a>` : ''}</div>`).join('')}</div></details>
+        <details class="my-client-details"><summary>Документы <span>${documents.length}</span></summary><div class="client360-list">${documents.map(doc => `<div class="client360-item"><div><div class="client360-item-title">Документ ${outreachEscape(doc.number || `#${doc.id}`)}</div><div class="client360-item-meta">${outreachEscape(doc.subject || 'Без названия')}</div></div>${doc.file_url ? `<a class="btn-secondary" href="${outreachEscape(doc.file_url)}" target="_blank" rel="noopener">Открыть</a>` : ''}</div>`).join('') || '<div class="empty-state">Документов пока нет.</div>'}</div></details>
     </article>`;
 }
 
@@ -1571,7 +1569,6 @@ function renderOutreachSavedClientCard(row, activities) {
     if (lead) return renderOutreachLeadJourney(row, lead, activities);
     const isConverted = String(row.status || '') === 'converted';
     const isRejected = String(row.status || '') === 'do_not_contact';
-    const lastActivity = activities[0] || null;
     const tags = Array.isArray(row.tags) ? row.tags : [];
     return `
         <article id="myClientCardStep" class="my-client-result-card ${isConverted ? 'is-complete' : ''}">
@@ -1615,46 +1612,6 @@ function renderOutreachSavedClientCard(row, activities) {
                 ${tags.length ? `<div class="crm-tags">${tags.map(tag => `<span class="crm-tag">${outreachEscape(tag)}</span>`).join('')}</div>` : ''}
             </section>
 
-            <section class="my-client-data-section">
-                <div class="my-client-data-section__head">
-                    <h3>Последний контакт</h3>
-                    <span>${activities.length} ${activities.length === 1 ? 'запись' : 'записей'}</span>
-                </div>
-                <div class="my-client-contact-result">
-                    <div><span>Как связались</span><strong>${outreachEscape(lastActivity ? outreachActivityTypeLabel(lastActivity.activity_type) : 'Не указано')}</strong></div>
-                    <div><span>Результат</span><strong>${outreachEscape(lastActivity ? outreachStatusLabel(lastActivity.result_status) : 'Не указан')}</strong></div>
-                    <div><span>Следующий шаг</span><strong>${outreachEscape(lastActivity?.next_action || row.next_action || 'Не назначен')}</strong></div>
-                    <div><span>Дата следующего контакта</span><strong>${outreachEscape(lastActivity?.next_action_date || row.next_action_date || 'Не назначена')}</strong></div>
-                </div>
-                <div class="my-client-result-card__note"><span>Комментарий по итогам</span><p>${outreachEscape(lastActivity?.summary || 'Комментарий не заполнен.')}</p></div>
-            </section>
-
-            <details class="my-client-details my-client-history">
-                <summary>Вся история контактов <span>${activities.length}</span></summary>
-                <div class="client360-list">
-                    ${activities.map(activity => `
-                        <div class="client360-item">
-                            <div>
-                                <div class="client360-item-title">${outreachEscape(outreachActivityTypeLabel(activity.activity_type))} · ${outreachEscape(outreachStatusLabel(activity.result_status || ''))}</div>
-                                <div class="client360-item-meta">${outreachEscape(activity.manager_name || '')} · ${outreachEscape(activity.next_action_date || 'без следующей даты')}</div>
-                                <div class="client360-item-meta">${outreachEscape(activity.summary || 'без комментария')}</div>
-                            </div>
-                        </div>
-                    `).join('') || '<div class="empty-state">Истории обработки пока нет.</div>'}
-                </div>
-            </details>
-
-            ${!isConverted && !isRejected ? `<section id="outreachFollowupPanel" class="unified-inline-panel" hidden>
-                <div class="unified-inline-panel__head"><div><h3>Новый контакт</h3><p>Зафиксируйте результат и сразу назначьте следующий шаг.</p></div><button class="btn-ghost" type="button" onclick="toggleUnifiedPanel('outreachFollowupPanel', false)">Закрыть</button></div>
-                <div class="unified-form-grid">
-                    <label class="unified-field"><span>Как связались</span><select id="outreachActivityType" class="auth-input"><option value="call">Звонок</option><option value="email">Письмо</option><option value="message">Сообщение</option><option value="meeting">Встреча</option></select></label>
-                    <label class="unified-field"><span>Результат *</span><select id="outreachActivityResult" class="auth-input" onchange="applyOutreachActivityResult(this.value)"><option value="">Выберите результат</option><option value="no_answer">Нет ответа</option><option value="follow_up">Перезвонить позже</option><option value="warm">Есть интерес</option><option value="meeting">Назначена встреча</option><option value="do_not_contact">Не интересно / больше не звонить</option></select></label>
-                    <label class="unified-field"><span>Что сделать дальше</span><input id="outreachActivityNextAction" class="auth-input" value="${outreachEscape(row.next_action || '')}"></label>
-                    <label class="unified-field"><span>До какого числа</span><input id="outreachActivityNextDate" class="auth-input date-picker" value="${outreachEscape(row.next_action_date || '')}" placeholder="дд.мм.гггг"></label>
-                    <label class="unified-field unified-field--wide"><span>Итог контакта *</span><textarea id="outreachActivitySummary" class="auth-input" rows="3"></textarea></label>
-                </div><button class="btn-primary" type="button" onclick="saveOutreachActivity(${Number(row.id || 0)})">Сохранить контакт</button>
-            </section>` : ''}
-
             <div id="outreachRejectPanel" class="my-client-reject-panel" hidden>
                 <div>
                     <h3>Укажите причину отказа</h3>
@@ -1669,7 +1626,6 @@ function renderOutreachSavedClientCard(row, activities) {
 
             <div class="my-client-result-card__actions">
                 <button class="btn-secondary" type="button" onclick="editOutreachClient(${Number(row.id || 0)})">Изменить</button>
-                ${!isConverted && !isRejected ? '<button class="btn-secondary" type="button" onclick="toggleUnifiedPanel(\'outreachFollowupPanel\', true)">Зафиксировать контакт</button>' : ''}
                 ${isConverted
                     ? '<button class="btn-primary" type="button" onclick="renderProspecting(true)">Продолжить работу</button>'
                     : (!isRejected ? `<button class="btn-primary" type="button" onclick="convertOutreachProspect(${Number(row.id || 0)})">Перевести в лид</button>` : '')}
@@ -1760,40 +1716,54 @@ function renderOutreachDetail(row) {
                 </div>
             </section>
 
-            <section id="myClientContactStep" class="my-client-work-step">
-                <div class="my-client-work-step__head">
-                    <span class="my-client-work-step__number">2</span>
-                    <div>
-                        <h3>Зафиксируйте контакт</h3>
-                        <p>После звонка, письма или встречи заполните результат и нажмите «Сохранить контакт».</p>
-                    </div>
-                </div>
-                <div class="prospecting-activity-grid">
-                    <label class="my-client-field"><span>Как связались</span><select id="outreachActivityType" class="auth-input">
-                            <option value="call">Звонок</option>
-                            <option value="email">Письмо</option>
-                            <option value="message">Сообщение</option>
-                            <option value="meeting">Встреча</option>
-                        </select></label>
-                    <label class="my-client-field"><span>Результат контакта *</span><select id="outreachActivityResult" class="auth-input" onchange="applyOutreachActivityResult(this.value)">
-                            <option value="">Выберите результат</option>
-                            <option value="no_answer">Нет ответа</option>
-                            <option value="follow_up">Просил перезвонить</option>
-                            <option value="warm">Есть интерес</option>
-                            <option value="meeting">Назначена встреча</option>
-                            <option value="do_not_contact">Не интересно / больше не звонить</option>
-                        </select></label>
-                    <label class="my-client-field"><span>Что сделать дальше</span><input id="outreachActivityNextAction" class="auth-input" type="text" placeholder="Например: отправить КП"></label>
-                    <label class="my-client-field"><span>До какого числа</span><input id="outreachActivityNextDate" class="auth-input date-picker" type="text" placeholder="дд.мм.гггг" autocomplete="off"></label>
-                    <label class="my-client-field my-client-field--wide"><span>Комментарий по итогам *</span><textarea id="outreachActivitySummary" class="auth-input" rows="3" placeholder="Коротко: о чём договорились и что важно учесть"></textarea></label>
-                </div>
-                <div class="my-client-work-step__footer">
-                    <span>Сохранение добавит запись в историю и обновит статус клиента.</span>
-                    <button class="btn-primary" type="button" onclick="saveOutreachActivity(${Number(row.id || 0)})">Сохранить контакт</button>
-                </div>
-            </section>
-
         </div>
+    `;
+}
+
+function renderClientActivityCard(row) {
+    const activities = Array.isArray(row?.activities) ? row.activities : [];
+    const { lead, deal } = outreachJourneyRecords(row);
+    const history = [
+        ...(deal?.activities || []),
+        ...(lead?.activities || []),
+        ...activities,
+    ];
+    return `
+        <section id="clientActivityCard" class="client-activity-card">
+            <div class="client-activity-card__head">
+                <div>
+                    <span class="view-eyebrow">Всегда доступно</span>
+                    <h3>Контакты и заметки</h3>
+                    <p>Добавляйте звонки, письма, встречи и заметки на любом этапе работы с клиентом.</p>
+                </div>
+                <span class="crm-inline-pill crm-inline-pill--neutral">${history.length} записей</span>
+            </div>
+            <div class="client-activity-composer">
+                <label class="unified-field"><span>Тип записи</span><select id="outreachActivityType" class="auth-input">
+                    <option value="note">Заметка</option>
+                    <option value="call">Звонок</option>
+                    <option value="email">Письмо</option>
+                    <option value="message">Сообщение</option>
+                    <option value="meeting">Встреча</option>
+                </select></label>
+                <label class="unified-field"><span>Результат, если нужен</span><select id="outreachActivityResult" class="auth-input" onchange="applyOutreachActivityResult(this.value)">
+                    <option value="">Не менять статус клиента</option>
+                    <option value="no_answer">Нет ответа</option>
+                    <option value="follow_up">Связаться повторно</option>
+                    <option value="warm">Есть интерес</option>
+                    <option value="meeting">Назначена встреча</option>
+                    <option value="do_not_contact">Не интересно / больше не связываться</option>
+                </select></label>
+                <label class="unified-field"><span>Следующее действие</span><input id="outreachActivityNextAction" class="auth-input" value="${outreachEscape(row?.next_action || '')}" placeholder="Например: отправить КП"></label>
+                <label class="unified-field"><span>Срок</span><input id="outreachActivityNextDate" class="auth-input date-picker" value="${outreachEscape(row?.next_action_date || '')}" placeholder="дд.мм.гггг" autocomplete="off"></label>
+                <label class="unified-field unified-field--wide"><span>Запись *</span><textarea id="outreachActivitySummary" class="auth-input" rows="3" placeholder="Что произошло, о чём договорились или что важно запомнить"></textarea></label>
+                <div class="client-activity-composer__actions"><button class="btn-primary" type="button" onclick="saveOutreachActivity(${Number(row?.id || 0)})">Добавить в историю</button></div>
+            </div>
+            <details class="my-client-details client-activity-history" ${history.length ? '' : 'open'}>
+                <summary>История контактов и заметок <span>${history.length}</span></summary>
+                <div class="client360-list">${outreachActivityHistory(history)}</div>
+            </details>
+        </section>
     `;
 }
 
@@ -1850,6 +1820,7 @@ function renderOutreachRegistry() {
                     <span>${selected ? `Открыт клиент: ${outreachEscape(selected.company_name || 'Без названия')}` : 'Выберите клиента из списка'}</span>
                 </div>
                 ${renderOutreachDetail(selected)}
+                ${selected ? renderClientActivityCard(selected) : ''}
             </section>
         </div>
     `;
@@ -2153,7 +2124,7 @@ function scrollToMyClientStep(id) {
 
 async function saveMyClientProfile(id) {
     outreachEditingId = Number(id || 0);
-    await saveOutreachProspect('myClientContactStep');
+    await saveOutreachProspect('clientActivityCard');
 }
 
 function editOutreachClient(id) {
@@ -2343,8 +2314,9 @@ async function saveOutreachActivity(prospectId) {
         summary: document.getElementById('outreachActivitySummary')?.value || '',
         prospect_status: document.getElementById('outreachActivityResult')?.value || '',
     };
-    if (!payload.result_status.trim()) return customAlert('Выберите результат контакта.');
-    if (!payload.summary.trim()) return customAlert('Коротко напишите, чем закончился контакт.');
+    if (!payload.summary.trim()) return customAlert('Напишите заметку или итог контакта.');
+    const isNote = payload.activity_type === 'note';
+    if (!isNote && !payload.result_status.trim()) return customAlert('Выберите результат контакта.');
     const requiresNextStep = ['no_answer', 'follow_up', 'warm', 'meeting'].includes(payload.result_status);
     if (requiresNextStep && !payload.next_action.trim()) return customAlert('Укажите, что нужно сделать дальше.');
     if (requiresNextStep && !payload.next_action_date.trim()) return customAlert('Выберите дату следующего контакта.');
@@ -2352,8 +2324,8 @@ async function saveOutreachActivity(prospectId) {
     if (!res || res.error) return customAlert(res?.message || 'Не удалось сохранить контакт.');
     outreachClientEditMode = false;
     await renderProspecting(true);
-    scrollToMyClientStep('myClientCardStep');
-    showToast('Мои клиенты', 'Контакт сохранён, следующий шаг обновлён');
+    scrollToMyClientStep('clientActivityCard');
+    showToast('Мои клиенты', isNote ? 'Заметка добавлена в историю' : 'Контакт добавлен в историю');
 }
 
 async function saveOutreachReport() {

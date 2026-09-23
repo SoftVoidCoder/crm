@@ -6666,6 +6666,13 @@ html body .app-layout > .main-wrapper > .topbar .topbar-logout-button:hover {
 #myProspectingView .outreach-client-workspace__toolbar span { color: var(--secondary); font-size: 12px; font-weight: 700; }
 #myProspectingView .outreach-client-workspace.is-opened { animation: outreach-card-open .45s ease-out; }
 @keyframes outreach-card-open { from { opacity: .45; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+#myProspectingView .client-activity-card { margin-top: 18px; padding: 22px; border: 1px solid var(--border); background: var(--surface, #fff); scroll-margin-top: 18px; }
+#myProspectingView .client-activity-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+#myProspectingView .client-activity-card__head h3 { margin: 4px 0 0; font-size: 20px; letter-spacing: 0; }
+#myProspectingView .client-activity-card__head p { margin: 5px 0 0; color: var(--secondary); font-size: 13px; }
+#myProspectingView .client-activity-composer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; padding: 18px; border: 1px solid var(--border); background: var(--surface-soft, #f8fafc); }
+#myProspectingView .client-activity-composer__actions { display: flex; justify-content: flex-end; grid-column: 1 / -1; }
+#myProspectingView .client-activity-history { margin-top: 16px; }
 
 @media (max-width: 900px) {
     #myProspectingView .client-journey { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -6683,6 +6690,11 @@ html body .app-layout > .main-wrapper > .topbar .topbar-logout-button:hover {
     #myProspectingView .unified-actions button { width: 100%; }
     #myProspectingView .unified-form-grid { grid-template-columns: 1fr; }
     #myProspectingView .unified-field--wide { grid-column: auto; }
+    #myProspectingView .client-activity-card { padding: 14px; }
+    #myProspectingView .client-activity-card__head { align-items: stretch; flex-direction: column; }
+    #myProspectingView .client-activity-composer { grid-template-columns: 1fr; padding: 14px; }
+    #myProspectingView .client-activity-composer__actions { grid-column: auto; }
+    #myProspectingView .client-activity-composer__actions .btn-primary { width: 100%; }
     #myProspectingView .outreach-client-workspace__toolbar { align-items: stretch; flex-direction: column; }
     #myProspectingView .outreach-client-workspace__toolbar .btn-secondary { width: 100%; }
 }
