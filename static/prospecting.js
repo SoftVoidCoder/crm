@@ -1840,7 +1840,13 @@ function renderOutreachRegistry() {
                 </table>
                 </div>
             </section>
-            ${renderOutreachDetail(selected)}
+            <section id="outreachClientWorkspace" class="outreach-client-workspace" tabindex="-1" aria-live="polite">
+                <div class="outreach-client-workspace__toolbar">
+                    <button class="btn-secondary" type="button" onclick="scrollToOutreachClientList()">К списку клиентов</button>
+                    <span>${selected ? `Открыт клиент: ${outreachEscape(selected.company_name || 'Без названия')}` : 'Выберите клиента из списка'}</span>
+                </div>
+                ${renderOutreachDetail(selected)}
+            </section>
         </div>
     `;
 }
@@ -1918,11 +1924,22 @@ function openOutreachEditor(id = 0) {
 }
 
 function selectOutreachRow(id) {
-    outreachSelectedId = Number(id || 0);
+    const selectedId = Number(id || 0);
+    if (!selectedId) return;
+    outreachSelectedId = selectedId;
     outreachClientEditMode = false;
     const mount = document.getElementById('prospectingContentMount');
     if (mount) mount.innerHTML = renderOutreachRegistry();
     initOutreachDatePicker();
+    const workspace = document.getElementById('outreachClientWorkspace');
+    if (!workspace) return;
+    workspace.classList.add('is-opened');
+    workspace.focus({ preventScroll: true });
+    workspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function scrollToOutreachClientList() {
+    document.querySelector('#myProspectingView .my-clients-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function initOutreachDatePicker() {
@@ -2692,6 +2709,7 @@ window.openOutreachEditor = openOutreachEditor;
 window.closeOutreachEditor = closeOutreachEditor;
 window.saveOutreachProspect = saveOutreachProspect;
 window.selectOutreachRow = selectOutreachRow;
+window.scrollToOutreachClientList = scrollToOutreachClientList;
 window.applyOutreachActivityResult = applyOutreachActivityResult;
 window.saveMyClientProfile = saveMyClientProfile;
 window.scrollToMyClientStep = scrollToMyClientStep;

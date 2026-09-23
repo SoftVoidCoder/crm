@@ -6661,6 +6661,11 @@ html body .app-layout > .main-wrapper > .topbar .topbar-logout-button:hover {
 #myProspectingView .unified-field--wide { grid-column: 1 / -1; }
 #myProspectingView .unified-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
 #myProspectingView .unified-client-card > .my-client-details { margin-top: 18px; }
+#myProspectingView .outreach-client-workspace { min-width: 0; scroll-margin-top: 18px; outline: none; }
+#myProspectingView .outreach-client-workspace__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--border); background: var(--surface-soft, #f8fafc); }
+#myProspectingView .outreach-client-workspace__toolbar span { color: var(--secondary); font-size: 12px; font-weight: 700; }
+#myProspectingView .outreach-client-workspace.is-opened { animation: outreach-card-open .45s ease-out; }
+@keyframes outreach-card-open { from { opacity: .45; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
 @media (max-width: 900px) {
     #myProspectingView .client-journey { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -6678,4 +6683,6 @@ html body .app-layout > .main-wrapper > .topbar .topbar-logout-button:hover {
     #myProspectingView .unified-actions button { width: 100%; }
     #myProspectingView .unified-form-grid { grid-template-columns: 1fr; }
     #myProspectingView .unified-field--wide { grid-column: auto; }
+    #myProspectingView .outreach-client-workspace__toolbar { align-items: stretch; flex-direction: column; }
+    #myProspectingView .outreach-client-workspace__toolbar .btn-secondary { width: 100%; }
 }
