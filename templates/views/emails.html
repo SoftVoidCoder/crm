@@ -13,7 +13,7 @@
             <button class="btn-secondary" onclick="retryFailedMailOps()">
                 Повторить сбойные
             </button>
-            <button id="newMailboxBtn" class="btn-secondary" onclick="startEmailConnect()">Привязать почту</button>
+            <button id="newMailboxBtn" class="btn-secondary" onclick="focusEmailOAuthConnect()">Привязать почту</button>
         </div>
     </div>
     <div class="ops-overview-card">
@@ -63,33 +63,6 @@
                     <li>Разреши чтение и отправку почты.</li>
                 </ol>
             </div>
-            <div class="usage-guide-item">
-          <h4 class="usage-guide-title">Почта Mail.ru</h4>
-          <p class="usage-guide-text">Для Mail.ru и нестандартных доменов оставлена ручная привязка. Она спрятана ниже и нужна только когда провайдер не поддержан через вход.</p>
-                <ol class="usage-guide-list">
-                    <li>Открой ручной режим.</li>
-                    <li>Введи адрес и пароль приложения.</li>
-                    <li>CRM сама подставит типовые IMAP/SMTP параметры.</li>
-                </ol>
-            </div>
-            <div class="usage-guide-item">
-          <h4 class="usage-guide-title">Что хранит CRM</h4>
-          <p class="usage-guide-text">Для OAuth-подключений CRM хранит технический токен доступа, а не основной пароль от почты. Доступ можно отозвать в аккаунте провайдера.</p>
-                <ol class="usage-guide-list">
-            <li>Обычный пароль в CRM не вводится.</li>
-                    <li>Разрешение выдаёт сам провайдер.</li>
-                    <li>При ошибке ящик можно переподключить.</li>
-                </ol>
-            </div>
-            <div class="usage-guide-item">
-                <h4 class="usage-guide-title">Если не подключается</h4>
-          <p class="usage-guide-text">Чаще всего на сервере ещё не настроено OAuth-приложение провайдера или не совпадает callback URL. CRM покажет точный адрес, который нужно добавить в настройках приложения.</p>
-                <ol class="usage-guide-list">
-                    <li>Проверь, что провайдер помечен как настроенный.</li>
-            <li>Сверь redirect URL в CRM и кабинете провайдера.</li>
-            <li>Повтори вход через кнопку подключения.</li>
-                </ol>
-            </div>
         </div>
     </section>
     <div class="email-workspace">
@@ -116,46 +89,12 @@
                         <span><strong>Microsoft</strong><small>Outlook / 365</small></span>
                     </button>
                 </div>
-      <div id="emailSetupHint" class="email-setup-hint">Выбери провайдера. Если кнопка недоступна, нужно один раз настроить OAuth-приложение на сервере.</div>
+      <div id="emailSetupHint" class="email-setup-hint">Выбери одну из трёх почт и войди в аккаунт провайдера. CRM сама привяжет ящик после разрешения доступа.</div>
                 <div id="emailOAuthStatus" class="email-oauth-status"></div>
                 <div class="email-setup-checklist">
                     <div class="email-setup-line">1. Нажми провайдера и войди в аккаунт.</div>
                     <div class="email-setup-line">2. Разреши CRM читать почту и отправлять ответы.</div>
       <div class="email-setup-line">3. После возврата ящик появится в списке и начнёт синхронизацию.</div>
-                    <div class="email-setup-line">4. Для нестандартной почты используй ручную настройку ниже.</div>
-                </div>
-                <button class="btn-secondary" onclick="openManualEmailSetup()">Ручная настройка другой почты</button>
-            </div>
-            <div class="email-account-form">
-                <div class="email-account-quick">
-                    <input id="emailAccountAddress" class="auth-input" placeholder="Адрес почты" oninput="syncEmailAccountQuickSetup(); updateEmailSetupHintFromAddress()">
-                    <input id="emailAccountPassword" type="password" class="auth-input" placeholder="Пароль приложения / пароль ящика">
-                    <div id="emailAccountNote" class="email-account-note">Остальные поля подставятся автоматически. Если нужно, открой дополнительные настройки.</div>
-                </div>
-                <details class="email-account-advanced">
-                    <summary>Дополнительные настройки</summary>
-                    <div style="margin-top: 12px; display: grid; gap: 12px;">
-                        <input id="emailAccountLabel" class="auth-input" placeholder="Название ящика, например: Тендеры">
-                        <input id="emailAccountLogin" class="auth-input" placeholder="Логин почтовых серверов">
-                        <div class="email-account-form-grid">
-                            <input id="emailAccountImapHost" class="auth-input" placeholder="Сервер входящей почты" value="imap.yandex.ru">
-                            <input id="emailAccountImapPort" class="auth-input" placeholder="Порт входящей почты" value="993">
-                            <input id="emailAccountSmtpHost" class="auth-input" placeholder="Сервер исходящей почты" value="smtp.yandex.ru">
-                            <input id="emailAccountSmtpPort" class="auth-input" placeholder="Порт исходящей почты" value="465">
-                            <input id="emailAccountSmtpLogin" class="auth-input" placeholder="Логин исходящей почты (если отличается)">
-                            <input id="emailAccountSmtpPassword" type="password" class="auth-input" placeholder="Пароль исходящей почты (если отличается)">
-                            <input id="emailAccountInboxFolder" class="auth-input" placeholder="Папка входящих" value="INBOX">
-                            <input id="emailAccountArchiveFolder" class="auth-input" placeholder="Папка архива" value="Archive">
-                        </div>
-                        <div class="email-account-checkboxes">
-                            <label><input id="emailAccountDefault" type="checkbox"> Основной ящик для уведомлений</label>
-                            <label><input id="emailAccountActive" type="checkbox" checked> Активен</label>
-                        </div>
-                    </div>
-                </details>
-                <div class="email-account-actions">
-                    <button class="btn-primary" onclick="saveEmailAccount()">Сохранить ящик</button>
-                    <button class="btn-secondary" onclick="resetEmailAccountForm()">Очистить</button>
                 </div>
             </div>
             <div id="emailAccountsList" class="email-accounts-list"></div>

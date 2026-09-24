@@ -34,14 +34,6 @@ const EMAIL_PROVIDER_DEFAULTS = {
         smtp_port: 465,
         inbox_folder: 'INBOX',
         archive_folder: 'Archive',
-    },
-    mailru: {
-        imap_host: 'imap.mail.ru',
-        imap_port: 993,
-        smtp_host: 'smtp.mail.ru',
-        smtp_port: 465,
-        inbox_folder: 'INBOX',
-        archive_folder: 'Archive',
     }
 };
 
@@ -51,7 +43,6 @@ function getEmailProviderKey(address) {
     if (['yandex.ru', 'ya.ru', 'yandex.com', 'yandex.kz', 'yandex.by', 'yandex.ua', 'yandex.uz'].includes(domain)) return 'yandex';
     if (domain === 'gmail.com') return 'gmail';
     if (['outlook.com', 'office365.com', 'hotmail.com', 'live.com', 'msn.com'].includes(domain)) return 'outlook';
-    if (['mail.ru', 'bk.ru', 'inbox.ru', 'list.ru'].includes(domain)) return 'mailru';
     return '';
 }
 
@@ -82,17 +73,9 @@ function getEmailSetupCopy(provider) {
             hint: 'Для Outlook чаще всего хватает адреса ящика и пароля приложения или пароля учетной записи Microsoft 365.',
             note: 'Если компания использует отдельные серверы, при необходимости открой дополнительные настройки.'
         },
-        mailru: {
-    hint: 'Для Mail.ru проверь, какой пароль разрешен для внешних приложений, и используй его для входящей и исходящей почты.',
-    note: 'Если логин или пароль исходящей почты отличаются, задай их в дополнительных настройках.'
-        },
-        manual: {
-    hint: 'Ручная настройка подходит для нестандартных серверов или если параметры входящей и исходящей почты отличаются от типовых значений.',
-            note: 'Заполни адрес, пароль и при необходимости открой дополнительные настройки ниже.'
-        },
         default: {
-    hint: 'Выбери провайдера или просто введи адрес почты. Система сама попробует подставить нужные параметры.',
-            note: 'Для безопасного подключения лучше использовать пароль приложения.'
+    hint: 'Выбери одну из трёх почт и войди в аккаунт провайдера.',
+            note: 'Подключение выполняется через официальный вход провайдера.'
         }
     };
     return copyMap[provider] || copyMap.default;
@@ -104,6 +87,14 @@ function updateEmailSetupCopy(provider = '') {
     const noteNode = document.getElementById('emailAccountNote');
     if (hintNode) hintNode.textContent = hint;
     if (noteNode) noteNode.textContent = note;
+}
+
+function focusEmailOAuthConnect() {
+    const grid = document.getElementById('emailOAuthProviderGrid');
+    if (!grid) return;
+    grid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const firstButton = grid.querySelector('button');
+    if (firstButton) firstButton.focus();
 }
 
 async function loadEmailOAuthProviders() {
@@ -357,7 +348,7 @@ function renderEmailAccounts() {
                     <div class="email-account-card-main">
                         <div class="email-account-name">${account.label || account.address}</div>
                         <div class="email-account-meta">${account.address}</div>
-                        <div class="email-account-meta">${account.auth_type === 'oauth' ? `Вход через ${emailOAuthProviderLabel(account.oauth_provider)}` : 'Ручная IMAP/SMTP настройка'}</div>
+                        <div class="email-account-meta">${account.auth_type === 'oauth' ? `Вход через ${emailOAuthProviderLabel(account.oauth_provider)}` : 'Подключённый ящик'}</div>
                     </div>
                     <div class="email-account-counters">
                         <span>${account.unread_count || 0} новых</span>
