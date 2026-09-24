@@ -130,7 +130,8 @@ function renderEmailOAuthProviders() {
         const item = emailOAuthProvidersDB.find(row => row.provider === provider);
         const configured = !!item?.configured;
         button.classList.toggle('email-oauth-card--disabled', !configured);
-        button.disabled = !configured;
+        button.disabled = false;
+        button.setAttribute('aria-disabled', configured ? 'false' : 'true');
         button.title = configured ? `Подключить ${emailOAuthProviderLabel(provider)}` : `Нужно настроить OAuth-приложение ${emailOAuthProviderLabel(provider)} на сервере`;
         let badge = button.querySelector('.email-oauth-badge');
         if (!badge) {
@@ -167,6 +168,12 @@ function ensureEmailOAuthListener() {
 async function connectEmailOAuth(provider) {
     ensureEmailOAuthListener();
     const status = document.getElementById('emailOAuthStatus');
+    const providerInfo = emailOAuthProvidersDB.find(row => row.provider === provider);
+    if (providerInfo && !providerInfo.configured) {
+        const message = `Сначала надо настроить OAuth-приложение ${emailOAuthProviderLabel(provider)} на сервере. Redirect URL: ${providerInfo.redirect_uri || 'не определён'}`;
+        if (status) status.textContent = message;
+        return customAlert(message);
+    }
     const res = await apiCall(`/email/oauth/${provider}/start`);
     if (!res || res.error) {
         const message = res?.message || 'OAuth-провайдер ещё не настроен на сервере.';
