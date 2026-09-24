@@ -117,10 +117,14 @@ function renderEmailOAuthProviders() {
     if (!grid) return;
     const providers = ['google', 'yandex', 'microsoft'];
     grid.querySelectorAll('.email-oauth-card').forEach(button => {
-        const provider = button.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || '';
+        const provider = button.dataset.provider || '';
         button.disabled = false;
         button.setAttribute('aria-disabled', 'false');
         button.title = `Подключить ${emailOAuthProviderLabel(provider)}`;
+        if (!button.dataset.oauthReady) {
+            button.dataset.oauthReady = '1';
+            button.addEventListener('click', () => connectEmailOAuth(provider));
+        }
     });
     if (status) {
         status.textContent = 'Выберите Google, Яндекс или Microsoft. Откроется официальный вход провайдера.';
