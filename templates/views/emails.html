@@ -76,27 +76,21 @@
             <div class="email-setup-card">
                 <div class="email-setup-title">Войти в почту</div>
                 <div id="emailOAuthProviderGrid" class="email-oauth-grid">
-                    <button class="email-oauth-card" onclick="openEmailProviderLogin('google')">
+                    <button class="email-oauth-card" onclick="connectEmailOAuth('google')">
                         <strong>Войти через Google</strong>
                         <small>Gmail / Workspace</small>
                     </button>
-                    <button class="email-oauth-card" onclick="openEmailProviderLogin('yandex')">
+                    <button class="email-oauth-card" onclick="connectEmailOAuth('yandex')">
                         <strong>Войти через Яндекс</strong>
                         <small>Яндекс 360</small>
                     </button>
-                    <button class="email-oauth-card" onclick="openEmailProviderLogin('microsoft')">
+                    <button class="email-oauth-card" onclick="connectEmailOAuth('microsoft')">
                         <strong>Войти через Microsoft</strong>
                         <small>Outlook / 365</small>
                     </button>
                 </div>
       <div id="emailSetupHint" class="email-setup-hint">Выбери одну из трёх почт и войди в аккаунт провайдера. CRM сама привяжет ящик после разрешения доступа.</div>
                 <div id="emailOAuthStatus" class="email-oauth-status"></div>
-                <div id="emailProviderLoginPanel" class="email-provider-login-panel" style="display: none;">
-                    <div class="email-provider-login-title" id="emailProviderLoginTitle">Подключение почты</div>
-                    <input id="emailProviderAddress" class="auth-input" placeholder="Адрес почты">
-                    <input id="emailProviderPassword" type="password" class="auth-input" placeholder="Пароль от почты / пароль приложения">
-                    <button class="btn-primary" onclick="saveProviderEmailAccount()">Подключить ящик</button>
-                </div>
                 <div class="email-setup-checklist">
                     <div class="email-setup-line">1. Нажми провайдера и войди в аккаунт.</div>
                     <div class="email-setup-line">2. Разреши CRM читать почту и отправлять ответы.</div>

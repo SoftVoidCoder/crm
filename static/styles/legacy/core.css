@@ -3331,15 +3331,6 @@ button.btn-danger {
     font-size: 12px;
     line-height: 1.45;
 }
-.email-provider-login-panel {
-    margin-top: 12px;
-    gap: 10px;
-}
-.email-provider-login-title {
-    font-weight: 800;
-    color: var(--primary-strong);
-    font-size: 13px;
-}
 .email-setup-hint {
     margin-top: 12px;
     padding: 12px 14px;

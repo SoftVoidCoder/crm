@@ -9,7 +9,6 @@ let editingEmailAccountId = null;
 let expandedReplyEmailId = null;
 let emailOAuthProvidersDB = [];
 let emailOAuthListenerReady = false;
-let selectedEmailProvider = '';
 
 const EMAIL_PROVIDER_DEFAULTS = {
     yandex: {
@@ -112,77 +111,6 @@ function emailOAuthProviderLabel(provider) {
     }[provider] || provider;
 }
 
-function getEmailProviderPreset(provider, address = '') {
-    const key = provider === 'google' ? 'gmail' : (provider === 'microsoft' ? 'outlook' : provider);
-    const defaults = EMAIL_PROVIDER_DEFAULTS[key] || EMAIL_PROVIDER_DEFAULTS.yandex;
-    const email = String(address || '').trim();
-    const localPart = email.split('@')[0] || email;
-    return {
-        ...defaults,
-        label: localPart || emailOAuthProviderLabel(provider),
-        login: email,
-        smtp_login: email,
-    };
-}
-
-function openEmailProviderLogin(provider) {
-    selectedEmailProvider = provider;
-    const panel = document.getElementById('emailProviderLoginPanel');
-    const title = document.getElementById('emailProviderLoginTitle');
-    const address = document.getElementById('emailProviderAddress');
-    const password = document.getElementById('emailProviderPassword');
-    const status = document.getElementById('emailOAuthStatus');
-    if (title) title.textContent = `Подключить ${emailOAuthProviderLabel(provider)}`;
-    if (status) status.textContent = `Введите адрес и пароль для ${emailOAuthProviderLabel(provider)}. Остальные настройки CRM подставит сама.`;
-    if (panel) panel.style.display = 'grid';
-    if (address) address.value = '';
-    if (password) password.value = '';
-    address?.focus();
-}
-
-async function saveProviderEmailAccount() {
-    const address = document.getElementById('emailProviderAddress')?.value.trim() || '';
-    const password = document.getElementById('emailProviderPassword')?.value || '';
-    const status = document.getElementById('emailOAuthStatus');
-    if (!selectedEmailProvider) {
-        return customAlert('Сначала выбери почтовый сервис.');
-    }
-    if (!address || !password) {
-        return customAlert('Введите адрес почты и пароль.');
-    }
-    const defaults = getEmailProviderPreset(selectedEmailProvider, address);
-    const payload = {
-        label: defaults.label || address,
-        address,
-        login: defaults.login || address,
-        password,
-        imap_host: defaults.imap_host,
-        imap_port: Number(defaults.imap_port || 993),
-        smtp_host: defaults.smtp_host,
-        smtp_port: Number(defaults.smtp_port || 465),
-        smtp_login: defaults.smtp_login || address,
-        smtp_password: password,
-        inbox_folder: defaults.inbox_folder || 'INBOX',
-        archive_folder: defaults.archive_folder || 'Archive',
-        is_default: emailAccountsDB.length ? 0 : 1,
-        is_active: 1
-    };
-    if (status) status.textContent = `Подключаю ${emailOAuthProviderLabel(selectedEmailProvider)}...`;
-    const res = await apiCall('/email/accounts', 'POST', payload);
-    if (!res || res.error) {
-        const message = res?.message || res?.error || 'Не удалось подключить ящик.';
-        if (status) status.textContent = message;
-        return customAlert(message);
-    }
-    await loadEmailAccounts();
-    renderEmailAccounts();
-    await renderEmails(true);
-    const panel = document.getElementById('emailProviderLoginPanel');
-    if (panel) panel.style.display = 'none';
-    if (status) status.textContent = 'Ящик подключён. Письма синхронизируются.';
-    showToast('Почта', 'Ящик подключён', 'success');
-}
-
 function renderEmailOAuthProviders() {
     const grid = document.getElementById('emailOAuthProviderGrid');
     const status = document.getElementById('emailOAuthStatus');
@@ -195,7 +123,7 @@ function renderEmailOAuthProviders() {
         button.title = `Подключить ${emailOAuthProviderLabel(provider)}`;
     });
     if (status) {
-        status.textContent = 'Выберите Google, Яндекс или Microsoft, затем введите адрес почты и пароль.';
+        status.textContent = 'Выберите Google, Яндекс или Microsoft. Откроется официальный вход провайдера.';
     }
 }
 
@@ -217,7 +145,7 @@ async function connectEmailOAuth(provider) {
     const status = document.getElementById('emailOAuthStatus');
     const providerInfo = emailOAuthProvidersDB.find(row => row.provider === provider);
     if (providerInfo && !providerInfo.configured) {
-        const message = `Сначала надо настроить OAuth-приложение ${emailOAuthProviderLabel(provider)} на сервере. Redirect URL: ${providerInfo.redirect_uri || 'не определён'}`;
+        const message = `Официальное окно ${emailOAuthProviderLabel(provider)} не откроется, пока на сервере не добавлены OAuth-ключи ${emailOAuthProviderLabel(provider)}. Redirect URL для настроек: ${providerInfo.redirect_uri || 'не определён'}`;
         if (status) status.textContent = message;
         return customAlert(message);
     }
