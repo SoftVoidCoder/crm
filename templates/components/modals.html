@@ -196,7 +196,7 @@
             </section>
 
             <section class="document-create-step">
-                <div class="document-create-step__head"><span>2</span><div><h3>Кому и к чему относится</h3><p>Выберите клиента и при необходимости договор, сделку или производственный заказ.</p></div></div>
+                <div class="document-create-step__head"><span>2</span><div><h3>Кому и к чему относится</h3><p>Выберите клиента и при необходимости договор или производственный заказ.</p></div></div>
                 <div class="document-create-grid">
                     <label class="form-field form-field--full document-client-picker">
                         <span class="form-label">Клиент или контрагент</span>
@@ -669,20 +669,12 @@
     </div>
     
     <script>
-        // Список сделок заполняется после выбора клиента в форме документа.
         document.addEventListener('DOMContentLoaded', () => {
-            const dealSelect = document.getElementById('docDealId');
-            if (dealSelect) {
-                dealSelect.addEventListener('focus', () => {
-                    if (typeof refreshDocumentDealPicker === 'function') refreshDocumentDealPicker();
-                });
-            }
-        
         const tIdSel = document.getElementById('taskProjectId');
         if(tIdSel) {
             tIdSel.addEventListener('focus', () => {
                 if(typeof projectsDB !== 'undefined' && tIdSel.options.length <= 1) {
-                    tIdSel.innerHTML = '<option value="0">Без привязки к сделке</option>' + 
+                    tIdSel.innerHTML = '<option value="0">Без привязки к проекту</option>' +
                         projectsDB.map(p => `<option value="${p.id}">${p.contract} - ${p.name}</option>`).join('');
                 }
             });

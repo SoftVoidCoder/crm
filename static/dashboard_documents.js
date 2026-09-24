@@ -6,6 +6,10 @@ let currentDocTab = 'all';
 let documentsExtraFilter = 'all';
 let selectedDocuments = new Set();
 let documentsOneCImportPreviewState = null;
+let documentSourcesLoadedAt = 0;
+let documentSourcesLoadingPromise = null;
+let documentsSecondaryRenderTimer = null;
+const DOCUMENT_SOURCES_TTL_MS = 5 * 60 * 1000;
 const documentDraftFieldIds = ['docType', 'docKind', 'docDate', 'docNumber', 'docClientSearch', 'docClientId', 'docClientSource', 'docClientSourceId', 'docContractSearch', 'docContractId', 'docExecutorName', 'docCorrespondent', 'docSubject', 'docProductionOrderSearch', 'docProductionOrderId'];
 const TENDER_REQUIRED_DOCUMENTS = [
     { key: 'company_card', label: 'Карточка компании', keywords: ['карточк', 'реквизит', 'инн', 'кпп'] },
@@ -172,10 +176,9 @@ function handleDocumentClientChoice(value, fillRoute = true) {
     if (sourceId) sourceId.value = String(Number(choice?.sourceId || 0));
     if (hint) {
         const sourceLabel = choice?.source === 'bitrix24' ? 'Bitrix24' : 'базы контрагентов';
-        hint.textContent = choice ? `Выбран клиент из ${sourceLabel}: ${choice.name}${choice.inn ? ` · ИНН ${choice.inn}` : ''}` : (normalized ? 'Название будет сохранено вручную. Сделку можно выбрать только для клиента из CRM или Bitrix24.' : 'Можно выбрать клиента из CRM и Bitrix24 или указать название вручную.');
+        hint.textContent = choice ? `Выбран клиент из ${sourceLabel}: ${choice.name}${choice.inn ? ` · ИНН ${choice.inn}` : ''}` : (normalized ? 'Название будет сохранено вручную.' : 'Можно выбрать клиента из CRM и Bitrix24 или указать название вручную.');
         hint.classList.toggle('is-selected', !!choice);
     }
-    refreshDocumentDealPicker(0, choice);
     if (!fillRoute) return;
     const type = String(document.getElementById('docType')?.value || 'incoming');
     const name = String(choice?.name || value || '').trim();
@@ -191,40 +194,6 @@ function handleDocumentClientChoice(value, fillRoute = true) {
 }
 
 window.handleDocumentClientChoice = handleDocumentClientChoice;
-
-function refreshDocumentDealPicker(selectedDealId = 0, selectedChoice = null) {
-    const select = document.getElementById('docDealId');
-    if (!select) return;
-    const directlySelectedDeal = Number(selectedDealId || 0) > 0 && typeof crmDealsDB !== 'undefined' && Array.isArray(crmDealsDB)
-        ? crmDealsDB.find(deal => Number(deal.id || 0) === Number(selectedDealId || 0))
-        : null;
-    const choice = selectedChoice || documentClientChoiceByReference(
-        document.getElementById('docClientSource')?.value || '',
-        Number(document.getElementById('docClientSourceId')?.value || 0),
-        Number(document.getElementById('docClientId')?.value || 0),
-        document.getElementById('docClientSearch')?.value || '',
-    );
-    if (!choice) {
-        if (directlySelectedDeal) {
-            select.innerHTML = `<option value="${Number(directlySelectedDeal.id || 0)}">${documentPackageEscape(directlySelectedDeal.title || directlySelectedDeal.client_name || `Сделка №${directlySelectedDeal.id}`)}</option>`;
-            select.value = String(Number(directlySelectedDeal.id || 0));
-            return;
-        }
-        select.innerHTML = '<option value="0">Сначала выберите клиента</option>';
-        return;
-    }
-    const normalizedName = String(choice.name || '').trim().toLocaleLowerCase('ru-RU');
-    const deals = (typeof crmDealsDB !== 'undefined' && Array.isArray(crmDealsDB) ? crmDealsDB : []).filter(deal => {
-        const sameClientId = Number(choice.clientId || 0) > 0 && Number(deal.client_id || 0) === Number(choice.clientId || 0);
-        const sameName = normalizedName && String(deal.client_name || deal.title || '').trim().toLocaleLowerCase('ru-RU') === normalizedName;
-        return sameClientId || sameName;
-    });
-    select.innerHTML = `<option value="0">Без привязки к сделке</option>${deals.map(deal => `<option value="${Number(deal.id || 0)}">${documentPackageEscape(deal.title || deal.client_name || `Сделка №${deal.id}`)}</option>`).join('')}`;
-    select.value = String(Number(selectedDealId || 0));
-    if (!deals.length) select.innerHTML = '<option value="0">У клиента пока нет сделки</option>';
-}
-
-window.refreshDocumentDealPicker = refreshDocumentDealPicker;
 
 function documentContractChoices() {
     const rows = typeof contractRegistryDB !== 'undefined' && Array.isArray(contractRegistryDB) ? contractRegistryDB : [];
@@ -322,11 +291,16 @@ function handleDocumentProductionOrderChoice(value) {
 
 window.handleDocumentProductionOrderChoice = handleDocumentProductionOrderChoice;
 
-async function ensureDocumentClientSources() {
+async function ensureDocumentClientSources(options = {}) {
+    const force = Boolean(options.force);
+    const now = Date.now();
+    if (!force && documentSourcesLoadedAt && now - documentSourcesLoadedAt < DOCUMENT_SOURCES_TTL_MS) {
+        return;
+    }
+    if (!force && documentSourcesLoadingPromise) return documentSourcesLoadingPromise;
     const loaders = [];
     if (typeof loadClients === 'function') loaders.push(loadClients());
     if (typeof loadOutreachProspects === 'function') loaders.push(loadOutreachProspects());
-    if (typeof loadCrmDeals === 'function') loaders.push(loadCrmDeals());
     if (typeof apiCall === 'function') {
         loaders.push(apiCall('/production/orders').then(rows => {
             if (Array.isArray(rows) && typeof productionOrdersDB !== 'undefined') productionOrdersDB = rows;
@@ -335,7 +309,12 @@ async function ensureDocumentClientSources() {
             if (Array.isArray(rows) && typeof contractRegistryDB !== 'undefined') contractRegistryDB = rows;
         }).catch(() => null));
     }
-    if (loaders.length) await Promise.allSettled(loaders);
+    documentSourcesLoadingPromise = Promise.allSettled(loaders).then(() => {
+        documentSourcesLoadedAt = Date.now();
+    }).finally(() => {
+        documentSourcesLoadingPromise = null;
+    });
+    await documentSourcesLoadingPromise;
 }
 
 window.ensureDocumentClientSources = ensureDocumentClientSources;
@@ -343,7 +322,6 @@ window.ensureDocumentClientSources = ensureDocumentClientSources;
 async function openDocumentModalWithPreset(preset = {}) {
     const modal = document.getElementById('createDocModal');
     if (!modal) return;
-    await ensureDocumentClientSources();
     if (typeof bindFormFieldErrorCleanup === 'function') bindFormFieldErrorCleanup('documentForm');
     if (typeof clearFormErrors === 'function') clearFormErrors('createDocModal');
     const typeEl = document.getElementById('docType');
@@ -359,8 +337,6 @@ async function openDocumentModalWithPreset(preset = {}) {
     const executorEl = document.getElementById('docExecutorName');
     const corrEl = document.getElementById('docCorrespondent');
     const subjEl = document.getElementById('docSubject');
-    const priorityEl = document.getElementById('docPriority');
-    const dealEl = document.getElementById('docDealId');
     const contractEl = document.getElementById('docContractId');
     const parentEl = document.getElementById('docParentId');
     const fileEl = document.getElementById('docFile');
@@ -376,15 +352,12 @@ async function openDocumentModalWithPreset(preset = {}) {
     if (executorEl) executorEl.value = preset.executor_name || currentUser?.name || '';
     if (corrEl) corrEl.value = preset.correspondent || '';
     if (subjEl) subjEl.value = preset.subject || '';
-    if (priorityEl) priorityEl.checked = preset.priority === 'high';
     if (parentEl) parentEl.value = String(Number(preset.parent_id || 0));
     if (fileEl) fileEl.value = '';
     updateDocumentFileName();
     populateDocumentClientPicker(Number(preset.client_id || 0), preset.client_name || preset.correspondent || '', preset.client_source || '', Number(preset.client_source_id || 0));
-    refreshDocumentDealPicker(Number(preset.deal_id || 0));
     populateDocumentContractPicker(Number(preset.contract_id || 0));
     populateDocumentProductionOrderPicker(Number(preset.production_order_id || 0));
-    if (dealEl) dealEl.value = String(Number(preset.deal_id || 0));
     if (contractEl) contractEl.value = String(Number(preset.contract_id || 0));
     modal.style.display = 'flex';
     if (numberEl) {
@@ -394,6 +367,12 @@ async function openDocumentModalWithPreset(preset = {}) {
     syncDocumentKindWithDirection();
     const flow = modal.querySelector('.document-create-flow');
     if (flow) flow.scrollTop = 0;
+    ensureDocumentClientSources().then(() => {
+        if (modal.style.display !== 'flex') return;
+        populateDocumentClientPicker(Number(preset.client_id || 0), preset.client_name || preset.correspondent || '', preset.client_source || '', Number(preset.client_source_id || 0));
+        populateDocumentContractPicker(Number(preset.contract_id || 0));
+        populateDocumentProductionOrderPicker(Number(preset.production_order_id || 0));
+    });
 }
 
 window.openDocumentModalWithPreset = openDocumentModalWithPreset;
@@ -522,7 +501,6 @@ function getFilteredDocuments() {
         if (!documentMatchesExtraFilter(doc)) return false;
         if (!query) return true;
         const assignedChoice = documentClientChoiceByReference(doc.client_source, doc.client_source_id, doc.client_id, doc.correspondent || doc.sender_name || doc.recipient_name || '');
-        const assignedDeal = (typeof crmDealsDB !== 'undefined' && Array.isArray(crmDealsDB) ? crmDealsDB : []).find(deal => Number(deal.id || 0) === Number(doc.deal_id || 0));
         const assignedContract = documentContractChoices().find(contract => Number(contract.id || 0) === Number(doc.contract_id || 0));
         const haystack = [
             doc.number || '',
@@ -538,8 +516,6 @@ function getFilteredDocuments() {
             assignedChoice?.name || '',
             assignedChoice?.inn || '',
             assignedChoice?.phone || '',
-            assignedDeal?.title || '',
-            assignedDeal?.client_name || '',
             assignedContract?.number || '',
             assignedContract?.title || '',
             assignedContract?.client || '',
@@ -1580,6 +1556,23 @@ window.bulkDeleteDocuments = async function() {
     selectedDocuments.clear();
 };
 
+function scheduleDocumentsSecondaryRender(rows = []) {
+    const snapshot = Array.isArray(rows) ? rows.slice() : [];
+    if (documentsSecondaryRenderTimer) {
+        if (typeof cancelIdleCallback === 'function') cancelIdleCallback(documentsSecondaryRenderTimer);
+        else clearTimeout(documentsSecondaryRenderTimer);
+    }
+    const run = () => {
+        documentsSecondaryRenderTimer = null;
+        renderDocumentPackagesMount();
+        renderTenderDirectorMount(snapshot);
+        renderReceptionDirectorMount(snapshot);
+    };
+    documentsSecondaryRenderTimer = typeof requestIdleCallback === 'function'
+        ? requestIdleCallback(run, { timeout: 1200 })
+        : setTimeout(run, 80);
+}
+
 function renderDocuments() {
     pruneSelectedDocuments();
     const container = document.getElementById('documentsListTable');
@@ -1589,10 +1582,8 @@ function renderDocuments() {
 
     const filtered = getFilteredDocuments();
     updateDocumentsBulkBar(filtered);
-    renderDocumentPackagesMount();
     renderDocumentsOpsCounters(Array.isArray(documentsDB) ? documentsDB : []);
-    renderTenderDirectorMount(filtered);
-    renderReceptionDirectorMount(filtered);
+    scheduleDocumentsSecondaryRender(filtered);
 
     // --- Empty state ---
     if (filtered.length === 0) {
@@ -1784,14 +1775,7 @@ async function submitDocument(status = 'registered') {
     updateDocumentFileName();
     if (document.getElementById('docParentId')) document.getElementById('docParentId').value = '0';
 
-    await Promise.all([
-        loadDocuments(),
-        dealId > 0 && typeof loadCrmDeals === 'function' ? loadCrmDeals() : Promise.resolve(),
-    ]);
-    if (dealId > 0 && typeof openDealEditor === 'function' && Number(editingDealId || 0) === dealId) {
-        openDealEditor(dealId);
-        if (typeof switchDealEditorStep === 'function') switchDealEditorStep(5, false);
-    }
+    await loadDocuments();
     showToast('Канцелярия', status === 'draft' ? 'Документ сохранён в черновики' : 'Документ зарегистрирован');
     switchDocTab(status === 'draft' ? 'drafts' : (type.startsWith('internal_') ? 'internal' : type));
     if (typeof scrollToWorkflowTarget === 'function') scrollToWorkflowTarget('[data-document-id].workflow-row-highlight, [data-document-id]');
