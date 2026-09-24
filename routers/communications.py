@@ -557,6 +557,8 @@ def _email_oauth_return_html(title: str, message: str, *, ok: bool = True) -> HT
         if (window.opener) {{
           window.opener.postMessage({{ type: 'korda-email-oauth', status: '{status}' }}, window.location.origin);
           setTimeout(() => window.close(), 900);
+        }} else {{
+          setTimeout(() => window.location.href = '/app#emailsView', 1800);
         }}
       </script>
     </body>
