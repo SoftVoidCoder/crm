@@ -654,7 +654,7 @@ def _upsert_oauth_email_account(provider: str, payload: dict, actor: dict) -> in
         c = conn.cursor()
         c.execute(
             """
-            SELECT id, password
+            SELECT a.id, a.password
             FROM email_accounts a
             JOIN email_account_owners eo ON eo.account_id = a.id
             WHERE LOWER(a.address)=LOWER(?) AND LOWER(COALESCE(eo.owner_email, ''))=?
