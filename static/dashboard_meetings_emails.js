@@ -9,6 +9,7 @@ let editingEmailAccountId = null;
 let expandedReplyEmailId = null;
 let emailOAuthProvidersDB = [];
 let emailOAuthListenerReady = false;
+let selectedEmailProvider = '';
 
 const EMAIL_PROVIDER_DEFAULTS = {
     yandex: {
@@ -111,6 +112,77 @@ function emailOAuthProviderLabel(provider) {
     }[provider] || provider;
 }
 
+function getEmailProviderPreset(provider, address = '') {
+    const key = provider === 'google' ? 'gmail' : (provider === 'microsoft' ? 'outlook' : provider);
+    const defaults = EMAIL_PROVIDER_DEFAULTS[key] || EMAIL_PROVIDER_DEFAULTS.yandex;
+    const email = String(address || '').trim();
+    const localPart = email.split('@')[0] || email;
+    return {
+        ...defaults,
+        label: localPart || emailOAuthProviderLabel(provider),
+        login: email,
+        smtp_login: email,
+    };
+}
+
+function openEmailProviderLogin(provider) {
+    selectedEmailProvider = provider;
+    const panel = document.getElementById('emailProviderLoginPanel');
+    const title = document.getElementById('emailProviderLoginTitle');
+    const address = document.getElementById('emailProviderAddress');
+    const password = document.getElementById('emailProviderPassword');
+    const status = document.getElementById('emailOAuthStatus');
+    if (title) title.textContent = `Подключить ${emailOAuthProviderLabel(provider)}`;
+    if (status) status.textContent = `Введите адрес и пароль для ${emailOAuthProviderLabel(provider)}. Остальные настройки CRM подставит сама.`;
+    if (panel) panel.style.display = 'grid';
+    if (address) address.value = '';
+    if (password) password.value = '';
+    address?.focus();
+}
+
+async function saveProviderEmailAccount() {
+    const address = document.getElementById('emailProviderAddress')?.value.trim() || '';
+    const password = document.getElementById('emailProviderPassword')?.value || '';
+    const status = document.getElementById('emailOAuthStatus');
+    if (!selectedEmailProvider) {
+        return customAlert('Сначала выбери почтовый сервис.');
+    }
+    if (!address || !password) {
+        return customAlert('Введите адрес почты и пароль.');
+    }
+    const defaults = getEmailProviderPreset(selectedEmailProvider, address);
+    const payload = {
+        label: defaults.label || address,
+        address,
+        login: defaults.login || address,
+        password,
+        imap_host: defaults.imap_host,
+        imap_port: Number(defaults.imap_port || 993),
+        smtp_host: defaults.smtp_host,
+        smtp_port: Number(defaults.smtp_port || 465),
+        smtp_login: defaults.smtp_login || address,
+        smtp_password: password,
+        inbox_folder: defaults.inbox_folder || 'INBOX',
+        archive_folder: defaults.archive_folder || 'Archive',
+        is_default: emailAccountsDB.length ? 0 : 1,
+        is_active: 1
+    };
+    if (status) status.textContent = `Подключаю ${emailOAuthProviderLabel(selectedEmailProvider)}...`;
+    const res = await apiCall('/email/accounts', 'POST', payload);
+    if (!res || res.error) {
+        const message = res?.message || res?.error || 'Не удалось подключить ящик.';
+        if (status) status.textContent = message;
+        return customAlert(message);
+    }
+    await loadEmailAccounts();
+    renderEmailAccounts();
+    await renderEmails(true);
+    const panel = document.getElementById('emailProviderLoginPanel');
+    if (panel) panel.style.display = 'none';
+    if (status) status.textContent = 'Ящик подключён. Письма синхронизируются.';
+    showToast('Почта', 'Ящик подключён', 'success');
+}
+
 function renderEmailOAuthProviders() {
     const grid = document.getElementById('emailOAuthProviderGrid');
     const status = document.getElementById('emailOAuthStatus');
@@ -118,28 +190,12 @@ function renderEmailOAuthProviders() {
     const providers = ['google', 'yandex', 'microsoft'];
     grid.querySelectorAll('.email-oauth-card').forEach(button => {
         const provider = button.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || '';
-        const item = emailOAuthProvidersDB.find(row => row.provider === provider);
-        const configured = !!item?.configured;
-        button.classList.toggle('email-oauth-card--disabled', !configured);
         button.disabled = false;
-        button.setAttribute('aria-disabled', configured ? 'false' : 'true');
-        button.title = configured ? `Подключить ${emailOAuthProviderLabel(provider)}` : `Нужно настроить OAuth-приложение ${emailOAuthProviderLabel(provider)} на сервере`;
-        let badge = button.querySelector('.email-oauth-badge');
-        if (!badge) {
-            badge = document.createElement('em');
-            badge.className = 'email-oauth-badge';
-            button.appendChild(badge);
-        }
-        badge.textContent = configured ? 'Готово' : 'Нужно настроить';
+        button.setAttribute('aria-disabled', 'false');
+        button.title = `Подключить ${emailOAuthProviderLabel(provider)}`;
     });
     if (status) {
-        const missing = providers
-            .filter(provider => !emailOAuthProvidersDB.find(row => row.provider === provider)?.configured)
-            .map(emailOAuthProviderLabel);
-        const ready = providers.length - missing.length;
-        status.innerHTML = missing.length
-            ? `OAuth готов: ${ready}/3. Не настроены: ${missing.join(', ')}. Redirect URL показан в настройках провайдера после запроса к серверу.`
-            : 'Все OAuth-провайдеры настроены. Можно подключать почту через официальный вход.';
+        status.textContent = 'Выберите Google, Яндекс или Microsoft, затем введите адрес почты и пароль.';
     }
 }
 
@@ -366,7 +422,6 @@ function renderEmailAccounts() {
                 </button>
                 ${canManageAccounts ? `
                     <div class="email-account-card-actions">
-                        <button class="btn-secondary" onclick="editEmailAccount(${account.id})">Редактировать</button>
                         <button class="btn-secondary" onclick="testMailbox(${account.id})">Проверить</button>
                         <button class="btn-secondary" onclick="syncMailbox(${account.id})">Обновить</button>
                         <button class="btn-secondary" onclick="retryFailedMailOps(${account.id})">Повторить сбои</button>

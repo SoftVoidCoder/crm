@@ -3297,58 +3297,30 @@ button.btn-danger {
     margin-top: 12px;
 }
 .email-oauth-card {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-height: 76px;
-    padding: 14px;
-    border: 1px solid rgba(31, 79, 209, 0.12);
-    border-radius: 8px;
-    background: #fff;
-    color: var(--text);
-    text-align: left;
-    cursor: pointer;
-    transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
-}
-.email-oauth-card:hover:not(:disabled) {
-    border-color: rgba(31, 79, 209, 0.45);
-    box-shadow: 0 10px 24px rgba(15, 23, 42, .08);
-    transform: translateY(-1px);
-}
-.email-oauth-card:disabled,
-.email-oauth-card--disabled {
-    cursor: not-allowed;
-    opacity: .62;
-}
-.email-oauth-icon {
     display: grid;
-    place-items: center;
-    width: 34px;
-    height: 34px;
+    gap: 3px;
+    min-height: 58px;
+    padding: 14px 16px;
+    border: 0;
     border-radius: 8px;
-    background: #111827;
+    background: var(--primary);
     color: #fff;
-    font-weight: 800;
-    flex: 0 0 auto;
+    text-align: center;
+    cursor: pointer;
+    transition: box-shadow .18s ease, transform .18s ease, filter .18s ease;
 }
-.email-oauth-card strong,
-.email-oauth-card small {
-    display: block;
-    line-height: 1.25;
+.email-oauth-card:hover {
+    box-shadow: 0 10px 24px rgba(31, 79, 209, .22);
+    transform: translateY(-1px);
+    filter: brightness(1.03);
+}
+.email-oauth-card strong {
+    font-size: 14px;
+    line-height: 1.2;
 }
 .email-oauth-card small {
-    margin-top: 3px;
-    color: var(--secondary);
+    color: rgba(255,255,255,.82);
     font-size: 12px;
-}
-.email-oauth-badge {
-    position: absolute;
-    right: 10px;
-    bottom: 8px;
-    font-style: normal;
-    font-size: 11px;
-    color: var(--secondary);
 }
 .email-oauth-status {
     margin-top: 12px;
@@ -3358,6 +3330,15 @@ button.btn-danger {
     color: var(--secondary);
     font-size: 12px;
     line-height: 1.45;
+}
+.email-provider-login-panel {
+    margin-top: 12px;
+    gap: 10px;
+}
+.email-provider-login-title {
+    font-weight: 800;
+    color: var(--primary-strong);
+    font-size: 13px;
 }
 .email-setup-hint {
     margin-top: 12px;
