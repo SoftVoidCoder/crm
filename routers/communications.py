@@ -1144,7 +1144,7 @@ def _mailbox_summary(actor: dict):
         JOIN email_account_owners eo ON eo.account_id = a.id
         LEFT JOIN email_messages m ON m.account_id = a.id
         WHERE {owner_clause}
-        GROUP BY a.id
+        GROUP BY a.id, eo.owner_email, eo.owner_name
         ORDER BY a.is_default DESC, a.id ASC
         """,
         owner_params,
