@@ -515,6 +515,60 @@ def read_app(request: Request):
     return templates.TemplateResponse(request=request, name="index.html")
 
 
+@app.get("/privacy")
+def privacy_policy():
+    return HTMLResponse("""
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Korda CRM — Privacy Policy</title>
+  <style>body{font-family:Inter,Arial,sans-serif;max-width:820px;margin:40px auto;padding:0 20px;line-height:1.6;color:#111827}h1{font-size:28px}h2{font-size:18px;margin-top:28px}</style>
+</head>
+<body>
+  <h1>Korda CRM — Privacy Policy</h1>
+  <p>Korda CRM uses connected mailbox access only to show, synchronize, archive, and send email inside the CRM for the account owner.</p>
+  <h2>Google mailbox data</h2>
+  <p>When a user connects Google, the CRM requests Gmail permissions needed to read messages, manage mailbox state, and send replies requested by the user. Email content is stored only in the CRM database for business workflow use.</p>
+  <h2>Data sharing</h2>
+  <p>Korda CRM does not sell mailbox data and does not share Google user data with third parties except where required to provide the CRM service or comply with law.</p>
+  <h2>Revocation</h2>
+  <p>A user can remove a connected mailbox in CRM or revoke access in the Google Account security settings.</p>
+  <h2>Contact</h2>
+  <p>Support email: tehnoblogery754@gmail.com</p>
+</body>
+</html>
+""")
+
+
+@app.get("/terms")
+def terms_of_service():
+    return HTMLResponse("""
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Korda CRM — Terms of Service</title>
+  <style>body{font-family:Inter,Arial,sans-serif;max-width:820px;margin:40px auto;padding:0 20px;line-height:1.6;color:#111827}h1{font-size:28px}h2{font-size:18px;margin-top:28px}</style>
+</head>
+<body>
+  <h1>Korda CRM — Terms of Service</h1>
+  <p>Korda CRM is a business CRM system for managing clients, documents, tasks, and connected email workflows.</p>
+  <h2>User responsibility</h2>
+  <p>Users are responsible for connecting only mailboxes they are authorized to use and for complying with applicable laws and company policies.</p>
+  <h2>Email integration</h2>
+  <p>Connected mailbox access is used only for CRM functions selected by the user, including synchronization, viewing messages, archiving, and sending replies.</p>
+  <h2>Availability</h2>
+  <p>The service is provided as-is. Access to third-party services such as Google, Microsoft, or Yandex can depend on those providers' policies and availability.</p>
+  <h2>Contact</h2>
+  <p>Support email: tehnoblogery754@gmail.com</p>
+</body>
+</html>
+""")
+
+
 @app.get("/qr/doc/{doc_id}")
 def open_document_by_qr(doc_id: int, token: str = ""):
     if not verify_document_qr_token(doc_id, token):
