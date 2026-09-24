@@ -19,79 +19,75 @@
     <div class="ops-overview-card">
         <div>
             <div class="ops-overview-title">Привязка корпоративной почты</div>
-      <div class="ops-overview-text">Теперь ящик можно быстро привязать прямо из системы: выбери провайдера, введи адрес и пароль приложения, потом сохрани ящик, проверь подключение и запусти синхронизацию. Для почты Гугл, Яндекса и многих других сервисов лучше использовать именно пароль приложения, а не обычный пароль от аккаунта.</div>
+      <div class="ops-overview-text">Подключай почту через официальный вход провайдера. CRM получит разрешение на синхронизацию писем и ответов без хранения обычного пароля от аккаунта.</div>
         </div>
         <div class="ops-overview-pills">
         <span class="ops-pill">Входящая почта</span>
         <span class="ops-pill">Исходящая почта</span>
-            <span class="ops-pill">Привязка</span>
-            <span class="ops-pill">Пароль приложения</span>
+            <span class="ops-pill">OAuth-вход</span>
+            <span class="ops-pill">Синхронизация</span>
         </div>
     </div>
     <section class="surface-card surface-card--padded usage-guide">
         <div class="section-header">
             <div>
-                <h3 class="section-title">Как создать пароль приложения</h3>
-                <p class="section-subtitle">Подробная инструкция для популярных сервисов. Все ссылки ведут на официальную справку провайдера.</p>
+                <h3 class="section-title">Подключение без ручных серверов</h3>
+                <p class="section-subtitle">Основной путь теперь такой же, как в привычных сервисах: выбрать почту, войти в аккаунт и разрешить синхронизацию.</p>
             </div>
         </div>
         <div class="usage-guide-grid">
             <div class="usage-guide-item">
           <h4 class="usage-guide-title">Почта Гугл</h4>
-          <p class="usage-guide-text">У Гугл пароль приложения работает только если у аккаунта включена двухэтапная аутентификация. После этого можно сгенерировать отдельный 16-значный пароль для системы.</p>
+          <p class="usage-guide-text">Вход идёт через официальный экран Google. После разрешения CRM синхронизирует входящие и сможет отправлять ответы из карточки письма.</p>
                 <ol class="usage-guide-list">
-            <li>Открой настройки безопасности Гугл и включи двухэтапную аутентификацию.</li>
-                    <li>Перейди на страницу паролей приложений.</li>
-            <li>Создай новый пароль приложения и вставь его в поле пароля в системе.</li>
+            <li>Нажми кнопку Google.</li>
+                    <li>Войди в нужный аккаунт.</li>
+            <li>Разреши доступ к почте и вернись в CRM.</li>
                 </ol>
-          <p class="usage-guide-text"><a href="https://support.google.com/accounts/answer/185833?hl=ru" target="_blank" rel="noopener noreferrer">Официальная инструкция Гугл по паролям приложений</a></p>
             </div>
             <div class="usage-guide-item">
           <h4 class="usage-guide-title">Яндекс 360</h4>
-          <p class="usage-guide-text">Для Яндекс Почты обычно нужно создать пароль приложения в аккаунте Яндекса. Если почтовый клиент не подключается, проверь, что доступ к входящей почте и пароли приложений разрешены.</p>
+          <p class="usage-guide-text">Яндекс подключается через OAuth-токен. Пользователь входит на стороне Яндекса, а CRM получает разрешение на работу с почтой.</p>
                 <ol class="usage-guide-list">
-            <li>Открой страницу паролей приложений в аккаунте Яндекса.</li>
-                    <li>Выбери тип приложения для почты и создай новый пароль.</li>
-            <li>Если нужно, проверь в настройках почты доступ к входящей почте и пароли приложений.</li>
+            <li>Нажми кнопку Яндекс.</li>
+                    <li>Войди в Яндекс ID.</li>
+            <li>Подтверди доступ к почте.</li>
                 </ol>
-          <p class="usage-guide-text"><a href="https://yandex.com/support/yandex-360/customers/mail/en/mail-clients/microsoft-outlook" target="_blank" rel="noopener noreferrer">Официальная инструкция Яндекса по паролю приложения и настройке почты</a></p>
             </div>
             <div class="usage-guide-item">
           <h4 class="usage-guide-title">Почта Майкрософт</h4>
-          <p class="usage-guide-text">Пароль приложения Майкрософт нужен не всегда, а в основном когда у аккаунта включена двухэтапная аутентификация и вход идет через старое приложение или внешний сервис.</p>
+          <p class="usage-guide-text">Outlook и Microsoft 365 подключаются через Microsoft Graph. Это самый стабильный путь для корпоративной почты.</p>
                 <ol class="usage-guide-list">
-            <li>Зайди в расширенные настройки безопасности Майкрософт.</li>
-            <li>Открой раздел паролей приложений.</li>
-                    <li>Создай новый пароль приложения и используй его вместо обычного пароля.</li>
+            <li>Нажми кнопку Microsoft.</li>
+            <li>Войди в рабочий или личный аккаунт.</li>
+                    <li>Разреши чтение и отправку почты.</li>
                 </ol>
-          <p class="usage-guide-text"><a href="https://support.microsoft.com/en-us/account-billing/how-to-get-and-use-app-passwords-5896ed9b-4263-e681-128a-a6f2979a7944" target="_blank" rel="noopener noreferrer">Официальная инструкция Майкрософт по паролям приложений</a></p>
             </div>
             <div class="usage-guide-item">
           <h4 class="usage-guide-title">Почта Mail.ru</h4>
-          <p class="usage-guide-text">Для Mail.ru лучше использовать отдельный пароль для внешнего приложения. Он создается в настройках безопасности почты и подставляется в системе вместо обычного пароля.</p>
+          <p class="usage-guide-text">Для Mail.ru и нестандартных доменов оставлена ручная привязка. Она спрятана ниже и нужна только когда провайдер не поддержан через вход.</p>
                 <ol class="usage-guide-list">
-                    <li>Открой настройки безопасности Почты Mail.</li>
-                    <li>Найди раздел паролей для внешних приложений.</li>
-                    <li>Создай новый пароль и используй его в настройке ящика.</li>
+                    <li>Открой ручной режим.</li>
+                    <li>Введи адрес и пароль приложения.</li>
+                    <li>CRM сама подставит типовые IMAP/SMTP параметры.</li>
                 </ol>
-                <p class="usage-guide-text"><a href="https://help.mail.ru/mail/faq/password/button/" target="_blank" rel="noopener noreferrer">Официальная инструкция Mail.ru по паролю для внешнего приложения</a></p>
             </div>
             <div class="usage-guide-item">
-          <h4 class="usage-guide-title">Что вставлять в систему</h4>
-          <p class="usage-guide-text">В системе обычно нужен не основной пароль от почты, а именно отдельный пароль приложения. Его показывают один раз, поэтому лучше сразу вставить его в форму и сохранить ящик.</p>
+          <h4 class="usage-guide-title">Что хранит CRM</h4>
+          <p class="usage-guide-text">Для OAuth-подключений CRM хранит технический токен доступа, а не основной пароль от почты. Доступ можно отозвать в аккаунте провайдера.</p>
                 <ol class="usage-guide-list">
-            <li>В поле эл. почты укажи полный адрес ящика.</li>
-                    <li>В поле пароля вставь пароль приложения.</li>
-                    <li>После сохранения нажми Проверить, потом Синк.</li>
+            <li>Обычный пароль в CRM не вводится.</li>
+                    <li>Разрешение выдаёт сам провайдер.</li>
+                    <li>При ошибке ящик можно переподключить.</li>
                 </ol>
             </div>
             <div class="usage-guide-item">
                 <h4 class="usage-guide-title">Если не подключается</h4>
-          <p class="usage-guide-text">Чаще всего проблема в том, что вставлен обычный пароль вместо пароля приложения, не включен доступ к входящей почте, или пароль приложения уже был сброшен после смены основного пароля.</p>
+          <p class="usage-guide-text">Чаще всего на сервере ещё не настроено OAuth-приложение провайдера или не совпадает callback URL. CRM покажет точный адрес, который нужно добавить в настройках приложения.</p>
                 <ol class="usage-guide-list">
-                    <li>Создай новый пароль приложения и вставь его заново.</li>
-            <li>Проверь, включен ли доступ к входящей почте у провайдера.</li>
-            <li>Убедись, что адрес ящика введен полностью, например <code>user@example.ru</code>.</li>
+                    <li>Проверь, что провайдер помечен как настроенный.</li>
+            <li>Сверь redirect URL в CRM и кабинете провайдера.</li>
+            <li>Повтори вход через кнопку подключения.</li>
                 </ol>
             </div>
         </div>
@@ -105,20 +101,30 @@
                 </div>
             </div>
             <div class="email-setup-card">
-                <div class="email-setup-title">Быстрая привязка</div>
-                <div class="email-setup-actions">
-            <button class="btn-secondary" onclick="startEmailConnect('yandex')">Привязать Яндекс 360</button>
-            <button class="btn-secondary" onclick="startEmailConnect('gmail')">Привязать почту Гугл</button>
-            <button class="btn-secondary" onclick="startEmailConnect('outlook')">Привязать почту Майкрософт</button>
-                    <button class="btn-secondary" onclick="openManualEmailSetup()">Ручная настройка</button>
+                <div class="email-setup-title">Войти в почту</div>
+                <div id="emailOAuthProviderGrid" class="email-oauth-grid">
+                    <button class="email-oauth-card" onclick="connectEmailOAuth('google')">
+                        <span class="email-oauth-icon">G</span>
+                        <span><strong>Google</strong><small>Gmail / Workspace</small></span>
+                    </button>
+                    <button class="email-oauth-card" onclick="connectEmailOAuth('yandex')">
+                        <span class="email-oauth-icon">Я</span>
+                        <span><strong>Яндекс</strong><small>Яндекс 360</small></span>
+                    </button>
+                    <button class="email-oauth-card" onclick="connectEmailOAuth('microsoft')">
+                        <span class="email-oauth-icon">M</span>
+                        <span><strong>Microsoft</strong><small>Outlook / 365</small></span>
+                    </button>
                 </div>
-      <div id="emailSetupHint" class="email-setup-hint">Выбери провайдера или открой ручную настройку. Форма ниже сама подставит параметры почты и подскажет, какой пароль нужен.</div>
+      <div id="emailSetupHint" class="email-setup-hint">Выбери провайдера. Если кнопка недоступна, нужно один раз настроить OAuth-приложение на сервере.</div>
+                <div id="emailOAuthStatus" class="email-oauth-status"></div>
                 <div class="email-setup-checklist">
-                    <div class="email-setup-line">1. Нажми кнопку привязки нужного провайдера.</div>
-                    <div class="email-setup-line">2. Введи адрес ящика и пароль приложения.</div>
-      <div class="email-setup-line">3. Нажми Сохранить, а потом Проверить, чтобы входящая и исходящая почта отвечали без ошибок.</div>
-                    <div class="email-setup-line">4. После успешной проверки запусти синк и при необходимости отметь ящик как основной.</div>
+                    <div class="email-setup-line">1. Нажми провайдера и войди в аккаунт.</div>
+                    <div class="email-setup-line">2. Разреши CRM читать почту и отправлять ответы.</div>
+      <div class="email-setup-line">3. После возврата ящик появится в списке и начнёт синхронизацию.</div>
+                    <div class="email-setup-line">4. Для нестандартной почты используй ручную настройку ниже.</div>
                 </div>
+                <button class="btn-secondary" onclick="openManualEmailSetup()">Ручная настройка другой почты</button>
             </div>
             <div class="email-account-form">
                 <div class="email-account-quick">

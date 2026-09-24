@@ -3290,6 +3290,75 @@ button.btn-danger {
     flex-wrap: wrap;
     margin-top: 12px;
 }
+.email-oauth-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+}
+.email-oauth-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 76px;
+    padding: 14px;
+    border: 1px solid rgba(31, 79, 209, 0.12);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.email-oauth-card:hover:not(:disabled) {
+    border-color: rgba(31, 79, 209, 0.45);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, .08);
+    transform: translateY(-1px);
+}
+.email-oauth-card:disabled,
+.email-oauth-card--disabled {
+    cursor: not-allowed;
+    opacity: .62;
+}
+.email-oauth-icon {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: #111827;
+    color: #fff;
+    font-weight: 800;
+    flex: 0 0 auto;
+}
+.email-oauth-card strong,
+.email-oauth-card small {
+    display: block;
+    line-height: 1.25;
+}
+.email-oauth-card small {
+    margin-top: 3px;
+    color: var(--secondary);
+    font-size: 12px;
+}
+.email-oauth-badge {
+    position: absolute;
+    right: 10px;
+    bottom: 8px;
+    font-style: normal;
+    font-size: 11px;
+    color: var(--secondary);
+}
+.email-oauth-status {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px dashed rgba(31, 79, 209, 0.2);
+    border-radius: 8px;
+    color: var(--secondary);
+    font-size: 12px;
+    line-height: 1.45;
+}
 .email-setup-hint {
     margin-top: 12px;
     padding: 12px 14px;
@@ -3346,6 +3415,11 @@ button.btn-danger {
 .email-feed-panel > .surface-card {
     min-height: 100%;
 }
+@media (max-width: 900px) {
+    .email-oauth-grid {
+        grid-template-columns: 1fr;
+    }
+}
 
 /* Finance + Client 360 */
 .finance-layout {
@@ -3372,5 +3446,3 @@ button.btn-danger {
 .finance-row-title {
     font-weight: 800;
     color: var(--primary-strong);
-
-

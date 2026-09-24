@@ -1,11 +1,11 @@
-import json, time, email, datetime, asyncio, os
+import json, time, email, datetime, asyncio, os, secrets, imaplib, html
 from email.utils import parseaddr
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.message import EmailMessage
 from fastapi import APIRouter, Request, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from database import get_connection, audit_log, create_notification, create_targeted_notifications, get_notifications_for_user, mark_notification_read, mark_all_notifications_read, get_dismissed_notification_keys, dismiss_notifications_for_user, record_error_log
 from auth_security import get_request_user
 from permissions import require_approved_user, require_director, has_permission
@@ -42,6 +42,18 @@ from services.mail_service import (
     smtp_credentials as smtp_credentials_service,
     test_email_account_connection as test_email_account_connection_service,
 )
+from services.mail_oauth_service import (
+    MailOAuthError,
+    build_authorization_url as build_mail_oauth_authorization_url,
+    build_oauth_account_payload,
+    build_redirect_uri as build_mail_oauth_redirect_uri,
+    exchange_code as exchange_mail_oauth_code,
+    fetch_oauth_identity,
+    provider_status as mail_oauth_provider_status,
+    refresh_access_token as refresh_mail_oauth_access_token,
+    sync_google_account,
+    sync_microsoft_account,
+)
 from services.collaboration_service import (
     list_meetings,
     create_meeting_record,
@@ -73,7 +85,8 @@ from services.email_ops_service import (
     retry_failed_email_accounts as retry_failed_email_accounts_service,
 )
 from services.document_workflow_service import list_documents_for_task, sync_document_workflow
-from settings import MAIL_IMAP_TIMEOUT, MAIL_SMTP_TIMEOUT, MAIL_SYNC_BATCH
+import settings
+from settings import MAIL_IMAP_TIMEOUT, MAIL_SMTP_TIMEOUT, MAIL_SYNC_BATCH, PUBLIC_BASE_URL
 
 # === ПОДКЛЮЧАЕМ МЕНЕДЖЕР WEBSOCKETS ===
 from utils import SMTP_USER, SMTP_PASS, SMTP_HOST, SMTP_PORT, manager, decrypt_secret, encrypt_secret
@@ -83,6 +96,7 @@ logger = get_logger("communications")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 EMAIL_ATTACHMENTS_DIR = os.path.join(UPLOADS_DIR, "email_attachments")
+EMAIL_OAUTH_STATES: dict[str, dict] = {}
 
 
 def _safe_text(value: str, fallback: str = "") -> str:
@@ -487,11 +501,224 @@ def _api_error(status_code: int, error: str, **payload):
     return JSONResponse(status_code=status_code, content={"error": error, **payload})
 
 
+def _email_oauth_base_url(request: Request) -> str:
+    if PUBLIC_BASE_URL:
+        return PUBLIC_BASE_URL
+    return str(request.base_url).rstrip("/")
+
+
+def _email_oauth_return_html(title: str, message: str, *, ok: bool = True) -> HTMLResponse:
+    status = "success" if ok else "error"
+    safe_title = html.escape(title or "")
+    safe_message = html.escape(message or "")
+    html = f"""
+    <!doctype html>
+    <html lang="ru">
+    <head>
+      <meta charset="utf-8">
+      <title>{safe_title}</title>
+      <style>
+        body {{ font-family: Inter, Arial, sans-serif; background:#f6f7fb; color:#111827; display:grid; place-items:center; min-height:100vh; margin:0; }}
+        .card {{ width:min(520px, calc(100vw - 32px)); background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:28px; box-shadow:0 18px 50px rgba(15,23,42,.08); }}
+        h1 {{ font-size:22px; margin:0 0 10px; }}
+        p {{ font-size:15px; line-height:1.5; color:#4b5563; margin:0 0 18px; }}
+        .pill {{ display:inline-flex; border-radius:999px; padding:6px 10px; font-size:13px; background:{'#dcfce7' if ok else '#fee2e2'}; color:{'#166534' if ok else '#991b1b'}; margin-bottom:14px; }}
+        button {{ border:0; border-radius:6px; background:#1f2937; color:#fff; padding:10px 14px; cursor:pointer; }}
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <div class="pill">{status}</div>
+        <h1>{safe_title}</h1>
+        <p>{safe_message}</p>
+        <button onclick="window.location.href='/app#emailsView'">Вернуться в CRM</button>
+      </div>
+      <script>
+        if (window.opener) {{
+          window.opener.postMessage({{ type: 'korda-email-oauth', status: '{status}' }}, window.location.origin);
+          setTimeout(() => window.close(), 900);
+        }}
+      </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(html)
+
+
+def _save_oauth_access_token(account_id: int, encrypted_access_token: str, expires_at: int):
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute(
+            "UPDATE email_accounts SET oauth_access_token=?, oauth_expires_at=?, updated_at=? WHERE id=?",
+            (encrypted_access_token, int(expires_at or 0), int(time.time()), account_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _save_oauth_message(row: dict):
+    now = int(time.time())
+    body_text = _safe_text(row.get("body_text"))
+    body_preview = (body_text[:320] + "...") if len(body_text) > 320 else body_text
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute(
+            """
+            INSERT INTO email_messages (
+                account_id, uid, folder, subject, sender, sender_email, body_preview, body_text,
+                received_at, is_read, is_archived, is_deleted, created_at, synced_at, message_id_header, reply_to_email
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+            ON CONFLICT(account_id, uid, folder) DO UPDATE SET
+                subject=excluded.subject,
+                sender=excluded.sender,
+                sender_email=excluded.sender_email,
+                body_preview=excluded.body_preview,
+                body_text=excluded.body_text,
+                received_at=excluded.received_at,
+                is_read=excluded.is_read,
+                is_archived=excluded.is_archived,
+                is_deleted=0,
+                synced_at=excluded.synced_at,
+                message_id_header=excluded.message_id_header,
+                reply_to_email=excluded.reply_to_email
+            """,
+            (
+                int(row.get("account_id") or 0),
+                _safe_text(row.get("uid")),
+                _safe_text(row.get("folder"), "INBOX"),
+                _safe_text(row.get("subject"), "Без темы"),
+                _safe_text(row.get("sender"), "Неизвестный отправитель"),
+                _safe_text(row.get("sender_email")),
+                body_preview,
+                body_text,
+                _safe_text(row.get("received_at")),
+                int(row.get("is_read") or 0),
+                int(row.get("is_archived") or 0),
+                now,
+                now,
+                _safe_text(row.get("message_id_header"))[:500],
+                _safe_text(row.get("reply_to_email")),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _upsert_oauth_email_account(provider: str, payload: dict, actor: dict) -> int:
+    now = int(time.time())
+    conn = get_connection(row_factory=True)
+    try:
+        c = conn.cursor()
+        c.execute(
+            "SELECT id, oauth_refresh_token FROM email_accounts WHERE address=? OR (oauth_provider=? AND provider_account_id=?) ORDER BY id ASC LIMIT 1",
+            (payload["address"], provider, payload.get("provider_account_id") or ""),
+        )
+        existing = c.fetchone()
+        account_id = int(existing["id"]) if existing else 0
+        refresh_token = payload.get("oauth_refresh_token") or (existing["oauth_refresh_token"] if existing else "")
+        if account_id:
+            c.execute(
+                """
+                UPDATE email_accounts
+                SET label=?, address=?, login=?, imap_host=?, imap_port=?, smtp_host=?, smtp_port=?,
+                    smtp_login=?, inbox_folder=?, archive_folder=?, is_active=1, auth_type='oauth',
+                    oauth_provider=?, oauth_access_token=?, oauth_refresh_token=?, oauth_expires_at=?,
+                    oauth_scope=?, provider_account_id=?, updated_at=?, last_error='', last_sync_status='ok'
+                WHERE id=?
+                """,
+                (
+                    payload["label"],
+                    payload["address"],
+                    payload["login"],
+                    payload["imap_host"],
+                    payload["imap_port"],
+                    payload["smtp_host"],
+                    payload["smtp_port"],
+                    payload["smtp_login"],
+                    payload["inbox_folder"],
+                    payload["archive_folder"],
+                    provider,
+                    payload["oauth_access_token"],
+                    refresh_token,
+                    payload["oauth_expires_at"],
+                    payload["oauth_scope"],
+                    payload.get("provider_account_id") or "",
+                    now,
+                    account_id,
+                ),
+            )
+        else:
+            c.execute(
+                """
+                INSERT INTO email_accounts (
+                    label, address, login, password, imap_host, imap_port, smtp_host, smtp_port,
+                    smtp_login, smtp_password, inbox_folder, archive_folder, is_default, is_active,
+                    created_at, updated_at, auth_type, oauth_provider, oauth_access_token,
+                    oauth_refresh_token, oauth_expires_at, oauth_scope, provider_account_id
+                ) VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, '', ?, ?, 0, 1, ?, ?, 'oauth', ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    payload["label"],
+                    payload["address"],
+                    payload["login"],
+                    payload["imap_host"],
+                    payload["imap_port"],
+                    payload["smtp_host"],
+                    payload["smtp_port"],
+                    payload["smtp_login"],
+                    payload["inbox_folder"],
+                    payload["archive_folder"],
+                    now,
+                    now,
+                    provider,
+                    payload["oauth_access_token"],
+                    refresh_token,
+                    payload["oauth_expires_at"],
+                    payload["oauth_scope"],
+                    payload.get("provider_account_id") or "",
+                ),
+            )
+            account_id = c.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+    audit_log(
+        "email_oauth_connected",
+        actor_email=actor.get("email", ""),
+        actor_name=actor.get("name", ""),
+        entity_type="email_account",
+        entity_id=str(account_id),
+        details={"provider": provider, "address": payload.get("address", "")},
+    )
+    return account_id
+
+
 def _is_locked_error(exc: Exception) -> bool:
     return "database is locked" in str(exc or "").lower()
 
 
 def _connect_imap_account(account: dict):
+    if account.get("auth_type") == "oauth" and account.get("oauth_provider") == "yandex":
+        access_token = refresh_mail_oauth_access_token(
+            "yandex",
+            account,
+            decrypt_secret=decrypt_secret,
+            encrypt_secret=encrypt_secret,
+            settings_module=settings,
+            save_token_fn=_save_oauth_access_token,
+        )
+        mailbox = imaplib.IMAP4_SSL(
+            account["imap_host"],
+            int(account.get("imap_port") or 993),
+            timeout=MAIL_IMAP_TIMEOUT,
+        )
+        auth_string = f"user={account.get('login') or account.get('address')}\1auth=Bearer {access_token}\1\1"
+        mailbox.authenticate("XOAUTH2", lambda _: auth_string.encode("utf-8"))
+        return mailbox
     return connect_imap_account_service(account, decrypt_secret=decrypt_secret, imap_timeout=MAIL_IMAP_TIMEOUT)
 
 
@@ -705,6 +932,30 @@ def sync_email_account(account: dict, force: bool = False):
     conn = get_connection()
     c = conn.cursor()
     try:
+        if account.get("auth_type") == "oauth" and account.get("oauth_provider") in {"google", "microsoft"}:
+            provider = account.get("oauth_provider")
+            access_token = refresh_mail_oauth_access_token(
+                provider,
+                account,
+                decrypt_secret=decrypt_secret,
+                encrypt_secret=encrypt_secret,
+                settings_module=settings,
+                save_token_fn=_save_oauth_access_token,
+            )
+            if provider == "google":
+                sync_google_account(account, access_token=access_token, batch_size=MAIL_SYNC_BATCH, save_message_fn=_save_oauth_message)
+            else:
+                sync_microsoft_account(account, access_token=access_token, batch_size=MAIL_SYNC_BATCH, save_message_fn=_save_oauth_message)
+            c.execute(
+                """
+                UPDATE email_accounts
+                SET last_sync_at=?, last_error='', sync_fail_count=0, next_retry_at=0, last_sync_status='ok'
+                WHERE id=?
+                """,
+                (now, account["id"]),
+            )
+            conn.commit()
+            return {"status": "success"}
         mail = _connect_imap_account(account)
         if "gmail" in str(account.get("imap_host") or "").lower():
             detected_archive = _find_imap_folder_by_flag(mail, "\\All", account.get("archive_folder") or "Archive")
@@ -812,6 +1063,9 @@ def _mailbox_summary():
             a.delivery_fail_count,
             a.last_delivery_at,
             a.last_delivery_error,
+            COALESCE(a.auth_type, 'password') AS auth_type,
+            COALESCE(a.oauth_provider, '') AS oauth_provider,
+            COALESCE(a.oauth_expires_at, 0) AS oauth_expires_at,
             SUM(CASE WHEN m.is_deleted=0 AND m.is_archived=0 THEN 1 ELSE 0 END) AS total_inbox,
             SUM(CASE WHEN m.is_deleted=0 AND m.is_archived=0 AND m.is_read=0 THEN 1 ELSE 0 END) AS unread_count,
             SUM(CASE WHEN m.is_deleted=0 AND m.is_archived=1 THEN 1 ELSE 0 END) AS archived_count
@@ -1079,6 +1333,75 @@ def get_email_accounts(request: Request):
         mailbox_summary_fn=_mailbox_summary,
         can_manage_accounts=has_permission(actor, "emails", "manage_accounts"),
     )
+
+
+@router.get("/api/email/oauth/providers")
+def get_email_oauth_providers(request: Request):
+    actor = require_approved_user(request)
+    if not actor or not has_permission(actor, "emails", "read"):
+        return {"error": "forbidden"}
+    base_url = _email_oauth_base_url(request)
+    rows = mail_oauth_provider_status(settings)
+    for row in rows:
+        row["redirect_uri"] = build_mail_oauth_redirect_uri(base_url, row["provider"])
+    return rows
+
+
+@router.get("/api/email/oauth/{provider}/start")
+def start_email_oauth(provider: str, request: Request):
+    actor = _mail_admin(request)
+    if not actor:
+        return _api_error(403, "forbidden")
+    provider = _safe_text(provider).lower()
+    base_url = _email_oauth_base_url(request)
+    redirect_uri = build_mail_oauth_redirect_uri(base_url, provider)
+    if not redirect_uri:
+        return _api_error(400, "oauth_base_url_missing", message="Не задан публичный адрес CRM для OAuth callback.")
+    state = secrets.token_urlsafe(32)
+    EMAIL_OAUTH_STATES[state] = {
+        "provider": provider,
+        "actor_email": actor.get("email", ""),
+        "actor_name": actor.get("name", ""),
+        "created_at": int(time.time()),
+    }
+    try:
+        auth_url = build_mail_oauth_authorization_url(provider, state=state, redirect_uri=redirect_uri, settings_module=settings)
+    except MailOAuthError as exc:
+        EMAIL_OAUTH_STATES.pop(state, None)
+        return _api_error(400, str(exc), message="Провайдер OAuth ещё не настроен на сервере.")
+    return {"status": "success", "auth_url": auth_url, "redirect_uri": redirect_uri}
+
+
+@router.get("/api/email/oauth/{provider}/callback")
+def finish_email_oauth(provider: str, request: Request, code: str = "", state: str = "", error: str = ""):
+    provider = _safe_text(provider).lower()
+    if error:
+        return _email_oauth_return_html("Подключение отменено", f"Провайдер вернул ошибку: {error}", ok=False)
+    state_data = EMAIL_OAUTH_STATES.pop(state, None)
+    if not state_data or state_data.get("provider") != provider or int(time.time()) - int(state_data.get("created_at") or 0) > 900:
+        return _email_oauth_return_html("Не удалось подключить почту", "Сессия подключения устарела. Открой CRM и начни вход заново.", ok=False)
+    if not code:
+        return _email_oauth_return_html("Не удалось подключить почту", "Провайдер не передал код авторизации.", ok=False)
+    actor = {
+        "email": state_data.get("actor_email", ""),
+        "name": state_data.get("actor_name", ""),
+    }
+    base_url = _email_oauth_base_url(request)
+    redirect_uri = build_mail_oauth_redirect_uri(base_url, provider)
+    try:
+        token_payload = exchange_mail_oauth_code(provider, code=code, redirect_uri=redirect_uri, settings_module=settings)
+        identity = fetch_oauth_identity(provider, token_payload)
+        if not identity.get("address"):
+            raise MailOAuthError("email_address_missing")
+        payload = build_oauth_account_payload(provider, identity, token_payload, encrypt_secret=encrypt_secret)
+        account_id = _upsert_oauth_email_account(provider, payload, actor)
+        account = _load_email_account(account_id)
+        if account:
+            sync_email_account(account, force=True)
+    except Exception as exc:
+        logger.warning("Email OAuth callback failed for %s: %s", provider, exc)
+        return _email_oauth_return_html("Почта не подключилась", "CRM получила ответ провайдера, но не смогла завершить привязку. Проверь настройки OAuth-приложения и повтори вход.", ok=False)
+    return _email_oauth_return_html("Почта подключена", f"Ящик {payload.get('address')} добавлен в CRM и первая синхронизация запущена.")
 
 
 @router.post("/api/email/accounts")

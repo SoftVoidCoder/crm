@@ -7,6 +7,8 @@ let currentEmailAccountId = 0;
 let currentEmailQuery = '';
 let editingEmailAccountId = null;
 let expandedReplyEmailId = null;
+let emailOAuthProvidersDB = [];
+let emailOAuthListenerReady = false;
 
 const EMAIL_PROVIDER_DEFAULTS = {
     yandex: {
@@ -102,6 +104,81 @@ function updateEmailSetupCopy(provider = '') {
     const noteNode = document.getElementById('emailAccountNote');
     if (hintNode) hintNode.textContent = hint;
     if (noteNode) noteNode.textContent = note;
+}
+
+async function loadEmailOAuthProviders() {
+    const data = await apiCall('/email/oauth/providers');
+    emailOAuthProvidersDB = Array.isArray(data) ? data : [];
+    renderEmailOAuthProviders();
+}
+
+function emailOAuthProviderLabel(provider) {
+    return {
+        google: 'Google',
+        yandex: 'Яндекс',
+        microsoft: 'Microsoft'
+    }[provider] || provider;
+}
+
+function renderEmailOAuthProviders() {
+    const grid = document.getElementById('emailOAuthProviderGrid');
+    const status = document.getElementById('emailOAuthStatus');
+    if (!grid) return;
+    const providers = ['google', 'yandex', 'microsoft'];
+    grid.querySelectorAll('.email-oauth-card').forEach(button => {
+        const provider = button.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || '';
+        const item = emailOAuthProvidersDB.find(row => row.provider === provider);
+        const configured = !!item?.configured;
+        button.classList.toggle('email-oauth-card--disabled', !configured);
+        button.disabled = !configured;
+        button.title = configured ? `Подключить ${emailOAuthProviderLabel(provider)}` : `Нужно настроить OAuth-приложение ${emailOAuthProviderLabel(provider)} на сервере`;
+        let badge = button.querySelector('.email-oauth-badge');
+        if (!badge) {
+            badge = document.createElement('em');
+            badge.className = 'email-oauth-badge';
+            button.appendChild(badge);
+        }
+        badge.textContent = configured ? 'Готово' : 'Нужно настроить';
+    });
+    if (status) {
+        const missing = providers
+            .filter(provider => !emailOAuthProvidersDB.find(row => row.provider === provider)?.configured)
+            .map(emailOAuthProviderLabel);
+        const ready = providers.length - missing.length;
+        status.innerHTML = missing.length
+            ? `OAuth готов: ${ready}/3. Не настроены: ${missing.join(', ')}. Redirect URL показан в настройках провайдера после запроса к серверу.`
+            : 'Все OAuth-провайдеры настроены. Можно подключать почту через официальный вход.';
+    }
+}
+
+function ensureEmailOAuthListener() {
+    if (emailOAuthListenerReady) return;
+    emailOAuthListenerReady = true;
+    window.addEventListener('message', async event => {
+        if (event.origin !== window.location.origin) return;
+        if (event.data?.type !== 'korda-email-oauth') return;
+        await loadEmailAccounts();
+        renderEmailAccounts();
+        await renderEmails(true);
+        showToast('Почта', event.data.status === 'success' ? 'Ящик подключён' : 'Подключение не завершилось', event.data.status === 'success' ? 'success' : 'error');
+    });
+}
+
+async function connectEmailOAuth(provider) {
+    ensureEmailOAuthListener();
+    const status = document.getElementById('emailOAuthStatus');
+    const res = await apiCall(`/email/oauth/${provider}/start`);
+    if (!res || res.error) {
+        const message = res?.message || 'OAuth-провайдер ещё не настроен на сервере.';
+        if (status) status.textContent = message;
+        return customAlert(message);
+    }
+    const popup = window.open(res.auth_url, `kordaEmailOAuth_${provider}`, 'width=720,height=780');
+    if (!popup) {
+        window.location.href = res.auth_url;
+        return;
+    }
+    if (status) status.textContent = `Открыт официальный вход ${emailOAuthProviderLabel(provider)}. После разрешения ящик появится в списке.`;
 }
 
 function updateEmailSetupHintFromAddress() {
@@ -273,6 +350,7 @@ function renderEmailAccounts() {
                     <div class="email-account-card-main">
                         <div class="email-account-name">${account.label || account.address}</div>
                         <div class="email-account-meta">${account.address}</div>
+                        <div class="email-account-meta">${account.auth_type === 'oauth' ? `Вход через ${emailOAuthProviderLabel(account.oauth_provider)}` : 'Ручная IMAP/SMTP настройка'}</div>
                     </div>
                     <div class="email-account-counters">
                         <span>${account.unread_count || 0} новых</span>
@@ -433,6 +511,8 @@ async function renderEmails(forceRefresh = false) {
     if (typeof loadEmailAccounts === 'function') {
         await loadEmailAccounts();
     }
+    await loadEmailOAuthProviders();
+    ensureEmailOAuthListener();
     renderEmailAccounts();
 
     if (emailAccountsDB.length === 0) {
