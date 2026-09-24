@@ -2,7 +2,7 @@
 // 3. КАНЦЕЛЯРИЯ (ДОКУМЕНТЫ)
 // ==========================================
 
-let currentDocTab = 'incoming';
+let currentDocTab = 'all';
 let documentsExtraFilter = 'all';
 let selectedDocuments = new Set();
 let documentsOneCImportPreviewState = null;
@@ -453,8 +453,9 @@ window.duplicateDocument = function(id) {
 };
 
 function switchDocTab(tab) {
-    currentDocTab = tab;
+    currentDocTab = tab || 'all';
     const map = {
+        all: 'tabDocAll',
         incoming: 'tabDocIncoming',
         outgoing: 'tabDocOutgoing',
         internal: 'tabDocInternal',
@@ -469,6 +470,10 @@ function switchDocTab(tab) {
         el.setAttribute('aria-selected', on ? 'true' : 'false');
     });
     const registryCopy = {
+        all: {
+            title: 'Все документы',
+            hint: 'Полный реестр входящих, исходящих и внутренних документов компании.',
+        },
         incoming: {
             title: 'Входящие документы',
             hint: 'Письма, запросы, акты и другие документы, которые компания получила извне.',
@@ -501,9 +506,14 @@ function documentMatchesExtraFilter(doc) {
 
 function getFilteredDocuments() {
     const searchInput = document.getElementById('documentRegistrySearch');
-    const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+    if (searchInput && typeof preventSearchAutofill === 'function') preventSearchAutofill(searchInput);
+    const rawQuery = searchInput ? (typeof cleanSearchQueryValue === 'function' ? cleanSearchQueryValue(searchInput.value) : searchInput.value) : '';
+    if (searchInput && rawQuery !== searchInput.value) searchInput.value = rawQuery;
+    const query = rawQuery.toLowerCase().trim();
     const filtered = documentsDB.filter(doc => {
-        const matchesTab = currentDocTab === 'drafts'
+        const matchesTab = currentDocTab === 'all'
+            ? doc.status !== 'draft'
+            : currentDocTab === 'drafts'
             ? doc.status === 'draft'
             : currentDocTab === 'internal'
                 ? String(doc.type || '').startsWith('internal_') && doc.status !== 'draft'
@@ -543,7 +553,10 @@ function getFilteredDocuments() {
 
 window.clearDocumentRegistrySearch = function() {
     const input = document.getElementById('documentRegistrySearch');
-    if (input) input.value = '';
+    if (input) {
+        input.dataset.userTouched = '1';
+        input.value = '';
+    }
     renderDocuments();
 };
 
@@ -573,10 +586,10 @@ function registerDocumentsSavedFilters() {
             query: document.getElementById('documentRegistrySearch')?.value || '',
         }),
         applyPayload: payload => {
-            currentDocTab = payload.currentDocTab || 'incoming';
+            currentDocTab = payload.currentDocTab || 'all';
             documentsExtraFilter = payload.documentsExtraFilter || 'all';
             const searchInput = document.getElementById('documentRegistrySearch');
-            if (searchInput) searchInput.value = payload.query || '';
+            if (searchInput) searchInput.value = typeof cleanSearchQueryValue === 'function' ? cleanSearchQueryValue(payload.query) : (payload.query || '');
             switchDocTab(currentDocTab);
         },
         presets: [

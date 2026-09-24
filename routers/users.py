@@ -41,7 +41,7 @@ from auth_security import (
     get_request_user,
     destroy_request_session,
 )
-from permissions import get_field_permissions, get_role_permissions, require_approved_user
+from permissions import DIRECTOR_ROLE, EMPLOYEE_ROLE, get_field_permissions, get_role_permissions, normalize_user_role, require_approved_user
 from services.policy_service import build_form_policy_payload
 from services.system_readiness_service import build_system_readiness
 from schemas import (
@@ -79,15 +79,8 @@ logger = get_logger("users")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BACKUP_DIR = os.path.join(BASE_DIR, "backups")
 ALLOWED_USER_ROLES = {
-    "Конструкторское бюро",
-    "Производство и ОТК",
-    "Склад",
-    "Менеджер",
-    "Бухгалтерия",
-    "Юрист",
-    "Секретарь / Канцелярия",
-    "Сотрудник",
-    "Директор",
+    EMPLOYEE_ROLE,
+    DIRECTOR_ROLE,
 }
 
 
@@ -168,9 +161,18 @@ def _is_rate_limited(action: str, identifier: str, limit: int, window_seconds: i
 
 def _director_from_session(request: Request):
     actor = get_request_user(request)
-    if not actor or actor.get("role") != "Директор":
+    if not actor or normalize_user_role(actor.get("role")) != DIRECTOR_ROLE:
         return None
+    actor = dict(actor)
+    actor["role"] = DIRECTOR_ROLE
     return actor
+
+
+def _coerce_account_role(role: str, *, allow_director: bool = True) -> str:
+    normalized = normalize_user_role(role)
+    if normalized == DIRECTOR_ROLE and allow_director:
+        return DIRECTOR_ROLE
+    return EMPLOYEE_ROLE
 
 
 def _load_user_snapshot(email: str):
@@ -371,6 +373,7 @@ def login(data: AuthData, request: Request):
     payload = dict(user)
     payload.pop("password", None)
     payload.pop("two_factor_secret", None)
+    payload["role"] = _coerce_account_role(payload.get("role", ""), allow_director=True)
     audit_log("login_success", actor_email=payload.get("email", ""), actor_name=payload.get("name", ""), entity_type="user", entity_id=payload.get("email", ""), details={"status": payload.get("status"), "role": payload.get("role")}, ip_address=ip_address, user_agent=user_agent)
     session_id = issue_session_for_user(request, payload.get("email", ""))
     response = JSONResponse(payload)
@@ -383,7 +386,9 @@ def get_session(request: Request):
     user = get_request_user(request)
     if not user:
         return {"error": "unauthorized"}
-    return user
+    payload = dict(user)
+    payload["role"] = _coerce_account_role(payload.get("role", ""), allow_director=True)
+    return payload
 
 
 @router.post("/api/logout")
@@ -501,7 +506,7 @@ def recover(data: AuthData, bg_tasks: BackgroundTasks, request: Request):
 def get_status(email: str, request: Request):
     actor = get_request_user(request)
     email = normalize_email(email)
-    if not actor or (actor.get("email") != email and actor.get("role") != "Директор"):
+    if not actor or (actor.get("email") != email and normalize_user_role(actor.get("role")) != DIRECTOR_ROLE):
         return {"error": "forbidden"}
     conn = get_connection(row_factory=True); c = conn.cursor()
     c.execute("SELECT status, role, is_head, hourly_rate FROM users WHERE email=?", (email,)); user = c.fetchone()
@@ -532,6 +537,7 @@ def all_users(request: Request):
                 row[field_name] = []
         row["two_factor_enabled"] = int(row.get("two_factor_enabled") or 0)
         row["is_head"] = int(row.get("is_head") or 0)
+        row["role"] = _coerce_account_role(row.get("role", ""), allow_director=True)
     return rows
 
 @router.post("/api/users/approve")
@@ -543,9 +549,10 @@ def approve(data: RoleData, request: Request):
     before = _load_user_snapshot(email)
     if not before:
         return {"error": "user_not_found"}
+    role = _coerce_account_role(data.role, allow_director=True)
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE users SET role=?, status='approved', is_head=? WHERE email=?", (data.role, data.is_head, email))
+    c.execute("UPDATE users SET role=?, status='approved', is_head=? WHERE email=?", (role, data.is_head, email))
     if int(getattr(c, "rowcount", 0) or 0) <= 0:
         conn.close()
         return {"error": "user_not_found"}
@@ -554,8 +561,8 @@ def approve(data: RoleData, request: Request):
     after = _load_user_snapshot(email)
     record_field_changes("user", email, before, after, actor.get("email", ""), actor.get("name", ""))
     ip_address, user_agent = _request_meta(request)
-    audit_log("user_approved", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="user", entity_id=email, details={"role": data.role, "is_head": data.is_head}, ip_address=ip_address, user_agent=user_agent)
-    create_notification("Доступ одобрен", f"Твоя заявка в Korda CRM одобрена. Роль: {data.role}.", user_email=email, category="user", entity_type="user", entity_id=email)
+    audit_log("user_approved", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="user", entity_id=email, details={"role": role, "is_head": data.is_head}, ip_address=ip_address, user_agent=user_agent)
+    create_notification("Доступ одобрен", f"Твоя заявка в Korda CRM одобрена. Роль: {role}.", user_email=email, category="user", entity_type="user", entity_id=email)
     return {"status": "success"}
 
 
@@ -567,11 +574,11 @@ def invite_user(data: UserInviteData, request: Request):
 
     email = normalize_email(data.email)
     name = (data.name or "").strip()
-    role = (data.role or "").strip()
+    role = _coerce_account_role(data.role, allow_director=True)
     password = data.password or ""
     if not name or not email or not role:
         return {"error": "validation_error", "message": "Заполните имя, почту и роль сотрудника."}
-    if role not in ALLOWED_USER_ROLES or role == "Директор":
+    if role not in ALLOWED_USER_ROLES:
         return {"error": "validation_error", "message": "Выберите допустимую роль сотрудника."}
     if not is_valid_email(email):
         return {"error": "validation_error", "message": "Введите корректную почту сотрудника."}
@@ -642,17 +649,12 @@ def update_role(data: RoleData, request: Request):
     before = _load_user_snapshot(email)
     if not before:
         return {"error": "user_not_found"}
-    allowed_roles = {
-        "Конструкторское бюро", "Производство и ОТК", "Склад", "Менеджер",
-        "Бухгалтерия", "Юрист", "Секретарь / Канцелярия", "Сотрудник",
-    }
-    if data.role not in allowed_roles:
+    role = _coerce_account_role(data.role, allow_director=True)
+    if role not in ALLOWED_USER_ROLES:
         return {"error": "invalid_role"}
-    if before.get("role") == "Директор":
-        return {"error": "protected_account"}
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE users SET role=? WHERE email=?", (data.role, email))
+    c.execute("UPDATE users SET role=? WHERE email=?", (role, email))
     if int(getattr(c, "rowcount", 0) or 0) <= 0:
         conn.close()
         return {"error": "user_not_found"}
@@ -661,8 +663,8 @@ def update_role(data: RoleData, request: Request):
     after = _load_user_snapshot(email)
     record_field_changes("user", email, before, after, actor.get("email", ""), actor.get("name", ""))
     ip_address, user_agent = _request_meta(request)
-    audit_log("user_role_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="user", entity_id=email, details={"role": data.role}, ip_address=ip_address, user_agent=user_agent)
-    create_notification("Обновлена роль", f"Твоя роль в CRM изменена на «{data.role}».", user_email=email, category="user", entity_type="user", entity_id=email)
+    audit_log("user_role_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="user", entity_id=email, details={"role": role}, ip_address=ip_address, user_agent=user_agent)
+    create_notification("Обновлена роль", f"Твоя роль в CRM изменена на «{role}».", user_email=email, category="user", entity_type="user", entity_id=email)
     return {"status": "success"}
 
 @router.post("/api/users/remove")

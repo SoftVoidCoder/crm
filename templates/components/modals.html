@@ -14,7 +14,7 @@
             <div>
                 <span class="view-eyebrow">Новый доступ</span>
                 <h2>Добавить сотрудника</h2>
-                <p>Создайте учётную запись и сразу назначьте рабочую роль.</p>
+                <p>Создайте учётную запись и назначьте роль: сотрудник или директор.</p>
             </div>
             <button class="icon-btn" type="button" aria-label="Закрыть" onclick="closeInviteEmployeeModal()">×</button>
         </div>
@@ -37,7 +37,7 @@
             </label>
             <label class="employee-head-toggle employee-create-grid__wide">
                 <input id="inviteEmployeeHead" type="checkbox">
-                <span><strong>Руководитель отдела</strong><small>Разрешает видеть задачи и сотрудников своей роли.</small></span>
+                <span><strong>Руководитель</strong><small>Служебная отметка, без отдельной ролевой матрицы.</small></span>
             </label>
         </div>
         <div id="inviteEmployeeError" class="form-error krd-is-hidden" role="alert"></div>
@@ -54,7 +54,7 @@
             <div>
                 <span class="view-eyebrow">Права сотрудника</span>
                 <h2>Сменить роль</h2>
-                <p id="changeUserRoleDescription">Выберите новую рабочую роль сотрудника.</p>
+                <p id="changeUserRoleDescription">Выберите роль: сотрудник или директор.</p>
             </div>
             <button class="icon-btn" type="button" aria-label="Закрыть" onclick="closeUserRoleModal()">×</button>
         </div>
@@ -353,7 +353,7 @@
                     <div id="newProjTeam" class="project-create-access-box"></div>
                 </div>
                 <div>
-                    <label class="project-create-label">Роли, которые видят проект</label>
+                    <label class="project-create-label">Доступ к проекту</label>
                     <div id="newProjRoles" class="project-create-roles-box"></div>
                 </div>
             </div>

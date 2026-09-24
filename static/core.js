@@ -38,9 +38,98 @@ let seenToastIds = new Set();
 let canvas, ctx, isDrawing = false;
 window.__formPolicyCache = window.__formPolicyCache || {};
 
-const availableRoles = ['Конструкторское бюро', 'Производство и ОТК', 'Склад', 'Менеджер', 'Бухгалтерия', 'Юрист', 'Секретарь / Канцелярия', 'Сотрудник', 'Директор'];
+const availableRoles = ['Сотрудник', 'Директор'];
+const PROJECT_NAV_IDS = ['navDashboard', 'navApprovals', 'navClients', 'navBitrixImport', 'navContract360', 'navClaims', 'navDocuments', 'navEmails'];
+const DIRECTOR_NAV_IDS = [...PROJECT_NAV_IDS, 'adminBtn'];
+const AUTOFILL_SEARCH_GHOSTS = new Set(['admin', 'админ']);
 
 window.exchangeRates = { RUB: 1, USD: 90, EUR: 100, CNY: 12 };
+
+window.formatMoney = window.formatMoney || function(value, currency = 'RUB') {
+    const amount = Number(value || 0);
+    const suffix = currency === 'RUB' ? '₽' : String(currency || 'RUB');
+    return `${amount.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${suffix}`;
+};
+
+function isGhostSearchValue(value = '') {
+    return AUTOFILL_SEARCH_GHOSTS.has(String(value || '').trim().toLocaleLowerCase('ru-RU'));
+}
+
+function isSearchLikeInput(input) {
+    if (!input || input.tagName !== 'INPUT') return false;
+    const type = String(input.type || '').toLowerCase();
+    const marker = [
+        input.id,
+        input.name,
+        input.className,
+        input.placeholder,
+        input.getAttribute('aria-label'),
+    ].join(' ').toLocaleLowerCase('ru-RU');
+    return type === 'search'
+        || marker.includes('search')
+        || marker.includes('поиск')
+        || marker.includes('найти');
+}
+
+function hardenSearchInput(input) {
+    if (!isSearchLikeInput(input)) return;
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('data-lpignore', 'true');
+    input.setAttribute('data-1p-ignore', 'true');
+    input.setAttribute('autocorrect', 'off');
+    input.setAttribute('autocapitalize', 'off');
+    input.setAttribute('spellcheck', 'false');
+    if (!input.dataset.searchAutofillGuardBound) {
+        ['focus', 'input', 'change'].forEach(eventName => {
+            input.addEventListener(eventName, () => {
+                setTimeout(() => hardenSearchInput(input), 0);
+                setTimeout(() => hardenSearchInput(input), 120);
+            });
+        });
+        input.dataset.searchAutofillGuardBound = '1';
+    }
+    if (isGhostSearchValue(input.value)) {
+        input.value = '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+}
+
+function preventSearchAutofill(root = document) {
+    const scope = root && root.querySelectorAll ? root : document;
+    if (isSearchLikeInput(scope)) hardenSearchInput(scope);
+    scope.querySelectorAll('input').forEach(hardenSearchInput);
+}
+
+window.preventSearchAutofill = preventSearchAutofill;
+window.cleanSearchQueryValue = function(value = '') {
+    return isGhostSearchValue(value) ? '' : String(value || '');
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    preventSearchAutofill(document);
+    if (!window.__searchAutofillObserver) {
+        window.__searchAutofillObserver = new MutationObserver(mutations => {
+            mutations.forEach(mutation => {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === 1) preventSearchAutofill(node);
+                });
+            });
+        });
+        window.__searchAutofillObserver.observe(document.body, { childList: true, subtree: true });
+    }
+    setTimeout(() => preventSearchAutofill(document), 250);
+    setTimeout(() => preventSearchAutofill(document), 1000);
+    let searchAutofillTicks = 0;
+    const searchAutofillTimer = setInterval(() => {
+        preventSearchAutofill(document);
+        searchAutofillTicks += 1;
+        if (searchAutofillTicks >= 40) clearInterval(searchAutofillTimer);
+    }, 250);
+    window.addEventListener('focus', () => preventSearchAutofill(document));
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) preventSearchAutofill(document);
+    });
+});
 
 function permissionRulesFor(module, entityType) {
     const policyMap = window.currentPermissionMeta?.field_policy_map || {};
@@ -507,14 +596,7 @@ function normalizeRoleName(roleName = '') {
 function getRoleSlug(roleName = '') {
     const role = normalizeRoleName(roleName);
     if (role === 'Директор') return 'director';
-    if (role === 'Менеджер') return 'manager';
-    if (role === 'Бухгалтерия') return 'accounting';
-    if (role === 'Склад') return 'warehouse';
-    if (role === 'Юрист') return 'legal';
-    if (role === 'Секретарь / Канцелярия') return 'office';
-    if (role === 'Сотрудник') return 'employee';
-    if (role === 'Производство и ОТК' || role === 'Конструкторское бюро') return 'production';
-    return 'default';
+    return 'employee';
 }
 
 function getBaseRoleUiConfig(roleName = '') {
@@ -530,92 +612,16 @@ function getBaseRoleUiConfig(roleName = '') {
         return {
             ...common,
             slug: 'director',
-            showDeptFilters: true,
-            visibleNav: [
-                'navDashboard', 'navDocuments', 'navTasks', 'navApprovals', 'navClaims', 'navFinance', 'navAccounting', 'navIntegrations',
-                'navSupply', 'navSales', 'navProspecting', 'navMyProspecting', 'navBitrixImport', 'navLeads', 'navDeals', 'navProduction', 'navExpenses', 'navRequests', 'navResources', 'navService', 'navExecutive',
-                'navOperations', 'navClients', 'navClient360', 'navContract360', 'navKnowledge', 'navMessenger',
-                'navEmails', 'navMeetings', 'navNomenclature', 'navContacts',
-                'navKpi', 'navProfile', 'adminBtn'
-            ],
+            visibleNav: DIRECTOR_NAV_IDS,
         };
     }
-    if (role === 'Менеджер') {
-        return {
-            ...common,
-            slug: 'manager',
-            quickTaskLabel: 'Задача',
-            visibleNav: [
-                'navDashboard', 'navDocuments', 'navTasks', 'navApprovals', 'navClaims', 'navFinance', 'navIntegrations',
-                'navSupply', 'navSales', 'navProspecting', 'navMyProspecting', 'navBitrixImport', 'navLeads', 'navDeals', 'navExpenses', 'navRequests', 'navResources', 'navService', 'navContract360',
-                'navClients', 'navClient360', 'navKnowledge', 'navMessenger', 'navEmails', 'navMeetings', 'navProfile'
-            ],
-        };
-    }
-    if (role === 'Бухгалтерия') {
-        return {
-            ...common,
-            slug: 'accounting',
-            quickTaskLabel: 'Платёж / задача',
-            visibleNav: [
-                'navFinance', 'navAccounting', 'navIntegrations', 'navDocuments', 'navApprovals', 'navExpenses', 'navDeals',
-                'navRequests', 'navClients', 'navClient360', 'navContract360', 'navDashboard', 'navMessenger', 'navEmails', 'navMeetings', 'navProfile'
-            ],
-        };
-    }
-    if (role === 'Склад') {
-        return {
-            ...common,
-            slug: 'warehouse',
-            quickTaskLabel: 'Задача склада',
-            visibleNav: [
-                'navSupply', 'navNomenclature', 'navIntegrations', 'navDocuments', 'navTasks', 'navApprovals',
-                'navRequests', 'navService', 'navDashboard', 'navMessenger', 'navMeetings', 'navProfile'
-            ],
-        };
-    }
-    if (role === 'Производство и ОТК' || role === 'Конструкторское бюро') {
-        return {
-            ...common,
-            slug: 'production',
-            quickTaskLabel: 'Задача цеха',
-            visibleNav: [
-                'navProduction', 'navSupply', 'navIntegrations', 'navDocuments', 'navTasks', 'navApprovals',
-                'navRequests', 'navResources', 'navService', 'navDashboard', 'navMessenger', 'navMeetings', 'navProfile'
-            ],
-        };
-    }
-    if (role === 'Юрист') {
-        return {
-            ...common,
-            slug: 'legal',
-            quickTaskLabel: 'Юр. поручение',
-            visibleNav: [
-                'navApprovals', 'navClaims', 'navDocuments', 'navIntegrations', 'navService', 'navKnowledge', 'navDashboard', 'navClient360', 'navContract360',
-                'navClients', 'navProspecting', 'navLeads', 'navDeals', 'navMessenger', 'navEmails', 'navMeetings', 'navProfile'
-            ],
-        };
-    }
-    if (role === 'Секретарь / Канцелярия') {
-        return {
-            ...common,
-            slug: 'office',
-            quickTaskLabel: 'Регистрация / поручение',
-            visibleNav: [
-                'navDocuments', 'navTasks', 'navApprovals', 'navClients', 'navProspecting', 'navLeads', 'navDeals', 'navClient360', 'navEmails',
-                'navMeetings', 'navKnowledge', 'navMessenger', 'navDashboard', 'navProfile'
-            ],
-        };
-    }
-    if (role === 'Сотрудник') {
+    if (role !== 'Директор') {
         return {
             ...common,
             slug: 'employee',
             quickTaskLabel: 'Поручение',
-            showScanner: false,
-            visibleNav: [
-                'navTasks', 'navDocuments', 'navIntegrations', 'navExpenses', 'navRequests', 'navKnowledge', 'navMessenger', 'navMeetings', 'navProfile'
-            ],
+            showScanner: true,
+            visibleNav: PROJECT_NAV_IDS,
         };
     }
     return { ...common, slug: 'default' };
@@ -672,7 +678,6 @@ function hasCurrentPermission(moduleName, actionName = 'read', permissionSet = n
 
 function isNavAllowedByPermissions(navId, permissionSet = null) {
     const id = String(navId || '').trim();
-    if (id === 'navProfile') return true;
     const requirements = NAV_PERMISSION_REQUIREMENTS[id];
     if (!Array.isArray(requirements) || !requirements.length) return false;
     return requirements.some(([moduleName, actionName]) => hasCurrentPermission(moduleName, actionName, permissionSet));
@@ -688,7 +693,6 @@ function getRoleUiConfig(roleName = '') {
 
 function isNavAvailableForCurrentRole(navId) {
     const id = String(navId || '').trim();
-    if (id === 'navProfile') return true;
     const config = getRoleUiConfig(currentUser?.role || '');
     return Array.isArray(config.visibleNav) && config.visibleNav.includes(id);
 }
@@ -729,8 +733,7 @@ window.applyRoleShell = function() {
         'navContract360', 'navKpi', 'navProfile', 'adminBtn'
     ];
     allNavIds.forEach(id => {
-        const alwaysVisible = id === 'navProfile';
-        setNavVisibility(id, alwaysVisible || config.visibleNav.includes(id));
+        setNavVisibility(id, config.visibleNav.includes(id));
     });
     refreshSidebarGroupsVisibility();
     const deptLabel = document.querySelector('.krd-shell-sidebar__footer .nav-label');
@@ -745,12 +748,12 @@ window.applyRoleShell = function() {
     }
     const taskBtn = document.getElementById('topbarQuickTaskBtn');
     if (taskBtn) {
-        taskBtn.style.setProperty('display', hasCurrentPermission('tasks', 'create') ? 'inline-flex' : 'none', 'important');
+        taskBtn.style.setProperty('display', 'none', 'important');
         const label = document.getElementById('topbarQuickTaskLabel');
         if (label) label.textContent = config.quickTaskLabel;
     }
     const scanBtn = document.getElementById('topbarQuickScanBtn');
-    const canScanDocuments = config.showScanner && hasCurrentPermission('documents', 'create');
+    const canScanDocuments = false;
     if (scanBtn) scanBtn.style.setProperty('display', canScanDocuments ? 'inline-flex' : 'none', 'important');
     const mobileScanNav = document.getElementById('navMobileScanner');
     if (mobileScanNav) mobileScanNav.style.setProperty('display', canScanDocuments ? 'flex' : 'none', 'important');
@@ -768,14 +771,7 @@ window.isNavAvailableForCurrentRole = isNavAvailableForCurrentRole;
 
 window.getRoleLandingView = function() {
     const role = String(currentUser?.role || '').trim();
-    if (role === 'Директор') return 'executive';
-    if (role === 'Бухгалтерия') return 'finance';
-    if (role === 'Склад') return 'supply';
-    if (role === 'Производство и ОТК' || role === 'Конструкторское бюро') return 'production';
-    if (role === 'Юрист') return 'approvals';
-    if (role === 'Секретарь / Канцелярия') return 'documents';
-    if (role === 'Менеджер') return 'dashboard';
-    if (role === 'Сотрудник') return 'tasks';
+    if (role === 'Директор') return 'dashboard';
     return 'dashboard';
 };
 

@@ -37,7 +37,7 @@ from database import (
     list_recovery_workflow_runs,
     get_backups,
 )
-from permissions import DIRECTOR_ROLE, MANAGER_ROLE, require_approved_user, require_director, can_access_project, can_edit_project, has_permission, can_access_scope, filter_rows_by_scope, has_field_permission, get_allowed_statuses
+from permissions import DIRECTOR_ROLE, MANAGER_ROLE, require_approved_user, require_director, can_access_project, can_edit_project, has_permission, can_access_scope, filter_rows_by_scope, has_field_permission, get_allowed_statuses, normalize_user_role
 from settings import DADATA_SECRET, DADATA_TOKEN
 from schemas import ClientData, ProjectData, ProjectUpdate, NomenclatureData, ContactData, StockMovement, TenderParseData, ContractScanData, FinancePaymentData, FinanceMasterRecordData, PurchaseOrderData, SalesDocumentData, ProductionOrderData, ProductionOperationData, ProductionBOMItemData, ProductionRouteTemplateData, StockReservationData, SalesQuoteData, CustomerReturnData, SalesPlanData, PriceListData, ClientSalesTermData, SupplierRegistryData, PurchasePlanData, SupplierDeliveryScheduleData, SupplierReturnData, SupplierDiscrepancyActData, ExpenseApprovalData, InternalRequestData, ResourceAllocationData, ServiceCaseData, BudgetLineData, StockMovementDetailedData, SpecificationVersionData, ERPFlowStartData, ERPFlowAdvanceData, ClientMergeData, NomenclatureMergeData, StockReservationFulfillData, BusinessObjectData, ContractMasterData, TreasuryLimitData, FinancePeriodCloseData, ReconciliationActData, EDOSignatureData, FinanceInboundSyncData, NSIMasterRecordData, MDMGovernanceActionData, NSIHierarchyData, NSIExternalClassifierData, NSIExternalClassifierImportData, NSIDuplicateRuleData, NSIBulkChangeRequestData, InventoryDocumentData, InventoryActData, InventoryRegradingData, WarehouseQualityReportData, WarehousePolicyData, IntegrationSyncBatchData, BankAccountData, BankStatementImportData, BankStatementReconcileData, TelephonyAccountData, TelephonyCallData, SavedReportData, EntityLockData, SystemRecoveryActionData
 from routers.accounting import _load_epl_waybill_rows
@@ -1116,6 +1116,8 @@ def _load_users_directory():
     c.execute("SELECT email, name, role, status, is_head, hourly_rate FROM users ORDER BY name ASC")
     rows = [dict(row) for row in c.fetchall()]
     conn.close()
+    for row in rows:
+        row["role"] = normalize_user_role(row.get("role", ""))
     return rows
 
 
@@ -14117,38 +14119,9 @@ def get_projs(request: Request):
     actor = require_approved_user(request)
     if not actor:
         return {"error": "forbidden"}
-    user_name = actor.get("name", "")
-    user_role = actor.get("role", "")
-    is_head = int(actor.get("is_head") or 0)
     conn = get_connection(row_factory=True); c = conn.cursor()
-    subordinates = []
-    if is_head == 1 and user_role != 'Директор':
-        c.execute("SELECT name FROM users WHERE role=?", (user_role,))
-        subordinates = [r['name'] for r in c.fetchall()]
-
     c.execute("SELECT * FROM projects")
-    projs = []
-    for p in c.fetchall():
-        d = dict(p)
-        d = _project_payload(d)
-        
-        team = d.get('team', [])
-        manager_name = d.get('manager', '')
-        allowed_roles = d.get('allowed_roles', [])
-        checked = d.get('checkedState', {})
-        
-        allowed = False
-        
-        if user_role == 'Директор': allowed = True
-        elif user_name == manager_name or user_name in team: allowed = True
-        elif user_role in allowed_roles: allowed = True
-        elif is_head == 1 and (manager_name in subordinates or any(t in subordinates for t in team)): allowed = True
-        elif user_role == 'Юрист' and "task_4_1" in checked: allowed = True
-        elif user_role == 'Бухгалтерия' and "task_2_1" in checked: allowed = True
-        elif user_role in ['Конструкторское бюро', 'Производство и ОТК']: allowed = True
-        elif not team and not allowed_roles: allowed = True
-        
-        if allowed: projs.append(d)
+    projs = [_project_payload(dict(p)) for p in c.fetchall()]
     conn.close()
     return projs
 
@@ -14172,7 +14145,7 @@ async def create_proj(data: ProjectData, request: Request):
         proj_id = 1
     manager_name = data.manager or actor.get("name", "")
     c.execute("INSERT INTO projects (id, name, contract, client, manager, status, progress, checkedState, comments, deadlines, budget, costs, chat, files, logs, team, checklist, escalations, archive_details, taskFiles, subtasks, time_logs, allowed_roles, nomenclature) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
-              (proj_id, data.name, data.contract, data.client, manager_name, 'active', 0, '{}', '{}', '{}', data.budget, data.costs, '[]', '[]', '[]', json.dumps(data.team), json.dumps(data.checklist), '{}', json.dumps(data.archive_details or {}), '{}', '{}', '[]', json.dumps(data.allowed_roles), json.dumps(data.nomenclature)))
+              (proj_id, data.name, data.contract, data.client, manager_name, 'active', 0, '{}', '{}', '{}', data.budget, data.costs, '[]', '[]', '[]', json.dumps(data.team), json.dumps(data.checklist), '{}', json.dumps(data.archive_details or {}), '{}', '{}', '[]', '[]', json.dumps(data.nomenclature)))
     conn.commit()
     conn.close()
     audit_log("project_created", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="project", entity_id=str(proj_id), details={"name": data.name, "manager": manager_name})
@@ -14195,7 +14168,7 @@ async def update_proj(proj_id: int, data: ProjectUpdate, request: Request):
         return {"error": "forbidden"}
     conn = get_connection(); c = conn.cursor()
     c.execute("UPDATE projects SET name=?, contract=?, client=?, manager=?, progress=?, status=?, checkedState=?, comments=?, deadlines=?, budget=?, costs=?, chat=?, files=?, logs=?, team=?, checklist=?, escalations=?, archive_details=?, taskFiles=?, subtasks=?, time_logs=?, allowed_roles=?, nomenclature=? WHERE id=?", 
-              (data.name, data.contract, data.client, data.manager, data.progress, data.status, json.dumps(data.checkedState), json.dumps(data.comments), json.dumps(data.deadlines), data.budget, data.costs, json.dumps(data.chat), json.dumps(data.files), json.dumps(data.logs), json.dumps(data.team), json.dumps(data.checklist), json.dumps(data.escalations), json.dumps(data.archive_details), json.dumps(data.taskFiles), json.dumps(data.subtasks), json.dumps(data.time_logs), json.dumps(data.allowed_roles), json.dumps(data.nomenclature), proj_id))
+              (data.name, data.contract, data.client, data.manager, data.progress, data.status, json.dumps(data.checkedState), json.dumps(data.comments), json.dumps(data.deadlines), data.budget, data.costs, json.dumps(data.chat), json.dumps(data.files), json.dumps(data.logs), json.dumps(data.team), json.dumps(data.checklist), json.dumps(data.escalations), json.dumps(data.archive_details), json.dumps(data.taskFiles), json.dumps(data.subtasks), json.dumps(data.time_logs), '[]', json.dumps(data.nomenclature), proj_id))
     conn.commit()
     conn.close()
     audit_log("project_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="project", entity_id=str(proj_id), details={"name": data.name, "status": data.status, "progress": data.progress})

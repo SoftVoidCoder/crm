@@ -37,11 +37,12 @@
     <section class="documents-control-panel">
         <div class="documents-registry-search">
             <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
-            <input id="documentRegistrySearch" class="auth-input" type="search" placeholder="Найти по номеру, названию, клиенту или виду документа" aria-label="Поиск документов" autocomplete="off" oninput="renderDocuments()">
+            <input id="documentRegistrySearch" class="auth-input" type="search" name="document_registry_query" placeholder="Найти по номеру, названию, клиенту или виду документа" aria-label="Поиск документов" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="renderDocuments()">
             <button class="krd-btn krd-btn--ghost krd-btn--sm" type="button" onclick="clearDocumentRegistrySearch()">Сбросить</button>
         </div>
         <nav class="krd-tablist documents-tabs" aria-label="Типы документов">
-            <button class="krd-tab is-active" id="tabDocIncoming" role="tab" aria-selected="true" onclick="switchDocTab('incoming')">Входящие документы</button>
+            <button class="krd-tab is-active" id="tabDocAll" role="tab" aria-selected="true" onclick="switchDocTab('all')">Все документы</button>
+            <button class="krd-tab" id="tabDocIncoming" role="tab" aria-selected="false" onclick="switchDocTab('incoming')">Входящие документы</button>
             <button class="krd-tab" id="tabDocOutgoing" role="tab" aria-selected="false" onclick="switchDocTab('outgoing')">Исходящие документы</button>
             <button class="krd-tab" id="tabDocInternal" role="tab" aria-selected="false" onclick="switchDocTab('internal')">Документы компании</button>
             <button class="krd-tab" id="tabDocDrafts" role="tab" aria-selected="false" onclick="switchDocTab('drafts')">Не закончено</button>
@@ -68,8 +69,8 @@
     <section class="krd-card krd-card--flush documents-registry-card">
         <header class="krd-card__head">
             <div>
-                <h2 class="krd-card__title" id="documentsRegistryTitle">Входящие документы</h2>
-                <p class="krd-card__subtitle" id="documentsRegistryHint">Всё, что компания получила от клиентов, поставщиков и организаций.</p>
+                <h2 class="krd-card__title" id="documentsRegistryTitle">Все документы</h2>
+                <p class="krd-card__subtitle" id="documentsRegistryHint">Полный реестр входящих, исходящих и внутренних документов компании.</p>
             </div>
             <label class="documents-select-all-label">
                 <input id="documentsSelectAllCheckbox" type="checkbox" onchange="toggleAllDocumentsOnPage(this.checked)">

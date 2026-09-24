@@ -18,13 +18,6 @@ SECRETARY_ROLE = "Секретарь / Канцелярия"
 
 CANONICAL_ROLES = [
     DIRECTOR_ROLE,
-    MANAGER_ROLE,
-    ENGINEERING_ROLE,
-    PRODUCTION_ROLE,
-    WAREHOUSE_ROLE,
-    ACCOUNTING_ROLE,
-    LEGAL_ROLE,
-    SECRETARY_ROLE,
     EMPLOYEE_ROLE,
 ]
 
@@ -254,8 +247,20 @@ def _canonical_role_name(role: str) -> str:
     normalized = _normalize_text(role)
     if not normalized:
         return ""
-    if normalized in PERMISSION_MATRIX:
-        return normalized
+    if normalized == DIRECTOR_ROLE:
+        return DIRECTOR_ROLE
+    if normalized in {
+        EMPLOYEE_ROLE,
+        MANAGER_ROLE,
+        ENGINEERING_ROLE,
+        PRODUCTION_ROLE,
+        WAREHOUSE_ROLE,
+        ACCOUNTING_ROLE,
+        LEGAL_ROLE,
+        SECRETARY_ROLE,
+        "Администратор",
+    }:
+        return EMPLOYEE_ROLE
 
     candidates = {
         normalized,
@@ -269,7 +274,11 @@ def _canonical_role_name(role: str) -> str:
     for candidate in normalized_candidates:
         if candidate in canonical_index:
             return canonical_index[candidate]
-    return normalized
+    return EMPLOYEE_ROLE
+
+
+def normalize_user_role(role: str) -> str:
+    return _canonical_role_name(role)
 
 
 def require_approved_user(request):
@@ -292,6 +301,14 @@ def has_permission(user: dict, module: str, action: str) -> bool:
     if not user:
         return False
     role = _canonical_role_name(user.get("role", ""))
+    if role == DIRECTOR_ROLE:
+        permissions = PERMISSION_MATRIX.get(DIRECTOR_ROLE, {})
+        allowed_actions = permissions.get(module, [])
+        return action in allowed_actions
+    if role == EMPLOYEE_ROLE:
+        if module in {"users", "system", "executive"}:
+            return False
+        return True
     permissions = PERMISSION_MATRIX.get(role, {})
     allowed_actions = permissions.get(module, [])
     return action in allowed_actions
@@ -307,7 +324,7 @@ def can_access_project(user: dict, project: dict) -> bool:
     manager_name = project.get("manager", "")
     allowed_roles = [_canonical_role_name(item) for item in (project.get("allowed_roles") or [])]
     checked = project.get("checkedState") or {}
-    if user_role == DIRECTOR_ROLE:
+    if user_role in {DIRECTOR_ROLE, EMPLOYEE_ROLE}:
         return True
     if user_name == manager_name or user_name in team:
         return True
@@ -330,7 +347,7 @@ def can_edit_project(user: dict, project: dict) -> bool:
     if not can_access_project(user, project):
         return False
     role = _canonical_role_name((user or {}).get("role", ""))
-    if role == DIRECTOR_ROLE:
+    if role in {DIRECTOR_ROLE, EMPLOYEE_ROLE}:
         return True
     if user.get("name") == project.get("manager"):
         return True
@@ -378,7 +395,7 @@ def get_user_scope_ids(user: dict):
 def can_access_scope(user: dict, legal_entity_id: int = 0, business_unit_id: int = 0) -> bool:
     if not user:
         return False
-    if _canonical_role_name(user.get("role", "")) == DIRECTOR_ROLE:
+    if _canonical_role_name(user.get("role", "")) in {DIRECTOR_ROLE, EMPLOYEE_ROLE}:
         return True
     legal_entity_id = int(legal_entity_id or 0)
     business_unit_id = int(business_unit_id or 0)
@@ -407,7 +424,11 @@ def filter_rows_by_scope(user: dict, rows: list[dict], legal_field: str = "legal
 
 def get_role_permissions(user: dict):
     role = _canonical_role_name((user or {}).get("role", ""))
-    permissions = PERMISSION_MATRIX.get(role, {})
+    permissions = PERMISSION_MATRIX.get(DIRECTOR_ROLE, {}) if role == DIRECTOR_ROLE else {
+        module: list(actions)
+        for module, actions in PERMISSION_MATRIX.get(DIRECTOR_ROLE, {}).items()
+        if module not in {"users", "system", "executive"}
+    }
     scope = get_user_scope_ids(user)
     field_rules = get_field_access_rules(role=role, is_active=1)
     field_policy_map = build_field_policy_map(field_rules)

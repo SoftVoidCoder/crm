@@ -15,6 +15,7 @@ let fieldSecurityRulesDB = [];
 let currentUser2faDB = null;
 let employeeSelfServiceDB = null;
 let employeeSelfServiceLoadedFor = '';
+const ACCOUNT_ROLE_OPTIONS = ['Сотрудник', 'Директор'];
 
 function hasDirectorWorkbenchAccess() {
     if (!currentUser) return false;
@@ -784,198 +785,28 @@ function renderKPI() {
 
 function renderProfile() {
     try {
-    let completedTasks = 0; let upcomingDeadlines = 0;
-    const today = new Date(); today.setHours(0,0,0,0);
-    const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 7);
-
-    projectsDB.forEach(p => {
-        if (p.checkedState) { 
-            Object.keys(p.checkedState).forEach(k => { 
-                if (p.checkedState[k].includes(currentUser.name)) completedTasks++; 
-            }); 
-        }        
-        if (p.status === 'active') {
-            if (p.checklist) p.checklist.forEach((sec, sIdx) => {
-                const responsibles = Array.isArray(sec?.responsibles) ? sec.responsibles : [];
-                if (responsibles.includes(currentUser.role) && p.deadlines && p.deadlines[sIdx]) {
-                    const pts = p.deadlines[sIdx].split('.');
-                    if (pts.length === 3) {
-                        const dDate = new Date(pts[2], pts[1]-1, pts[0]);
-                        if (dDate >= today && dDate <= nextWeek) upcomingDeadlines++;
-                        else if (dDate < today) {
-                            let secOk = true;
-                            for (let t = 0; t < sec.tasks.length; t++) { 
-                                if (!p.checkedState || !p.checkedState[`task_${sIdx}_${t}`] || p.checkedState[`task_${sIdx}_${t}`].startsWith('🟡')) secOk = false; 
-                            }
-                            if (!secOk) upcomingDeadlines++; 
-                        }
-                    }
-                }
-            });
-        }
-    });
-
-    const elTasks = document.getElementById('profCompletedTasks'); if(elTasks) elTasks.innerText = completedTasks;
-    const elDeadlines = document.getElementById('profUpcomingDeadlines'); if(elDeadlines) elDeadlines.innerText = upcomingDeadlines;
     const heroMount = document.getElementById('profileHeroMount');
-    
-    const uData = allUsersDB.find(x => x.email === currentUser.email);
-    const vType = document.getElementById('absType');
-    const vStart = document.getElementById('absStart');
-    const vEnd = document.getElementById('absEnd');
-    const vReason = document.getElementById('absReason');
-    const vDep = document.getElementById('vacationDeputy');
-    
-    if (vType && vStart && vEnd && vReason && vDep && uData) {
-        if (typeof flatpickr === 'function') {
-            flatpickr("#absStart", { locale: "ru", dateFormat: "d.m.Y" });
-            flatpickr("#absEnd", { locale: "ru", dateFormat: "d.m.Y" });
-        }
-        
-        if(vStart._flatpickr) vStart._flatpickr.setDate(uData.abs_start || ''); else vStart.value = uData.abs_start || '';
-        if(vEnd._flatpickr) vEnd._flatpickr.setDate(uData.abs_end || ''); else vEnd.value = uData.abs_end || '';
-        
-        let cleanAbsType = uData.abs_type ? uData.abs_type.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '').replace(/❓/g, '').replace(/✈️/g, '').trim() : 'Отпуск';
-        vType.value = cleanAbsType || 'Отпуск';
-        vReason.value = uData.abs_reason || '';
-        
-        let opts = '<option value="">Без заместителя</option>';
-        allUsersDB.filter(x => x.email !== currentUser.email && x.status === 'approved').forEach(x => {
-            opts += `<option value="${x.name}" ${uData.deputy === x.name ? 'selected' : ''}>${x.name} (${x.role})</option>`;
-        });
-        vDep.innerHTML = opts;
-    }
     if (heroMount && currentUser) {
-        const initials = (currentUser.name || '?').split(' ').map(item => item[0]).slice(0, 2).join('').toUpperCase() || '?';
-        const has2fa = Number(currentUser.two_factor_enabled || 0) === 1;
-        const deputy = uData?.deputy || 'не назначен';
-        const absence = uData?.abs_start && uData?.abs_end
-            ? `${uData.abs_type || 'Отсутствие'} · ${uData.abs_start} — ${uData.abs_end}`
-            : 'Отсутствия не задано';
+        const initials = profileEscape((currentUser.name || currentUser.email || '?').split(/\s+/).map(item => item[0]).slice(0, 2).join('').toUpperCase() || '?');
+        const displayName = profileEscape(currentUser.name || currentUser.email || 'Пользователь');
+        const email = profileEscape(currentUser.email || '');
+        const role = profileEscape(currentUser.role || 'Сотрудник');
         heroMount.innerHTML = `
             <section class="surface-card surface-card--padded profile-hero-card">
                 <div class="profile-hero-main">
                     <div class="profile-hero-avatar">${initials}</div>
                     <div>
-                        <div class="profile-hero-eyebrow">${currentUser.role === 'Директор' ? 'Кабинет директора' : 'Личный рабочий кабинет'}</div>
-                        <h2 class="profile-hero-title">${currentUser.name || currentUser.email}</h2>
-                        <p class="profile-hero-text">${currentUser.role || 'Сотрудник'} · ${currentUser.email || ''}</p>
+                        <div class="profile-hero-eyebrow">${role}</div>
+                        <h2 class="profile-hero-title">${displayName}</h2>
+                        <p class="profile-hero-text">${email}</p>
                         <div class="profile-hero-chips">
-                            <span class="profile-hero-chip">${has2fa ? 'Двухфакторная защита включена' : 'Двухфакторная защита выключена'}</span>
-                            <span class="profile-hero-chip">${currentUser.is_head === 1 ? 'Руководитель' : 'Личный кабинет'}</span>
-                            <span class="profile-hero-chip">${absence}</span>
+                            <span class="profile-hero-chip">Почта пользователя</span>
                         </div>
-                    </div>
-                </div>
-                <div class="profile-hero-side">
-                    <div class="profile-hero-side-item">
-                        <div class="profile-hero-side-label">Замещение</div>
-                        <div class="profile-hero-side-value">${deputy}</div>
-                    </div>
-                    <div class="profile-hero-side-item">
-                        <div class="profile-hero-side-label">Задач закрыто</div>
-                        <div class="profile-hero-side-value">${completedTasks}</div>
-                    </div>
-                    <div class="profile-hero-side-item">
-                        <div class="profile-hero-side-label">Ближайшие дедлайны</div>
-                        <div class="profile-hero-side-value">${upcomingDeadlines}</div>
                     </div>
                 </div>
             </section>
         `;
     }
-    
-    const dBlock = document.getElementById('directorUsersBlock');
-    const tabsBlock = document.getElementById('directorProfileTabsBlock');
-    if (tabsBlock) {
-        tabsBlock.style.display = hasDirectorWorkbenchAccess() ? 'block' : 'none';
-    }
-    if (dBlock) {
-        if (hasDirectorWorkbenchAccess()) {
-            dBlock.style.display = currentDirectorProfileTab === 'users' ? 'block' : 'none';
-            document.getElementById('totalUsersCount').innerText = allUsersDB.length;
-            
-            let filteredUsers = allUsersDB.filter(u => currentUsersTab === 'active' ? u.status !== 'banned' : u.status === 'banned');
-            if (currentRoleFilter) filteredUsers = filteredUsers.filter(u => u.role === currentRoleFilter);
-            if (currentProfileUserSearch) {
-                filteredUsers = filteredUsers.filter(u => [u.name, u.email, u.role].some(value => String(value || '').toLocaleLowerCase('ru').includes(currentProfileUserSearch)));
-            }
-
-            const searchInput = document.getElementById('profileUserSearch');
-            if (searchInput && searchInput.value !== currentProfileUserSearch) searchInput.value = currentProfileUserSearch;
-            const roleSelect = document.getElementById('profileUserRoleFilter');
-            if (roleSelect && roleSelect.value !== currentRoleFilter) roleSelect.value = currentRoleFilter;
-
-            const uHtml = filteredUsers.map(u => {
-                const emailJs = String(u.email || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                const roleJs = String(u.role || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                const initials = String(u.name || u.email || '?').split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase();
-                const statusLabel = u.status === 'approved' ? 'Активен' : u.status === 'banned' ? 'Заблокирован' : 'Ожидает подтверждения';
-                const statusClass = u.status === 'approved' ? 'status-completed' : u.status === 'banned' ? 'status-overdue' : 'status-active';
-                const roleLabel = u.role || 'Роль не назначена';
-                const headBadge = Number(u.is_head || 0) === 1 && u.role !== 'Директор' ? '<span class="profile-team-tag">Руководитель</span>' : '';
-                const securityLabel = `${u.has_password ? 'Пароль задан' : 'Пароль не задан'}${Number(u.two_factor_enabled || 0) === 1 ? ' · 2FA включена' : ''}`;
-                const companies = (u.allowed_legal_entities || []).length ? `выбрано ${(u.allowed_legal_entities || []).length}` : 'все';
-                const units = (u.allowed_business_units || []).length ? `выбрано ${(u.allowed_business_units || []).length}` : 'все';
-                const scopeSummary = `Компании: ${companies} · Подразделения: ${units}`;
-                const absence = isUserAbsentOrUpcoming(u)
-                    ? `<div class="profile-team-absence">${profileEscape(u.abs_type || 'Отсутствие')} · до ${profileEscape(u.abs_end || '')}${u.deputy ? ` · замещает ${profileEscape(u.deputy)}` : ''}</div>`
-                    : '';
-
-                let actions = '<span class="profile-team-self">Ваш аккаунт</span>';
-                if (u.email !== currentUser.email && u.status === 'banned') {
-                    actions = `<button class="btn-primary" onclick="restoreUser('${emailJs}')">Вернуть доступ</button>`;
-                } else if (u.email !== currentUser.email) {
-                    actions = `
-                        <button class="btn-secondary" onclick="changeUserRole('${emailJs}', '${roleJs}')">Изменить роль</button>
-                        <button class="btn-secondary" onclick="changeUserAccessScope('${emailJs}')">Настроить доступ</button>
-                        <details class="profile-team-more">
-                            <summary>Ещё</summary>
-                            <div class="profile-team-more__menu">
-                                <button type="button" onclick="toggleHeadStatus('${emailJs}', ${Number(u.is_head || 0) === 1 ? 0 : 1})">${Number(u.is_head || 0) === 1 ? 'Снять права руководителя' : 'Назначить руководителем'}</button>
-                                <button type="button" class="is-danger" onclick="removeUser('${emailJs}')">Заблокировать доступ</button>
-                            </div>
-                        </details>`;
-                }
-
-                return `
-                    <article class="profile-team-card">
-                        <div class="profile-team-person">
-                            <span class="profile-team-avatar">${profileEscape(initials)}</span>
-                            <span class="profile-team-person__copy">
-                                <strong>${profileEscape(u.name || 'Без имени')}</strong>
-                                <small>${profileEscape(u.email || '')}</small>
-                                ${absence}
-                            </span>
-                        </div>
-                        <div class="profile-team-role">
-                            <span class="profile-team-label">Роль</span>
-                            <strong>${profileEscape(roleLabel)}</strong>
-                            ${headBadge}
-                        </div>
-                        <div class="profile-team-state">
-                            <span class="status-badge ${statusClass}">${statusLabel}</span>
-                            <small>${profileEscape(securityLabel)}</small>
-                            <small>${profileEscape(scopeSummary)}</small>
-                        </div>
-                        <div class="profile-team-actions">${actions}</div>
-                    </article>`;
-            }).join('');
-            const tBody = document.getElementById('allUsersListTable');
-            if (tBody) tBody.innerHTML = uHtml || '<div class="empty-state">Сотрудники по выбранным условиям не найдены.</div>';
-        } else {
-            dBlock.style.display = 'none';
-        }
-    }
-    renderSecurityOpsPanel();
-    renderCurrentUser2FA();
-    renderEmployeeSelfServicePanel();
-    const selfServiceBlock = document.getElementById('profileSelfServiceBlock');
-    if (selfServiceBlock) selfServiceBlock.style.display = canShowEmployeeSelfService() ? 'block' : 'none';
-    if (hasDirectorWorkbenchAccess()) {
-        loadSecurityOps().then(() => renderSecurityOpsPanel());
-    }
-    applyDirectorProfileTabState();
     } catch (error) {
         console.error('renderProfile error', error);
         const heroMount = document.getElementById('profileHeroMount');
@@ -1612,7 +1443,7 @@ async function changeUserRole(email, currentRole) {
     const user = (allUsersDB || []).find(item => item.email === email);
     if (!modal || !emailInput || !select) return;
 
-    const roles = availableRoles.filter(role => role !== 'Директор');
+    const roles = ACCOUNT_ROLE_OPTIONS;
     select.innerHTML = roles.map(role => `<option value="${profileUiEscape(role)}" ${role === currentRole ? 'selected' : ''}>${profileUiEscape(role)}</option>`).join('');
     emailInput.value = email;
     select.dataset.currentRole = currentRole || '';
@@ -2118,7 +1949,7 @@ async function openAdminPanelLogic() {
     const users = Array.isArray(pendingResponse) ? pendingResponse : [];
     if (!Array.isArray(allUsersDB) || !allUsersDB.length) await loadAllUsers();
     const tbody = document.getElementById('adminUsersList'); if(!tbody) return;
-    const opts = availableRoles.map(r => `<option value="${r}">${r}</option>`).join(''); 
+    const opts = ACCOUNT_ROLE_OPTIONS.map(r => `<option value="${r}">${r}</option>`).join('');
     tbody.innerHTML = users.length ? users.map((u, i) => `<tr>
         <td><strong>${profileUiEscape(u.name || 'Без имени')}</strong></td>
         <td>${profileUiEscape(u.email || '')}</td>
@@ -2161,9 +1992,9 @@ function renderAdminTeamList() {
         .filter(user => !query || [user.name, user.email, user.role].some(value => String(value || '').toLocaleLowerCase('ru').includes(query)))
         .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ru'));
     tbody.innerHTML = rows.length ? rows.map(user => {
-        const isDirector = user.role === 'Директор';
+        const isCurrentAccount = user.email === currentUser?.email;
         const headLabel = Number(user.is_head || 0) === 1 ? '<span class="status-badge status-badge--info">Руководитель</span>' : '';
-        const actions = isDirector ? '<span class="admin-protected-label">Основной аккаунт</span>' : `
+        const actions = isCurrentAccount ? '<span class="admin-protected-label">Ваш аккаунт</span>' : `
             <button class="btn-secondary btn-compact" onclick="changeUserRole('${user.email}', '${profileUiEscape(user.role || '')}')">Сменить роль</button>
             <button class="btn-secondary btn-compact" onclick="toggleHeadStatus('${user.email}', ${Number(user.is_head || 0) === 1 ? 0 : 1})">${Number(user.is_head || 0) === 1 ? 'Снять руководство' : 'Назначить руководителем'}</button>`;
         return `<tr>
@@ -2186,8 +2017,7 @@ function openInviteEmployeeModal() {
     const modal = document.getElementById('inviteEmployeeModal');
     const role = document.getElementById('inviteEmployeeRole');
     if (!modal || !role) return;
-    role.innerHTML = '<option value="">Выберите роль</option>' + availableRoles
-        .filter(item => item !== 'Директор')
+    role.innerHTML = '<option value="">Выберите роль</option>' + ACCOUNT_ROLE_OPTIONS
         .map(item => `<option value="${item}">${item}</option>`).join('');
     document.getElementById('inviteEmployeeName').value = '';
     document.getElementById('inviteEmployeeEmail').value = '';

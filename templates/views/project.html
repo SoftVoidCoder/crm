@@ -72,7 +72,6 @@
             <summary>Команда и права доступа</summary>
             <div class="project-edit-access-grid">
                 <div><h3>Рабочая группа</h3><div id="projTeam" class="project-team-box"></div></div>
-                <div><h3>Роли с доступом</h3><div id="editProjRoles"></div></div>
             </div>
         </details>
         <div class="project-edit-actions">
@@ -128,13 +127,6 @@
             </div>
         </div>
         <div id="projectFilesList" class="project-files-list krd-file-list"></div>
-        <details class="project-compact-details no-print">
-            <summary>Другие действия с документами</summary>
-            <div class="project-compact-details__actions">
-                <button class="btn-secondary" type="button" onclick="generateContractDoc()">Сформировать договор</button>
-                <button class="btn-secondary" type="button" onclick="request1CInvoice()">Запросить счёт в 1С</button>
-            </div>
-        </details>
     </section>
 
     <section class="project-workspace-panel" data-project-panel="execution">
@@ -158,27 +150,7 @@
             </details>
         </div>
 
-        <details class="project-advanced-tools no-print">
-            <summary><strong>Дополнительные возможности</strong><span>Портал заказчика и проверка договора — открывайте только при необходимости</span></summary>
-            <div class="project-advanced-tools__body">
-                <div class="project-advanced-card">
-                    <div class="project-advanced-card__head"><span>1</span><div><h3>Портал заказчика</h3><p>Создайте безопасную ссылку, чтобы клиент видел статус и файлы.</p></div></div>
-                    <input type="text" id="guestPortalLink" class="auth-input" readonly placeholder="Ссылка ещё не создана">
-                    <div class="project-compact-details__actions"><button class="btn-secondary" type="button" onclick="generateGuestPortalLink()">Создать ссылку</button><button class="btn-secondary" type="button" onclick="copyGuestPortalLink()">Копировать</button><button class="btn-secondary" type="button" onclick="openGuestPortal()">Открыть</button></div>
-                </div>
-                <div class="project-advanced-card">
-                    <div class="project-advanced-card__head"><span>2</span><div><h3>Проверка договора</h3><p>Вставьте спорный пункт и получите подсказку по рискам.</p></div></div>
-                    <textarea id="contractScanInput" class="auth-input" rows="4" placeholder="Вставьте текст спорного условия"></textarea>
-                    <button class="btn-secondary" type="button" onclick="runContractRiskScan()">Проверить</button>
-                    <div id="contractScanResult" class="smart-tool-result"></div>
-                </div>
-                <div class="project-advanced-card">
-                    <div class="project-advanced-card__head"><span>3</span><div><h3>Источник проекта</h3><p>Информация о тендере или другом источнике проекта.</p></div></div>
-                    <div id="tenderSourceCard" class="smart-tool-result smart-tool-result--plain"></div>
-                </div>
-            </div>
-            <div id="projectOpsSummary" class="krd-is-hidden"></div>
-        </details>
+        <div id="projectOpsSummary" class="krd-is-hidden"></div>
         <input type="hidden" id="arcFolder"><input type="hidden" id="arcRack"><input type="hidden" id="arcDate">
         <div id="finalBlock" class="krd-is-hidden"><button id="btnArchiveFinal" type="button" class="krd-is-hidden"></button></div>
     </section>

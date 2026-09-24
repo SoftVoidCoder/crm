@@ -2,20 +2,17 @@
     <div class="surface-card surface-card--padded crm-workspace-shell bitrix-import-page">
         <div class="view-header">
             <div class="view-heading">
-                <span class="view-eyebrow">CRM / Bitrix24</span>
-                <h1 class="view-title">Выгрузка клиентов из Bitrix24</h1>
-                <p class="view-subtitle">Отдельный экран для загрузки базы из Bitrix24, поиска конкретного клиента и обновления новых записей без дублей.</p>
-            </div>
-            <div class="view-actions">
-                <button class="btn-secondary" onclick="navigateTo('prospecting')">К базе развития</button>
+                <span class="view-eyebrow">Клиенты</span>
+                <h1 class="view-title">Загрузка клиентов</h1>
+                <p class="view-subtitle">Отдельный экран для загрузки клиентской базы, поиска конкретного клиента и обновления новых записей без дублей.</p>
             </div>
         </div>
 
         <section id="bitrixConnectionPanel" class="surface-card prospecting-panel bitrix-connection-panel">
             <div class="bitrix-connection-panel__head">
                 <div>
-                    <span class="view-eyebrow">Подключение</span>
-                    <h3 class="section-title">Связь с Bitrix24</h3>
+                    <span class="view-eyebrow">Источник клиентов</span>
+                    <h3 class="section-title">Подключение источника</h3>
                     <p class="section-subtitle">Сохранённое подключение используется для поиска и загрузки клиентов.</p>
                 </div>
                 <div id="bitrixConnectionStatus" class="bitrix-connection-status"></div>
@@ -36,7 +33,7 @@
         <section class="surface-card prospecting-panel bitrix-import-control">
             <div class="section-header">
                 <div>
-                    <h3 class="section-title">Загрузка из Bitrix24</h3>
+                    <h3 class="section-title">Загрузка клиентов</h3>
                     <p class="section-subtitle">Выбери объём, нажми выгрузку или найди одного клиента по названию, телефону или email.</p>
                 </div>
             </div>
@@ -70,9 +67,9 @@
                 </div>
             </div>
             <div class="bitrix-import-action-grid">
-                <div><strong>1. Выгрузить</strong><span>Менеджер загружает новые компании, контакты и лиды из Bitrix24 без дублей.</span></div>
-                <div><strong>2. Забрать</strong><span>В «Базе развития» менеджер нажимает «Забрать себе». Клиент сразу исчезает у коллег.</span></div>
-                <div><strong>3. Работать</strong><span>В разделе «Мои клиенты» менеджер фиксирует контакты, следующий шаг и перевод в лид.</span></div>
+                <div><strong>1. Загрузить</strong><span>Новые компании, контакты и лиды попадают в базу без дублей.</span></div>
+                <div><strong>2. Проверить</strong><span>Сотрудник сверяет данные клиента и при необходимости обновляет карточку.</span></div>
+                <div><strong>3. Связать</strong><span>Клиента можно использовать в проекте, договоре и документах.</span></div>
             </div>
         </section>
     </div>

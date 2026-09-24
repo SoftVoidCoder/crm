@@ -225,7 +225,7 @@ function createNewProject() {
     
     const tDiv = document.getElementById('newProjTeam');
     if(tDiv) {
-        tDiv.innerHTML = allUsersDB.filter(u => u.role !== 'Директор').map(u => 
+        tDiv.innerHTML = allUsersDB.filter(u => u.status === 'approved' && u.name).map(u =>
             `<label style="display:flex; gap:8px; align-items:center; margin-bottom:6px; cursor:pointer;"><input type="checkbox" value="${u.name}" class="team-cb-new"> <b>${u.name}</b> <span style="color:var(--secondary)">(${u.role})</span></label>`
         ).join('');
     }
@@ -241,8 +241,6 @@ function createNewProject() {
     const nameInput = document.getElementById('newProjName'); if (nameInput) nameInput.value = '';
     const managerInput = document.getElementById('newProjManager'); if (managerInput) managerInput.value = currentUser?.name || '';
     const budgetInput = document.getElementById('newProjBudget'); if (budgetInput) budgetInput.value = '';
-
-    ProjectRolesManager.renderSelector('newProjRoles', []);
 
     const emptyChecklist = document.getElementById('isEmptyChecklist');
     if (emptyChecklist) emptyChecklist.checked = false;
@@ -284,8 +282,6 @@ async function submitNewProject(event) {
         dynamicChecklist = [];
     }
 
-    const allowed_roles = ProjectRolesManager.getSelected('newProjRoles');
-
     const created = await apiCall('/projects', 'POST', {
         name: name, 
         contract: contract, 
@@ -294,7 +290,7 @@ async function submitNewProject(event) {
         budget: budget, 
         team: team, 
         checklist: dynamicChecklist, 
-        allowed_roles: allowed_roles 
+        allowed_roles: []
     });
     
     closeCreateModal();
@@ -408,15 +404,13 @@ function openProject(id) {
     
     const tDiv = document.getElementById('projTeam');
     if(tDiv) {
-        tDiv.innerHTML = allUsersDB.filter(u => u.role !== 'Директор').map(u => {
+        tDiv.innerHTML = allUsersDB.filter(u => u.status === 'approved' && u.name).map(u => {
             const isChecked = p.team && p.team.includes(u.name) ? 'checked' : '';
             return `<label style="display:flex; gap:8px; align-items:center; margin-bottom:6px; cursor:pointer;"><input type="checkbox" value="${u.name}" class="team-cb-edit" ${isChecked}> <b>${u.name}</b> <span style="color:var(--secondary)">(${u.role})</span></label>`;
         }).join('');
     }
     
-    ProjectRolesManager.renderSelector('editProjRoles', p.allowed_roles || []);
-
-    document.querySelectorAll('.finance-block').forEach(el => el.style.display = ['Директор', 'Бухгалтерия', 'Менеджер'].includes(currentUser.role) ? 'flex' : 'none');
+    document.querySelectorAll('.finance-block').forEach(el => el.style.display = 'flex');
     
     // Редкие договорные действия больше не смешиваются с ежедневной работой.
     const btnContainer = document.getElementById('projectToolbarStatusActions');
@@ -440,8 +434,6 @@ function openProject(id) {
         });
     }
     calcMargin();
-    if (typeof renderProjectSmartTools === 'function') renderProjectSmartTools();
-    if (typeof renderProjectOpsSummary === 'function') renderProjectOpsSummary();
     renderProjectSummaryCard();
     setProjectEditMode(false);
     switchProjectWorkspaceTab('overview', false);
@@ -528,11 +520,7 @@ async function saveProjectInfo() {
     const newTeam = Array.from(teamCbs).map(cb => cb.value);
     if(JSON.stringify(p.team || []) !== JSON.stringify(newTeam)) { appendLog(`Изменил состав Рабочей группы (приватность)`); p.team = newTeam; }
     
-    const newRoles = ProjectRolesManager.getSelected('editProjRoles');
-    if(JSON.stringify(p.allowed_roles || []) !== JSON.stringify(newRoles)) { 
-        appendLog(`Изменил доступы по ролям`); 
-        p.allowed_roles = newRoles; 
-    }
+    p.allowed_roles = [];
     
     const pBudget = document.getElementById('projBudget');
     const newB = pBudget ? (parseFloat(pBudget.value) || 0) : 0;
@@ -546,7 +534,6 @@ async function saveProjectInfo() {
     if (typeof syncCurrentProjectContractMaster === 'function') {
         await syncCurrentProjectContractMaster(false);
     }
-    if (typeof renderProjectSmartTools === 'function') renderProjectSmartTools();
     renderProjectSummaryCard();
     setProjectEditMode(false);
     showToast("Система", "Данные проекта успешно сохранены");

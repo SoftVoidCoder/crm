@@ -11,12 +11,39 @@ function clearDepartmentFilter(doRender = true) {
         titleEl.innerText = "ВСЕ ПРОЕКТЫ";
     }
     
-    if (doRender) renderDashboard();
+    if (doRender) safeRenderView('dashboard', window.renderDashboard);
 }
 
 window.__navHistory = window.__navHistory || [];
 window.__navCurrentView = window.__navCurrentView || '';
 const MOBILE_WORKSPACE_MAX_WIDTH = 768;
+const DISABLED_LEGACY_VIEWS = new Set([
+    'tasks',
+    'knowledge',
+    'messenger',
+    'meetings',
+    'finance',
+    'accounting',
+    'integrations',
+    'supply',
+    'sales',
+    'production',
+    'expenses',
+    'requests',
+    'resources',
+    'service',
+    'executive',
+    'operations',
+    'prospecting',
+    'myProspecting',
+    'leads',
+    'deals',
+    'client360',
+    'nomenclature',
+    'contacts',
+    'kpi',
+    'profile',
+]);
 
 function isMobileWorkspaceMode() {
     return window.matchMedia(`(max-width: ${MOBILE_WORKSPACE_MAX_WIDTH}px)`).matches;
@@ -74,10 +101,62 @@ const VIEW_NAV_MAP = {
     admin: 'adminBtn',
 };
 
+const ACTIVE_VIEW_IDS = [
+    'dashboardView',
+    'adminView',
+    'projectView',
+    'clientsView',
+    'bitrixImportView',
+    'approvalsView',
+    'documentsView',
+    'claimsView',
+    'emailsView',
+    'contract360View',
+];
+
+const ACTIVE_VIEW_RENDERERS = {
+    dashboard: () => safeRenderView('dashboard', window.renderDashboard),
+    approvals: () => safeRenderView('approvals', window.renderApprovals),
+    clients: () => safeRenderView('clients', window.renderClients),
+    bitrixImport: () => {
+        safeRenderView('bitrixImport', window.renderBitrixImport);
+    },
+    contract360: () => {
+        safeRenderView('contract360', window.renderContract360);
+    },
+    claims: () => {
+        if (window.currentLegalTab === 'courts') safeRenderView('claims', window.renderCourts);
+        else safeRenderView('claims', window.renderClaims);
+    },
+    documents: () => {
+        safeRenderView('documents', window.renderDocuments);
+        if (typeof ensureDocumentClientSources === 'function') {
+            ensureDocumentClientSources().then(() => {
+                if (document.getElementById('documentsView')?.style.display === 'block') safeRenderView('documents', window.renderDocuments);
+            });
+        }
+    },
+    emails: () => safeRenderView('emails', window.renderEmails),
+    admin: () => safeRenderView('admin', window.openAdminPanelLogic),
+};
+
+function safeRenderView(view, renderer) {
+    if (typeof renderer !== 'function') return;
+    try {
+        renderer();
+    } catch (error) {
+        console.error(`Failed to render ${view}`, error);
+        if (typeof showToast === 'function') {
+            showToast('Раздел не открылся', 'Обнови страницу и попробуй ещё раз. Ошибка записана в консоль.', 'error');
+        }
+    }
+}
+
 function canAccessViewForCurrentRole(view) {
     if (!currentUser || currentUser.status !== 'approved') return false;
     const target = String(view || '').trim();
     if (!target) return false;
+    if (DISABLED_LEGACY_VIEWS.has(target)) return false;
     const config = typeof getRoleUiConfig === 'function' ? getRoleUiConfig(currentUser.role) : null;
     if (!config) return true;
     const navId = VIEW_NAV_MAP[target];
@@ -88,8 +167,8 @@ function canAccessViewForCurrentRole(view) {
 
 function getSafeRoleLandingView() {
     const landing = typeof getRoleLandingView === 'function' ? getRoleLandingView() : 'dashboard';
-    if (canAccessViewForCurrentRole(landing)) return landing;
-    return canAccessViewForCurrentRole('dashboard') ? 'dashboard' : 'profile';
+    if (!DISABLED_LEGACY_VIEWS.has(landing) && canAccessViewForCurrentRole(landing)) return landing;
+    return canAccessViewForCurrentRole('dashboard') ? 'dashboard' : 'documents';
 }
 
 window.canAccessViewForCurrentRole = canAccessViewForCurrentRole;
@@ -132,13 +211,7 @@ function filterByDepartment(role, el) {
     const titleEl = document.getElementById('dashboardTitle'); 
     if (titleEl) titleEl.innerText = `ВХОДЯЩИЕ: ${role.toUpperCase()}`;
     
-    const viewsToHide = [
-        'analyticsView', 'adminView', 'projectView', 'clientsView', 'bitrixImportView', 'prospectingView', 'myProspectingView', 'leadsView', 'dealsView',
-        'profileView', 'emailsView', 'meetingsView', 'messengerView', 
-        'tasksView', 'knowledgeView', 'approvalsView', 'documentsView', 'claimsView', 'kpiView',
-        'nomenclatureView', 'contactsView', 'financeView', 'accountingView', 'integrationsView', 'client360View', 'contract360View', 'supplyView', 'salesView', 'productionView', 'expensesView', 'requestsView', 'resourcesView', 'serviceView', 'executiveView', 'operationsView'
-    ];
-    viewsToHide.forEach(v => {
+    ACTIVE_VIEW_IDS.forEach(v => {
         const viewEl = document.getElementById(v);
         if (viewEl) viewEl.style.display = 'none';
     });
@@ -149,7 +222,7 @@ function filterByDepartment(role, el) {
         dashView.classList.add('fade-in');
     }
     scrollMainContentToTop();
-    renderDashboard();
+    safeRenderView('dashboard', window.renderDashboard);
 }
 
 function navigateTo(view, triggerRender = true) {
@@ -186,228 +259,19 @@ function navigateTo(view, triggerRender = true) {
     window.__navCurrentView = nextView;
     if (nextView) localStorage.setItem('korda_last_view', nextView);
 
-    // 1. Скрываем вообще все экраны
-    const views = [
-        'dashboardView', 'analyticsView', 'adminView', 'projectView', 
-        'clientsView', 'bitrixImportView', 'prospectingView', 'myProspectingView', 'leadsView', 'dealsView', 'profileView', 'emailsView', 'meetingsView',
-        'messengerView', 'tasksView', 'knowledgeView', 'approvalsView', 
-        'documentsView', 'claimsView', 'kpiView', 'nomenclatureView', 'contactsView', 'financeView', 'accountingView', 'integrationsView', 'client360View', 'contract360View', 'supplyView', 'salesView', 'productionView', 'expensesView', 'requestsView', 'resourcesView', 'serviceView', 'executiveView', 'operationsView'
-    ];
-    views.forEach(v => {
+    ACTIVE_VIEW_IDS.forEach(v => {
         const el = document.getElementById(v);
         if(el) { el.style.display = 'none'; el.classList.remove('fade-in'); }
     });
 
-    // 2. Снимаем выделение (подсветку) со всех пунктов левого меню
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
 
-    // 3. Выполняем логику и подсвечиваем нужный пункт меню
-    if (nextView === 'tasks') { 
-        const nav = document.getElementById('navTasks'); 
-        if(nav) nav.classList.add('active'); 
-        renderTasks(); 
-    } 
-    else if (nextView === 'messenger') { 
-        const nav = document.getElementById('navMessenger'); 
-        if(nav) nav.classList.add('active'); 
-        if (typeof messengerSwitchTab === 'function') messengerSwitchTab('chats');
-        else loadGlobalChats(); 
-    }
-    else if (nextView === 'emails') { 
-        const nav = document.getElementById('navEmails'); 
-        if(nav) nav.classList.add('active'); 
-        renderEmails(); 
-    }
-    else if (nextView === 'meetings') { 
-        const nav = document.getElementById('navMeetings'); 
-        if(nav) nav.classList.add('active'); 
-        renderMeetings(); 
-    }
-    else if (nextView === 'finance') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navFinance');
-        if (nav) nav.classList.add('active');
-        if (typeof renderFinance === 'function') renderFinance();
-    }
-    else if (nextView === 'accounting') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navAccounting');
-        if (nav) nav.classList.add('active');
-        if (typeof renderAccounting === 'function') renderAccounting();
-    }
-    else if (nextView === 'integrations') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navIntegrations');
-        if (nav) nav.classList.add('active');
-        if (typeof renderIntegrations === 'function') renderIntegrations();
-    }
-    else if (nextView === 'supply') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navSupply');
-        if (nav) nav.classList.add('active');
-        if (typeof renderSupply === 'function') renderSupply();
-    }
-    else if (nextView === 'sales') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navSales');
-        if (nav) nav.classList.add('active');
-        if (typeof renderSales === 'function') renderSales();
-    }
-    else if (nextView === 'production') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navProduction');
-        if (nav) nav.classList.add('active');
-        if (typeof renderProduction === 'function') renderProduction();
-    }
-    else if (nextView === 'expenses') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navExpenses');
-        if (nav) nav.classList.add('active');
-        if (typeof renderExpenses === 'function') renderExpenses();
-    }
-    else if (nextView === 'requests') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navRequests');
-        if (nav) nav.classList.add('active');
-        if (typeof renderInternalRequests === 'function') renderInternalRequests();
-    }
-    else if (nextView === 'resources') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navResources');
-        if (nav) nav.classList.add('active');
-        if (typeof renderResources === 'function') renderResources();
-    }
-    else if (nextView === 'service') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navService');
-        if (nav) nav.classList.add('active');
-        if (typeof renderServiceCases === 'function') renderServiceCases();
-    }
-    else if (nextView === 'executive') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navExecutive');
-        if (nav) nav.classList.add('active');
-        if (typeof renderExecutiveDashboard === 'function') renderExecutiveDashboard();
-    }
-    else if (nextView === 'operations') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navOperations');
-        if (nav) nav.classList.add('active');
-        if (typeof renderOperationsCenter === 'function') renderOperationsCenter();
-    }
-    else if (nextView === 'documents') { 
-        const nav = document.getElementById('navDocuments'); 
-        if(nav) nav.classList.add('active'); 
-        renderDocuments();
-        if (typeof ensureDocumentClientSources === 'function') {
-            ensureDocumentClientSources().then(() => {
-                if (document.getElementById('documentsView')?.style.display === 'block') renderDocuments();
-            });
-        }
-    }
-    else if (nextView === 'claims') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navClaims');
-        if (nav) nav.classList.add('active');
-        if (currentLegalTab === 'courts' && typeof renderCourts === 'function') renderCourts();
-        else if (typeof renderClaims === 'function') renderClaims();
-    }
-    else if (nextView === 'knowledge') { 
-        const nav = document.getElementById('navKnowledge'); 
-        if(nav) nav.classList.add('active'); 
-        renderKnowledge(); 
-    }
-    else if (nextView === 'approvals') { 
-        const nav = document.getElementById('navApprovals'); 
-        if(nav) nav.classList.add('active'); 
-        renderApprovals(); 
-    }
-    else if (nextView === 'kpi') { 
-        const nav = document.getElementById('navKpi'); 
-        if(nav) nav.classList.add('active'); 
-        renderKPI(); 
-    }
-    else if (nextView === 'dashboard') { 
-        clearDepartmentFilter(false); 
-        const nav = document.getElementById('navDashboard'); 
-        if(nav) nav.classList.add('active'); 
-        if(triggerRender) renderDashboard(); 
-    } 
-    else if (nextView === 'clients') { 
-        clearDepartmentFilter(false); 
-        const nav = document.getElementById('navClients'); 
-        if(nav) nav.classList.add('active'); 
-        renderClients(); 
-    } 
-    else if (nextView === 'prospecting') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navProspecting');
-        if (nav) nav.classList.add('active');
-        if (typeof renderOutreachPoolPage === 'function') renderOutreachPoolPage();
-    }
-    else if (nextView === 'myProspecting') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navMyProspecting');
-        if (nav) nav.classList.add('active');
-        if (triggerRender && typeof renderMyProspecting === 'function') renderMyProspecting();
-    }
-    else if (nextView === 'bitrixImport') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navBitrixImport');
-        if (nav) nav.classList.add('active');
-        if (typeof renderBitrixImport === 'function') renderBitrixImport();
-    }
-    else if (nextView === 'leads') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navLeads');
-        if (nav) nav.classList.add('active');
-        if (typeof renderLeads === 'function') renderLeads();
-    }
-    else if (nextView === 'deals') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navDeals');
-        if (nav) nav.classList.add('active');
-        if (typeof refreshDealsFromServer === 'function') refreshDealsFromServer(true);
-        else if (typeof renderDeals === 'function') renderDeals();
-    }
-    else if (nextView === 'client360') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navClient360');
-        if (nav) nav.classList.add('active');
-        if (typeof renderClient360 === 'function') renderClient360();
-    }
-    else if (nextView === 'contract360') {
-        clearDepartmentFilter(false);
-        const nav = document.getElementById('navContract360');
-        if (nav) nav.classList.add('active');
-        if (typeof renderContract360 === 'function') renderContract360();
-    }
-    else if (nextView === 'admin') { 
-        clearDepartmentFilter(false); 
-        const nav = document.getElementById('adminBtn'); 
-        if(nav) nav.classList.add('active'); 
-        openAdminPanelLogic(); 
-    } 
-    else if (nextView === 'profile') { 
-        clearDepartmentFilter(false); 
-        const nav = document.getElementById('navProfile'); 
-        if(nav) nav.classList.add('active'); 
-        renderProfile(); 
-    }
-    else if (nextView === 'nomenclature') { 
-        clearDepartmentFilter(false); 
-        const nav = document.getElementById('navNomenclature'); 
-        if(nav) nav.classList.add('active'); 
-        if(typeof renderNomenclature === 'function') renderNomenclature(); 
-    } 
-    else if (nextView === 'contacts') { 
-        clearDepartmentFilter(false); 
-        const nav = document.getElementById('navContacts'); 
-        if(nav) nav.classList.add('active'); 
-        if(typeof renderContacts === 'function') renderContacts(); 
-    }
+    if (nextView !== 'dashboard') clearDepartmentFilter(false);
+    const navId = VIEW_NAV_MAP[nextView];
+    const nav = navId ? document.getElementById(navId) : null;
+    if (nav) nav.classList.add('active');
+    if (triggerRender && ACTIVE_VIEW_RENDERERS[nextView]) ACTIVE_VIEW_RENDERERS[nextView]();
 
-    // 4. Показываем сам экран (контейнер)
     const target = document.getElementById(nextView + 'View');
     if (target) {
         target.classList.remove('krd-is-hidden');
@@ -430,6 +294,37 @@ function navigateTo(view, triggerRender = true) {
 window.clearDepartmentFilter = clearDepartmentFilter;
 window.filterByDepartment = filterByDepartment;
 window.navigateTo = navigateTo;
+
+function bindPrimaryNavigationClicks() {
+    const bindings = [
+        ['navDashboard', 'dashboard'],
+        ['navApprovals', 'approvals'],
+        ['navClients', 'clients'],
+        ['navBitrixImport', 'bitrixImport'],
+        ['navContract360', 'contract360'],
+        ['navClaims', 'claims'],
+        ['navDocuments', 'documents'],
+        ['navEmails', 'emails'],
+        ['adminBtn', 'admin'],
+    ];
+    bindings.forEach(([id, view]) => {
+        const item = document.getElementById(id);
+        if (!item || item.dataset.navBound === '1') return;
+        item.dataset.navBound = '1';
+        item.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (view === 'dashboard') clearDepartmentFilter(false);
+            navigateTo(view);
+        });
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindPrimaryNavigationClicks);
+} else {
+    bindPrimaryNavigationClicks();
+}
 
 window.addEventListener('resize', () => {
     const wasMobile = document.documentElement.classList.contains('krd-mobile-communication-mode');
