@@ -167,6 +167,7 @@ async function connectEmailOAuth(provider) {
     popup.location.href = res.auth_url;
     if (status) status.textContent = `Открыт официальный вход ${emailOAuthProviderLabel(provider)}. После разрешения ящик появится в списке.`;
 }
+window.connectEmailOAuth = connectEmailOAuth;
 
 function updateEmailSetupHintFromAddress() {
     const addressInput = document.getElementById('emailAccountAddress');
