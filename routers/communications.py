@@ -198,6 +198,7 @@ def _load_live_notifications(actor: dict, limit: int = 80) -> list[dict]:
                 SELECT m.id, m.subject, m.sender, m.sender_email, m.received_at, m.created_at, a.label
                 FROM email_messages m
                 LEFT JOIN email_accounts a ON a.id = m.account_id
+                JOIN email_account_owners eo ON eo.account_id = a.id
                 WHERE COALESCE(m.is_deleted, 0)=0
                   AND COALESCE(m.is_archived, 0)=0
                   AND COALESCE(m.is_read, 0)=0
@@ -504,7 +505,7 @@ def _mail_owner_email(actor: dict | None) -> str:
     return _safe_text((actor or {}).get("email")).lower()
 
 
-def _mail_account_owner_clause(actor: dict | None, alias: str = "a") -> tuple[str, list[str]]:
+def _mail_account_owner_clause(actor: dict | None, alias: str = "eo") -> tuple[str, list[str]]:
     owner_email = _mail_owner_email(actor)
     if not owner_email:
         return "1=0", []
@@ -654,9 +655,10 @@ def _upsert_oauth_email_account(provider: str, payload: dict, actor: dict) -> in
         c.execute(
             """
             SELECT id, password
-            FROM email_accounts
-            WHERE LOWER(address)=LOWER(?) AND LOWER(COALESCE(owner_email, ''))=?
-            ORDER BY id ASC
+            FROM email_accounts a
+            JOIN email_account_owners eo ON eo.account_id = a.id
+            WHERE LOWER(a.address)=LOWER(?) AND LOWER(COALESCE(eo.owner_email, ''))=?
+            ORDER BY a.id ASC
             LIMIT 1
             """,
             (payload["address"], owner_email),
@@ -670,7 +672,7 @@ def _upsert_oauth_email_account(provider: str, payload: dict, actor: dict) -> in
                 UPDATE email_accounts
                 SET label=?, address=?, login=?, imap_host=?, imap_port=?, smtp_host=?, smtp_port=?,
                     smtp_login=?, smtp_password=?, password=?, inbox_folder=?, archive_folder=?, is_active=1,
-                    owner_email=?, owner_name=?, last_delivery_at=?, updated_at=?, last_error='', last_sync_status='ok'
+                    last_delivery_at=?, updated_at=?, last_error='', last_sync_status='ok'
                 WHERE id=?
                 """,
                 (
@@ -686,8 +688,6 @@ def _upsert_oauth_email_account(provider: str, payload: dict, actor: dict) -> in
                     refresh_token,
                     payload["inbox_folder"],
                     payload["archive_folder"],
-                    owner_email,
-                    owner_name,
                     payload["oauth_expires_at"],
                     now,
                     account_id,
@@ -699,8 +699,8 @@ def _upsert_oauth_email_account(provider: str, payload: dict, actor: dict) -> in
                 INSERT INTO email_accounts (
                     label, address, login, password, imap_host, imap_port, smtp_host, smtp_port,
                     smtp_login, smtp_password, inbox_folder, archive_folder, is_default, is_active,
-                    owner_email, owner_name, last_delivery_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?)
+                    last_delivery_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?)
                 """,
                 (
                     payload["label"],
@@ -715,14 +715,20 @@ def _upsert_oauth_email_account(provider: str, payload: dict, actor: dict) -> in
                     payload["oauth_access_token"],
                     payload["inbox_folder"],
                     payload["archive_folder"],
-                    owner_email,
-                    owner_name,
                     payload["oauth_expires_at"],
                     now,
                     now,
                 ),
             )
             account_id = c.lastrowid
+        c.execute("DELETE FROM email_account_owners WHERE account_id=?", (account_id,))
+        c.execute(
+            """
+            INSERT INTO email_account_owners (account_id, owner_email, owner_name, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (account_id, owner_email, owner_name, now, now),
+        )
         conn.commit()
     finally:
         conn.close()
@@ -1064,10 +1070,15 @@ def sync_email_account(account: dict, force: bool = False):
 def _load_email_account(account_id: int, actor: dict | None = None):
     conn = get_connection(row_factory=True)
     c = conn.cursor()
-    sql = "SELECT * FROM email_accounts WHERE id=?"
+    sql = """
+        SELECT email_accounts.*, eo.owner_email, eo.owner_name
+        FROM email_accounts
+        LEFT JOIN email_account_owners eo ON eo.account_id = email_accounts.id
+        WHERE email_accounts.id=?
+    """
     params: list = [account_id]
     if actor is not None:
-        owner_clause, owner_params = _mail_account_owner_clause(actor, alias="email_accounts")
+        owner_clause, owner_params = _mail_account_owner_clause(actor)
         sql += f" AND {owner_clause}"
         params.extend(owner_params)
     c.execute(sql, params)
@@ -1079,10 +1090,15 @@ def _load_email_account(account_id: int, actor: dict | None = None):
 def _sync_active_email_accounts(force: bool = False, actor: dict | None = None):
     conn = get_connection(row_factory=True)
     c = conn.cursor()
-    sql = "SELECT * FROM email_accounts WHERE is_active=1"
+    sql = """
+        SELECT email_accounts.*, eo.owner_email, eo.owner_name
+        FROM email_accounts
+        JOIN email_account_owners eo ON eo.account_id = email_accounts.id
+        WHERE email_accounts.is_active=1
+    """
     params: list = []
     if actor is not None:
-        owner_clause, owner_params = _mail_account_owner_clause(actor, alias="email_accounts")
+        owner_clause, owner_params = _mail_account_owner_clause(actor)
         sql += f" AND {owner_clause}"
         params.extend(owner_params)
     sql += " ORDER BY is_default DESC, id ASC"
@@ -1103,8 +1119,8 @@ def _mailbox_summary(actor: dict):
             a.id,
             a.label,
             a.address,
-            a.owner_email,
-            a.owner_name,
+            eo.owner_email,
+            eo.owner_name,
             a.login,
             a.imap_host,
             a.smtp_host,
@@ -1125,6 +1141,7 @@ def _mailbox_summary(actor: dict):
             SUM(CASE WHEN m.is_deleted=0 AND m.is_archived=0 AND m.is_read=0 THEN 1 ELSE 0 END) AS unread_count,
             SUM(CASE WHEN m.is_deleted=0 AND m.is_archived=1 THEN 1 ELSE 0 END) AS archived_count
         FROM email_accounts a
+        JOIN email_account_owners eo ON eo.account_id = a.id
         LEFT JOIN email_messages m ON m.account_id = a.id
         WHERE {owner_clause}
         GROUP BY a.id
@@ -1146,6 +1163,7 @@ def _mail_message_action(message_id: int, action: str, actor: dict):
         SELECT m.*, a.login, a.password, a.imap_host, a.imap_port, a.archive_folder
         FROM email_messages m
         JOIN email_accounts a ON a.id = m.account_id
+        JOIN email_account_owners eo ON eo.account_id = a.id
         WHERE m.id=? AND {owner_clause}
         """,
         [message_id, *owner_params],
@@ -1206,6 +1224,7 @@ def _load_message_with_account(message_id: int, actor: dict):
         SELECT m.*, a.address, a.login, a.password, a.smtp_host, a.smtp_port, a.smtp_login, a.smtp_password
         FROM email_messages m
         JOIN email_accounts a ON a.id = m.account_id
+        JOIN email_account_owners eo ON eo.account_id = a.id
         WHERE m.id=? AND {owner_clause}
         """,
         [message_id, *owner_params],
@@ -1604,6 +1623,7 @@ def get_emails(request: Request, account_id: int = 0, filter_name: str = "all", 
         SELECT m.*, a.label AS account_label, a.address AS account_address, a.last_error AS account_error
         FROM email_messages m
         JOIN email_accounts a ON a.id = m.account_id
+        JOIN email_account_owners eo ON eo.account_id = a.id
         WHERE {' AND '.join(clauses)}
         ORDER BY m.created_at DESC, m.id DESC
         LIMIT 120
@@ -1681,7 +1701,7 @@ def mark_email_read(message_id: int, data: EmailMessageStateData, request: Reque
         SET is_read=?
         WHERE id=?
           AND account_id IN (
-            SELECT id FROM email_accounts WHERE LOWER(COALESCE(owner_email, ''))=?
+            SELECT account_id FROM email_account_owners WHERE LOWER(COALESCE(owner_email, ''))=?
           )
         """,
         (int(bool(data.read)), message_id, _mail_owner_email(actor)),

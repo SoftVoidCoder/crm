@@ -42,16 +42,22 @@ def create_email_account_record(
             c = conn.cursor()
             if data.is_default:
                 c.execute(
-                    "UPDATE email_accounts SET is_default=0 WHERE LOWER(COALESCE(owner_email, ''))=?",
+                    """
+                    UPDATE email_accounts
+                    SET is_default=0
+                    WHERE id IN (
+                        SELECT account_id FROM email_account_owners
+                        WHERE LOWER(COALESCE(owner_email, ''))=?
+                    )
+                    """,
                     (owner_email,),
                 )
             c.execute(
                 """
                 INSERT INTO email_accounts (
                     label, address, login, password, imap_host, imap_port, smtp_host, smtp_port,
-                    smtp_login, smtp_password, inbox_folder, archive_folder, is_default, is_active,
-                    owner_email, owner_name, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    smtp_login, smtp_password, inbox_folder, archive_folder, is_default, is_active, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     payload["label"],
@@ -68,13 +74,18 @@ def create_email_account_record(
                     payload["archive_folder"],
                     payload["is_default"],
                     payload["is_active"],
-                    owner_email,
-                    owner_name,
                     now,
                     now,
                 ),
             )
             account_id = c.lastrowid
+            c.execute(
+                """
+                INSERT INTO email_account_owners (account_id, owner_email, owner_name, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (account_id, owner_email, owner_name, now, now),
+            )
             conn.commit()
             locked = False
             break
@@ -125,7 +136,14 @@ def update_email_account_record(
         payload = normalize_payload_fn(data, existing=existing)
         if data.is_default:
             c.execute(
-                "UPDATE email_accounts SET is_default=0 WHERE LOWER(COALESCE(owner_email, ''))=?",
+                """
+                UPDATE email_accounts
+                SET is_default=0
+                WHERE id IN (
+                    SELECT account_id FROM email_account_owners
+                    WHERE LOWER(COALESCE(owner_email, ''))=?
+                )
+                """,
                 (owner_email,),
             )
         c.execute("SELECT password, smtp_password FROM email_accounts WHERE id=?", (account_id,))
@@ -179,6 +197,7 @@ def delete_email_account_record(account_id: int, *, actor: dict, get_connection,
     conn = get_connection()
     try:
         c = conn.cursor()
+        c.execute("DELETE FROM email_account_owners WHERE account_id=?", (account_id,))
         c.execute("DELETE FROM email_messages WHERE account_id=?", (account_id,))
         c.execute("DELETE FROM email_accounts WHERE id=?", (account_id,))
         conn.commit()
@@ -200,16 +219,17 @@ def retry_failed_email_accounts(account_id: int = 0, *, get_connection, sync_acc
         c = conn.cursor()
         params = []
         sql = """
-            SELECT *
-            FROM email_accounts
+            SELECT a.*, eo.owner_email, eo.owner_name
+            FROM email_accounts a
+            JOIN email_account_owners eo ON eo.account_id = a.id
             WHERE is_active=1
               AND (last_sync_status='error' OR sync_fail_count > 0 OR next_retry_at > 0)
         """
         if account_id:
-            sql += " AND id=?"
+            sql += " AND a.id=?"
             params.append(account_id)
         if owner_email:
-            sql += " AND LOWER(COALESCE(owner_email, ''))=?"
+            sql += " AND LOWER(COALESCE(eo.owner_email, ''))=?"
             params.append(owner_email.strip().lower())
         sql += " ORDER BY is_default DESC, id ASC"
         c.execute(sql, params)
