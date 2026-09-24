@@ -149,17 +149,22 @@ async function connectEmailOAuth(provider) {
         if (status) status.textContent = message;
         return customAlert(message);
     }
+    const popup = window.open('', `kordaEmailOAuth_${provider}`, 'width=720,height=780');
+    if (popup) {
+        popup.document.write('<!doctype html><title>Вход в почту</title><p style="font-family:system-ui,sans-serif;padding:24px;">Открываем официальный вход...</p>');
+    }
     const res = await apiCall(`/email/oauth/${provider}/start`);
     if (!res || res.error) {
         const message = res?.message || 'OAuth-провайдер ещё не настроен на сервере.';
+        if (popup) popup.close();
         if (status) status.textContent = message;
         return customAlert(message);
     }
-    const popup = window.open(res.auth_url, `kordaEmailOAuth_${provider}`, 'width=720,height=780');
     if (!popup) {
         window.location.href = res.auth_url;
         return;
     }
+    popup.location.href = res.auth_url;
     if (status) status.textContent = `Открыт официальный вход ${emailOAuthProviderLabel(provider)}. После разрешения ящик появится в списке.`;
 }
 
