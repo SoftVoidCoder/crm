@@ -29,6 +29,8 @@ def create_email_account_record(
 ):
     now = int(time.time())
     payload = normalize_payload_fn(data)
+    owner_email = (actor.get("email") or "").strip().lower()
+    owner_name = (actor.get("name") or "").strip()
     if not payload["address"] or not payload["password"]:
         return {"error": "validation_error", "message": "Укажи почту и пароль ящика", "status_code": 400}
 
@@ -39,13 +41,17 @@ def create_email_account_record(
         try:
             c = conn.cursor()
             if data.is_default:
-                c.execute("UPDATE email_accounts SET is_default=0")
+                c.execute(
+                    "UPDATE email_accounts SET is_default=0 WHERE LOWER(COALESCE(owner_email, ''))=?",
+                    (owner_email,),
+                )
             c.execute(
                 """
                 INSERT INTO email_accounts (
                     label, address, login, password, imap_host, imap_port, smtp_host, smtp_port,
-                    smtp_login, smtp_password, inbox_folder, archive_folder, is_default, is_active, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    smtp_login, smtp_password, inbox_folder, archive_folder, is_default, is_active,
+                    owner_email, owner_name, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     payload["label"],
@@ -62,6 +68,8 @@ def create_email_account_record(
                     payload["archive_folder"],
                     payload["is_default"],
                     payload["is_active"],
+                    owner_email,
+                    owner_name,
                     now,
                     now,
                 ),
@@ -110,12 +118,16 @@ def update_email_account_record(
     try:
         c = conn.cursor()
         now = int(time.time())
+        owner_email = (actor.get("email") or "").strip().lower()
         c.execute("SELECT * FROM email_accounts WHERE id=?", (account_id,))
         existing_row = c.fetchone()
         existing = dict(existing_row) if existing_row else {}
         payload = normalize_payload_fn(data, existing=existing)
         if data.is_default:
-            c.execute("UPDATE email_accounts SET is_default=0")
+            c.execute(
+                "UPDATE email_accounts SET is_default=0 WHERE LOWER(COALESCE(owner_email, ''))=?",
+                (owner_email,),
+            )
         c.execute("SELECT password, smtp_password FROM email_accounts WHERE id=?", (account_id,))
         existing_credentials = c.fetchone()
         password_to_save = encrypt_secret_fn(payload["password"]) if payload["password"] else (existing_credentials[0] if existing_credentials else "")
@@ -182,7 +194,7 @@ def delete_email_account_record(account_id: int, *, actor: dict, get_connection,
     return {"status": "success"}
 
 
-def retry_failed_email_accounts(account_id: int = 0, *, get_connection, sync_account_fn):
+def retry_failed_email_accounts(account_id: int = 0, *, get_connection, sync_account_fn, owner_email: str = ""):
     conn = get_connection(row_factory=True)
     try:
         c = conn.cursor()
@@ -196,6 +208,9 @@ def retry_failed_email_accounts(account_id: int = 0, *, get_connection, sync_acc
         if account_id:
             sql += " AND id=?"
             params.append(account_id)
+        if owner_email:
+            sql += " AND LOWER(COALESCE(owner_email, ''))=?"
+            params.append(owner_email.strip().lower())
         sql += " ORDER BY is_default DESC, id ASC"
         c.execute(sql, params)
         accounts = [dict(row) for row in c.fetchall()]

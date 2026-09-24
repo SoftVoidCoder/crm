@@ -192,17 +192,20 @@ def _load_live_notifications(actor: dict, limit: int = 80) -> list[dict]:
         items: list[dict] = []
 
         if has_permission(actor, "emails", "read"):
+            owner_clause, owner_params = _mail_account_owner_clause(actor)
             c.execute(
-                """
+                f"""
                 SELECT m.id, m.subject, m.sender, m.sender_email, m.received_at, m.created_at, a.label
                 FROM email_messages m
                 LEFT JOIN email_accounts a ON a.id = m.account_id
                 WHERE COALESCE(m.is_deleted, 0)=0
                   AND COALESCE(m.is_archived, 0)=0
                   AND COALESCE(m.is_read, 0)=0
+                  AND {owner_clause}
                 ORDER BY COALESCE(m.created_at, 0) DESC, m.id DESC
                 LIMIT 8
-                """
+                """,
+                owner_params,
             )
             for row in c.fetchall():
                 item = dict(row)
@@ -497,6 +500,17 @@ def _mail_admin(request: Request):
     return None
 
 
+def _mail_owner_email(actor: dict | None) -> str:
+    return _safe_text((actor or {}).get("email")).lower()
+
+
+def _mail_account_owner_clause(actor: dict | None, alias: str = "a") -> tuple[str, list[str]]:
+    owner_email = _mail_owner_email(actor)
+    if not owner_email:
+        return "1=0", []
+    return f"LOWER(COALESCE({alias}.owner_email, ''))=?", [owner_email]
+
+
 def _api_error(status_code: int, error: str, **payload):
     return JSONResponse(status_code=status_code, content={"error": error, **payload})
 
@@ -632,12 +646,20 @@ def _save_oauth_message(row: dict):
 
 def _upsert_oauth_email_account(provider: str, payload: dict, actor: dict) -> int:
     now = int(time.time())
+    owner_email = _mail_owner_email(actor)
+    owner_name = _safe_text(actor.get("name"))
     conn = get_connection(row_factory=True)
     try:
         c = conn.cursor()
         c.execute(
-            "SELECT id, password FROM email_accounts WHERE address=? ORDER BY id ASC LIMIT 1",
-            (payload["address"],),
+            """
+            SELECT id, password
+            FROM email_accounts
+            WHERE LOWER(address)=LOWER(?) AND LOWER(COALESCE(owner_email, ''))=?
+            ORDER BY id ASC
+            LIMIT 1
+            """,
+            (payload["address"], owner_email),
         )
         existing = c.fetchone()
         account_id = int(existing["id"]) if existing else 0
@@ -648,7 +670,7 @@ def _upsert_oauth_email_account(provider: str, payload: dict, actor: dict) -> in
                 UPDATE email_accounts
                 SET label=?, address=?, login=?, imap_host=?, imap_port=?, smtp_host=?, smtp_port=?,
                     smtp_login=?, smtp_password=?, password=?, inbox_folder=?, archive_folder=?, is_active=1,
-                    last_delivery_at=?, updated_at=?, last_error='', last_sync_status='ok'
+                    owner_email=?, owner_name=?, last_delivery_at=?, updated_at=?, last_error='', last_sync_status='ok'
                 WHERE id=?
                 """,
                 (
@@ -664,6 +686,8 @@ def _upsert_oauth_email_account(provider: str, payload: dict, actor: dict) -> in
                     refresh_token,
                     payload["inbox_folder"],
                     payload["archive_folder"],
+                    owner_email,
+                    owner_name,
                     payload["oauth_expires_at"],
                     now,
                     account_id,
@@ -675,8 +699,8 @@ def _upsert_oauth_email_account(provider: str, payload: dict, actor: dict) -> in
                 INSERT INTO email_accounts (
                     label, address, login, password, imap_host, imap_port, smtp_host, smtp_port,
                     smtp_login, smtp_password, inbox_folder, archive_folder, is_default, is_active,
-                    last_delivery_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?)
+                    owner_email, owner_name, last_delivery_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?)
                 """,
                 (
                     payload["label"],
@@ -691,6 +715,8 @@ def _upsert_oauth_email_account(provider: str, payload: dict, actor: dict) -> in
                     payload["oauth_access_token"],
                     payload["inbox_folder"],
                     payload["archive_folder"],
+                    owner_email,
+                    owner_name,
                     payload["oauth_expires_at"],
                     now,
                     now,
@@ -1035,34 +1061,50 @@ def sync_email_account(account: dict, force: bool = False):
         conn.close()
 
 
-def _load_email_account(account_id: int):
+def _load_email_account(account_id: int, actor: dict | None = None):
     conn = get_connection(row_factory=True)
     c = conn.cursor()
-    c.execute("SELECT * FROM email_accounts WHERE id=?", (account_id,))
+    sql = "SELECT * FROM email_accounts WHERE id=?"
+    params: list = [account_id]
+    if actor is not None:
+        owner_clause, owner_params = _mail_account_owner_clause(actor, alias="email_accounts")
+        sql += f" AND {owner_clause}"
+        params.extend(owner_params)
+    c.execute(sql, params)
     row = c.fetchone()
     conn.close()
     return _hydrate_email_oauth_row(dict(row)) if row else None
 
 
-def _sync_active_email_accounts(force: bool = False):
+def _sync_active_email_accounts(force: bool = False, actor: dict | None = None):
     conn = get_connection(row_factory=True)
     c = conn.cursor()
-    c.execute("SELECT * FROM email_accounts WHERE is_active=1 ORDER BY is_default DESC, id ASC")
+    sql = "SELECT * FROM email_accounts WHERE is_active=1"
+    params: list = []
+    if actor is not None:
+        owner_clause, owner_params = _mail_account_owner_clause(actor, alias="email_accounts")
+        sql += f" AND {owner_clause}"
+        params.extend(owner_params)
+    sql += " ORDER BY is_default DESC, id ASC"
+    c.execute(sql, params)
     accounts = [_hydrate_email_oauth_row(dict(row)) for row in c.fetchall()]
     conn.close()
     for account in accounts:
         sync_email_account(account, force=force)
 
 
-def _mailbox_summary():
+def _mailbox_summary(actor: dict):
     conn = get_connection(row_factory=True)
     c = conn.cursor()
+    owner_clause, owner_params = _mail_account_owner_clause(actor)
     c.execute(
-        """
+        f"""
         SELECT
             a.id,
             a.label,
             a.address,
+            a.owner_email,
+            a.owner_name,
             a.login,
             a.imap_host,
             a.smtp_host,
@@ -1084,26 +1126,29 @@ def _mailbox_summary():
             SUM(CASE WHEN m.is_deleted=0 AND m.is_archived=1 THEN 1 ELSE 0 END) AS archived_count
         FROM email_accounts a
         LEFT JOIN email_messages m ON m.account_id = a.id
+        WHERE {owner_clause}
         GROUP BY a.id
         ORDER BY a.is_default DESC, a.id ASC
-        """
+        """,
+        owner_params,
     )
     rows = [_hydrate_email_oauth_row(dict(row)) for row in c.fetchall()]
     conn.close()
     return rows
 
 
-def _mail_message_action(message_id: int, action: str):
+def _mail_message_action(message_id: int, action: str, actor: dict):
     conn = get_connection(row_factory=True)
     c = conn.cursor()
+    owner_clause, owner_params = _mail_account_owner_clause(actor)
     c.execute(
-        """
+        f"""
         SELECT m.*, a.login, a.password, a.imap_host, a.imap_port, a.archive_folder
         FROM email_messages m
         JOIN email_accounts a ON a.id = m.account_id
-        WHERE m.id=?
+        WHERE m.id=? AND {owner_clause}
         """,
-        (message_id,),
+        [message_id, *owner_params],
     )
     row = c.fetchone()
     if not row:
@@ -1152,17 +1197,18 @@ def _mail_message_action(message_id: int, action: str):
         return False, str(e)
 
 
-def _load_message_with_account(message_id: int):
+def _load_message_with_account(message_id: int, actor: dict):
     conn = get_connection(row_factory=True)
     c = conn.cursor()
+    owner_clause, owner_params = _mail_account_owner_clause(actor)
     c.execute(
-        """
+        f"""
         SELECT m.*, a.address, a.login, a.password, a.smtp_host, a.smtp_port, a.smtp_login, a.smtp_password
         FROM email_messages m
         JOIN email_accounts a ON a.id = m.account_id
-        WHERE m.id=?
+        WHERE m.id=? AND {owner_clause}
         """,
-        (message_id,),
+        [message_id, *owner_params],
     )
     row = c.fetchone()
     conn.close()
@@ -1343,7 +1389,7 @@ def get_email_accounts(request: Request):
     if not actor or not has_permission(actor, "emails", "read"):
         return {"error": "forbidden"}
     return list_email_accounts_service(
-        mailbox_summary_fn=_mailbox_summary,
+        mailbox_summary_fn=lambda: _mailbox_summary(actor),
         can_manage_accounts=has_permission(actor, "emails", "manage_accounts"),
     )
 
@@ -1443,6 +1489,8 @@ def update_email_account(account_id: int, data: EmailAccountData, request: Reque
     actor = _mail_admin(request)
     if not actor:
         return _api_error(403, "forbidden")
+    if not _load_email_account(account_id, actor):
+        return _api_error(404, "not_found")
     return update_email_account_record_service(
         account_id,
         data,
@@ -1461,6 +1509,8 @@ def delete_email_account(account_id: int, request: Request):
     actor = _mail_admin(request)
     if not actor:
         return _api_error(403, "forbidden")
+    if not _load_email_account(account_id, actor):
+        return _api_error(404, "not_found")
     return delete_email_account_record_service(
         account_id,
         actor=actor,
@@ -1474,7 +1524,7 @@ def sync_email_account_route(account_id: int, request: Request):
     actor = get_request_user(request)
     if not actor or actor.get("status") != "approved" or not has_permission(actor, "emails", "read"):
         return {"error": "forbidden"}
-    account = _load_email_account(account_id)
+    account = _load_email_account(account_id, actor)
     if not account:
         return {"error": "not_found"}
     return sync_email_account(account, force=True)
@@ -1485,7 +1535,7 @@ def test_email_account_route(account_id: int, request: Request):
     actor = get_request_user(request)
     if not actor or actor.get("status") != "approved" or not has_permission(actor, "emails", "manage_accounts"):
         return {"error": "forbidden"}
-    account = _load_email_account(account_id)
+    account = _load_email_account(account_id, actor)
     if not account:
         return {"error": "not_found"}
     result = _test_email_account_connection(account)
@@ -1509,6 +1559,7 @@ def retry_failed_email_ops(request: Request, account_id: int = 0):
         account_id,
         get_connection=get_connection,
         sync_account_fn=sync_email_account,
+        owner_email=_mail_owner_email(actor),
     )
 
 
@@ -1519,16 +1570,19 @@ def get_emails(request: Request, account_id: int = 0, filter_name: str = "all", 
         return {"error": "forbidden"}
     if force_refresh:
         if account_id:
-            account = _load_email_account(account_id)
+            account = _load_email_account(account_id, actor)
             if account and account.get("is_active"):
                 sync_email_account(account, force=True)
         else:
-            _sync_active_email_accounts(force=True)
+            _sync_active_email_accounts(force=True, actor=actor)
 
     conn = get_connection(row_factory=True)
     c = conn.cursor()
     clauses = ["m.is_deleted=0"]
     params = []
+    owner_clause, owner_params = _mail_account_owner_clause(actor)
+    clauses.append(owner_clause)
+    params.extend(owner_params)
     if account_id:
         clauses.append("m.account_id=?")
         params.append(account_id)
@@ -1621,9 +1675,22 @@ def mark_email_read(message_id: int, data: EmailMessageStateData, request: Reque
         return {"error": "forbidden"}
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE email_messages SET is_read=? WHERE id=?", (int(bool(data.read)), message_id))
+    c.execute(
+        """
+        UPDATE email_messages
+        SET is_read=?
+        WHERE id=?
+          AND account_id IN (
+            SELECT id FROM email_accounts WHERE LOWER(COALESCE(owner_email, ''))=?
+          )
+        """,
+        (int(bool(data.read)), message_id, _mail_owner_email(actor)),
+    )
+    changed = c.rowcount
     conn.commit()
     conn.close()
+    if changed < 1:
+        return {"error": "not_found"}
     return {"status": "success"}
 
 
@@ -1632,7 +1699,7 @@ def archive_email(message_id: int, request: Request):
     actor = get_request_user(request)
     if not actor or actor.get("status") != "approved" or not has_permission(actor, "emails", "archive"):
         return {"error": "forbidden"}
-    ok, error = _mail_message_action(message_id, "archive")
+    ok, error = _mail_message_action(message_id, "archive", actor)
     return {"status": "success"} if ok else {"error": error}
 
 
@@ -1641,7 +1708,7 @@ def restore_email(message_id: int, request: Request):
     actor = get_request_user(request)
     if not actor or actor.get("status") != "approved" or not has_permission(actor, "emails", "archive"):
         return {"error": "forbidden"}
-    ok, error = _mail_message_action(message_id, "restore")
+    ok, error = _mail_message_action(message_id, "restore", actor)
     return {"status": "success"} if ok else {"error": error}
 
 
@@ -1650,7 +1717,7 @@ def delete_email(message_id: int, request: Request):
     actor = get_request_user(request)
     if not actor or actor.get("status") != "approved" or not has_permission(actor, "emails", "delete"):
         return {"error": "forbidden"}
-    ok, error = _mail_message_action(message_id, "delete")
+    ok, error = _mail_message_action(message_id, "delete", actor)
     return {"status": "success"} if ok else {"error": error}
 
 
@@ -1659,7 +1726,7 @@ async def reply_email(message_id: int, request: Request, body: str = Form(...), 
     actor = require_approved_user(request)
     if not actor or not has_permission(actor, "emails", "reply"):
         return {"error": "forbidden"}
-    message = _load_message_with_account(message_id)
+    message = _load_message_with_account(message_id, actor)
     if not message:
         return {"error": "not_found"}
     to_email = message.get("reply_to_email") or message.get("sender_email")

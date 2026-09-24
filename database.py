@@ -2129,7 +2129,7 @@ def _init_db_once():
     c.execute('''CREATE TABLE IF NOT EXISTS operation_types (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT DEFAULT '', code TEXT DEFAULT '', module_name TEXT DEFAULT '', flow_kind TEXT DEFAULT '', is_active INTEGER DEFAULT 1, comment TEXT DEFAULT '', external_sync_id TEXT DEFAULT '', exchange_state TEXT DEFAULT 'draft', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0, UNIQUE(code))''')
     c.execute('''CREATE TABLE IF NOT EXISTS inventory_documents (id INTEGER PRIMARY KEY AUTOINCREMENT, doc_type TEXT DEFAULT 'inventory', doc_number TEXT DEFAULT '', article TEXT DEFAULT '', warehouse TEXT DEFAULT '', bin_code TEXT DEFAULT '', batch_code TEXT DEFAULT '', serial_no TEXT DEFAULT '', target_warehouse TEXT DEFAULT '', target_bin TEXT DEFAULT '', qty REAL DEFAULT 0, counted_qty REAL DEFAULT 0, adjustment_qty REAL DEFAULT 0, reason TEXT DEFAULT '', comment TEXT DEFAULT '', status TEXT DEFAULT 'posted', actor_email TEXT DEFAULT '', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0)''')
     c.execute('''CREATE TABLE IF NOT EXISTS contacts (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER, name TEXT, phone TEXT, email TEXT, position TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS email_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT, address TEXT, login TEXT, password TEXT, imap_host TEXT, imap_port INTEGER DEFAULT 993, smtp_host TEXT, smtp_port INTEGER DEFAULT 465, inbox_folder TEXT DEFAULT 'INBOX', archive_folder TEXT DEFAULT 'Archive', is_default INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, last_sync_at INTEGER DEFAULT 0, last_error TEXT DEFAULT '', created_at INTEGER, updated_at INTEGER)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS email_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT, address TEXT, login TEXT, password TEXT, imap_host TEXT, imap_port INTEGER DEFAULT 993, smtp_host TEXT, smtp_port INTEGER DEFAULT 465, inbox_folder TEXT DEFAULT 'INBOX', archive_folder TEXT DEFAULT 'Archive', is_default INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, last_sync_at INTEGER DEFAULT 0, last_error TEXT DEFAULT '', owner_email TEXT DEFAULT '', owner_name TEXT DEFAULT '', created_at INTEGER, updated_at INTEGER)''')
     c.execute('''CREATE TABLE IF NOT EXISTS email_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER, uid TEXT, folder TEXT DEFAULT 'INBOX', subject TEXT, sender TEXT, sender_email TEXT, body_preview TEXT, body_text TEXT, received_at TEXT, is_read INTEGER DEFAULT 0, is_archived INTEGER DEFAULT 0, is_deleted INTEGER DEFAULT 0, created_at INTEGER DEFAULT 0, synced_at INTEGER DEFAULT 0, UNIQUE(account_id, uid, folder))''')
     c.execute('''CREATE TABLE IF NOT EXISTS email_attachments (id INTEGER PRIMARY KEY AUTOINCREMENT, message_id INTEGER, filename TEXT, stored_path TEXT, mime_type TEXT DEFAULT '', size INTEGER DEFAULT 0, created_at INTEGER DEFAULT 0, UNIQUE(message_id, filename))''')
     c.execute('''CREATE TABLE IF NOT EXISTS bank_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT DEFAULT '', bank_name TEXT DEFAULT '', account_number TEXT DEFAULT '', bik TEXT DEFAULT '', currency TEXT DEFAULT 'RUB', legal_entity_id INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, created_by TEXT DEFAULT '', created_at INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 0)''')
@@ -2576,6 +2576,14 @@ def _init_db_once():
     except: pass
     try: c.execute("ALTER TABLE email_messages ADD COLUMN reply_to_email TEXT DEFAULT ''")
     except: pass
+    try:
+        _add_column_if_missing(c, "email_accounts", "owner_email", "TEXT DEFAULT ''")
+    except Exception:
+        pass
+    try:
+        _add_column_if_missing(c, "email_accounts", "owner_name", "TEXT DEFAULT ''")
+    except Exception:
+        pass
     try: c.execute("ALTER TABLE sales_documents_extended ADD COLUMN sent_status TEXT DEFAULT 'draft'")
     except: pass
     try: c.execute("ALTER TABLE sales_documents_extended ADD COLUMN recipient_email TEXT DEFAULT ''")
