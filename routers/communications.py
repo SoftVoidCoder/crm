@@ -501,6 +501,26 @@ def _api_error(status_code: int, error: str, **payload):
     return JSONResponse(status_code=status_code, content={"error": error, **payload})
 
 
+def _hydrate_email_oauth_row(row: dict | None) -> dict | None:
+    if not row:
+        return row
+    smtp_login = _safe_text(row.get("smtp_login"))
+    if smtp_login.startswith("oauth:"):
+        provider = smtp_login.split(":", 1)[1].strip()
+        row["auth_type"] = "oauth"
+        row["oauth_provider"] = provider
+        row["oauth_access_token"] = row.get("smtp_password") or ""
+        row["oauth_refresh_token"] = row.get("password") or ""
+        row["oauth_expires_at"] = int(row.get("last_delivery_at") or 0)
+    else:
+        row["auth_type"] = "password"
+        row["oauth_provider"] = ""
+        row["oauth_access_token"] = ""
+        row["oauth_refresh_token"] = ""
+        row["oauth_expires_at"] = 0
+    return row
+
+
 def _email_oauth_base_url(request: Request) -> str:
     if PUBLIC_BASE_URL:
         return PUBLIC_BASE_URL
@@ -550,7 +570,7 @@ def _save_oauth_access_token(account_id: int, encrypted_access_token: str, expir
     try:
         c = conn.cursor()
         c.execute(
-            "UPDATE email_accounts SET oauth_access_token=?, oauth_expires_at=?, updated_at=? WHERE id=?",
+            "UPDATE email_accounts SET smtp_password=?, last_delivery_at=?, updated_at=? WHERE id=?",
             (encrypted_access_token, int(expires_at or 0), int(time.time()), account_id),
         )
         conn.commit()
@@ -614,20 +634,19 @@ def _upsert_oauth_email_account(provider: str, payload: dict, actor: dict) -> in
     try:
         c = conn.cursor()
         c.execute(
-            "SELECT id, oauth_refresh_token FROM email_accounts WHERE address=? OR (oauth_provider=? AND provider_account_id=?) ORDER BY id ASC LIMIT 1",
-            (payload["address"], provider, payload.get("provider_account_id") or ""),
+            "SELECT id, password FROM email_accounts WHERE address=? ORDER BY id ASC LIMIT 1",
+            (payload["address"],),
         )
         existing = c.fetchone()
         account_id = int(existing["id"]) if existing else 0
-        refresh_token = payload.get("oauth_refresh_token") or (existing["oauth_refresh_token"] if existing else "")
+        refresh_token = payload.get("oauth_refresh_token") or (existing["password"] if existing else "")
         if account_id:
             c.execute(
                 """
                 UPDATE email_accounts
                 SET label=?, address=?, login=?, imap_host=?, imap_port=?, smtp_host=?, smtp_port=?,
-                    smtp_login=?, inbox_folder=?, archive_folder=?, is_active=1, auth_type='oauth',
-                    oauth_provider=?, oauth_access_token=?, oauth_refresh_token=?, oauth_expires_at=?,
-                    oauth_scope=?, provider_account_id=?, updated_at=?, last_error='', last_sync_status='ok'
+                    smtp_login=?, smtp_password=?, password=?, inbox_folder=?, archive_folder=?, is_active=1,
+                    last_delivery_at=?, updated_at=?, last_error='', last_sync_status='ok'
                 WHERE id=?
                 """,
                 (
@@ -638,15 +657,12 @@ def _upsert_oauth_email_account(provider: str, payload: dict, actor: dict) -> in
                     payload["imap_port"],
                     payload["smtp_host"],
                     payload["smtp_port"],
-                    payload["smtp_login"],
-                    payload["inbox_folder"],
-                    payload["archive_folder"],
-                    provider,
+                    f"oauth:{provider}",
                     payload["oauth_access_token"],
                     refresh_token,
+                    payload["inbox_folder"],
+                    payload["archive_folder"],
                     payload["oauth_expires_at"],
-                    payload["oauth_scope"],
-                    payload.get("provider_account_id") or "",
                     now,
                     account_id,
                 ),
@@ -657,29 +673,25 @@ def _upsert_oauth_email_account(provider: str, payload: dict, actor: dict) -> in
                 INSERT INTO email_accounts (
                     label, address, login, password, imap_host, imap_port, smtp_host, smtp_port,
                     smtp_login, smtp_password, inbox_folder, archive_folder, is_default, is_active,
-                    created_at, updated_at, auth_type, oauth_provider, oauth_access_token,
-                    oauth_refresh_token, oauth_expires_at, oauth_scope, provider_account_id
-                ) VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, '', ?, ?, 0, 1, ?, ?, 'oauth', ?, ?, ?, ?, ?, ?)
+                    last_delivery_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?)
                 """,
                 (
                     payload["label"],
                     payload["address"],
                     payload["login"],
+                    refresh_token,
                     payload["imap_host"],
                     payload["imap_port"],
                     payload["smtp_host"],
                     payload["smtp_port"],
-                    payload["smtp_login"],
+                    f"oauth:{provider}",
+                    payload["oauth_access_token"],
                     payload["inbox_folder"],
                     payload["archive_folder"],
-                    now,
-                    now,
-                    provider,
-                    payload["oauth_access_token"],
-                    refresh_token,
                     payload["oauth_expires_at"],
-                    payload["oauth_scope"],
-                    payload.get("provider_account_id") or "",
+                    now,
+                    now,
                 ),
             )
             account_id = c.lastrowid
@@ -702,6 +714,7 @@ def _is_locked_error(exc: Exception) -> bool:
 
 
 def _connect_imap_account(account: dict):
+    account = _hydrate_email_oauth_row(dict(account or {}))
     if account.get("auth_type") == "oauth" and account.get("oauth_provider") == "yandex":
         access_token = refresh_mail_oauth_access_token(
             "yandex",
@@ -926,6 +939,7 @@ def _sync_folder(mail, account_id: int, folder_name: str, is_archived: int):
 
 
 def sync_email_account(account: dict, force: bool = False):
+    account = _hydrate_email_oauth_row(dict(account or {}))
     now = int(time.time())
     if not force and int(account.get("next_retry_at") or 0) > now:
         return {"status": "deferred", "next_retry_at": int(account.get("next_retry_at") or 0)}
@@ -1025,14 +1039,14 @@ def _load_email_account(account_id: int):
     c.execute("SELECT * FROM email_accounts WHERE id=?", (account_id,))
     row = c.fetchone()
     conn.close()
-    return dict(row) if row else None
+    return _hydrate_email_oauth_row(dict(row)) if row else None
 
 
 def _sync_active_email_accounts(force: bool = False):
     conn = get_connection(row_factory=True)
     c = conn.cursor()
     c.execute("SELECT * FROM email_accounts WHERE is_active=1 ORDER BY is_default DESC, id ASC")
-    accounts = [dict(row) for row in c.fetchall()]
+    accounts = [_hydrate_email_oauth_row(dict(row)) for row in c.fetchall()]
     conn.close()
     for account in accounts:
         sync_email_account(account, force=force)
@@ -1063,9 +1077,6 @@ def _mailbox_summary():
             a.delivery_fail_count,
             a.last_delivery_at,
             a.last_delivery_error,
-            COALESCE(a.auth_type, 'password') AS auth_type,
-            COALESCE(a.oauth_provider, '') AS oauth_provider,
-            COALESCE(a.oauth_expires_at, 0) AS oauth_expires_at,
             SUM(CASE WHEN m.is_deleted=0 AND m.is_archived=0 THEN 1 ELSE 0 END) AS total_inbox,
             SUM(CASE WHEN m.is_deleted=0 AND m.is_archived=0 AND m.is_read=0 THEN 1 ELSE 0 END) AS unread_count,
             SUM(CASE WHEN m.is_deleted=0 AND m.is_archived=1 THEN 1 ELSE 0 END) AS archived_count
@@ -1075,7 +1086,7 @@ def _mailbox_summary():
         ORDER BY a.is_default DESC, a.id ASC
         """
     )
-    rows = [dict(row) for row in c.fetchall()]
+    rows = [_hydrate_email_oauth_row(dict(row)) for row in c.fetchall()]
     conn.close()
     return rows
 
