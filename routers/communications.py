@@ -531,7 +531,7 @@ def _email_oauth_return_html(title: str, message: str, *, ok: bool = True) -> HT
     status = "success" if ok else "error"
     safe_title = html.escape(title or "")
     safe_message = html.escape(message or "")
-    html = f"""
+    page_html = f"""
     <!doctype html>
     <html lang="ru">
     <head>
@@ -564,7 +564,7 @@ def _email_oauth_return_html(title: str, message: str, *, ok: bool = True) -> HT
     </body>
     </html>
     """
-    return HTMLResponse(html)
+    return HTMLResponse(page_html)
 
 
 def _save_oauth_access_token(account_id: int, encrypted_access_token: str, expires_at: int):
