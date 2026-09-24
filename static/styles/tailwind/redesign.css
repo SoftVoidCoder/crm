@@ -15011,7 +15011,7 @@ body.workspace-config-open {
     display: grid;
     grid-template-columns: 2fr 1.45fr 1.1fr 1fr 0.8fr 1.65fr;
     gap: 12px;
-    padding: 0 18px 8px 58px;
+    padding: 0 18px 8px;
     border-top: 1px solid rgba(15, 23, 42, 0.06);
     border-bottom: 1px solid rgba(15, 23, 42, 0.06);
     background: rgba(248, 251, 255, 0.8);
@@ -15025,7 +15025,7 @@ body.workspace-config-open {
 
 .main-content #documentsView .krd-file-row {
     display: grid;
-    grid-template-columns: 28px 2fr 1.45fr 1.1fr 1fr 0.8fr 1.65fr;
+    grid-template-columns: 2fr 1.45fr 1.1fr 1fr 0.8fr 1.65fr;
     align-items: start;
     gap: 12px;
     padding: 14px 14px 14px 12px;
@@ -15187,11 +15187,11 @@ body.workspace-config-open {
     }
 
     .main-content #documentsView .krd-file-row {
-        grid-template-columns: 28px repeat(5, minmax(0, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
     }
 
     .main-content #documentsView .krd-file-row__actions--wrap {
-        grid-column: 2 / -1;
+        grid-column: 1 / -1;
     }
 }
 
@@ -15216,11 +15216,11 @@ body.workspace-config-open {
     }
 
     .main-content #documentsView .krd-file-row {
-        grid-template-columns: 28px 1fr;
+        grid-template-columns: 1fr;
     }
 
-    .main-content #documentsView .krd-file-row > :not(.krd-file-row__expand) {
-        grid-column: 2 / -1;
+    .main-content #documentsView .krd-file-row > * {
+        grid-column: 1 / -1;
     }
 }
 

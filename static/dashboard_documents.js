@@ -6,7 +6,7 @@ let currentDocTab = 'all';
 let documentsExtraFilter = 'all';
 let selectedDocuments = new Set();
 let documentsOneCImportPreviewState = null;
-const documentDraftFieldIds = ['docType', 'docKind', 'docDate', 'docNumber', 'docClientSearch', 'docClientId', 'docClientSource', 'docClientSourceId', 'docContractSearch', 'docContractId', 'docExecutorName', 'docCorrespondent', 'docSubject', 'docDealId', 'docProductionOrderSearch', 'docProductionOrderId', 'docPriority'];
+const documentDraftFieldIds = ['docType', 'docKind', 'docDate', 'docNumber', 'docClientSearch', 'docClientId', 'docClientSource', 'docClientSourceId', 'docContractSearch', 'docContractId', 'docExecutorName', 'docCorrespondent', 'docSubject', 'docProductionOrderSearch', 'docProductionOrderId'];
 const TENDER_REQUIRED_DOCUMENTS = [
     { key: 'company_card', label: 'Карточка компании', keywords: ['карточк', 'реквизит', 'инн', 'кпп'] },
     { key: 'authority', label: 'Доверенность / полномочия', keywords: ['доверен', 'полномоч', 'приказ директор'] },
@@ -1436,7 +1436,6 @@ window.openDocumentPreview = function(id) {
     }
     const assignedChoice = documentClientChoiceByReference(row.client_source, row.client_source_id, row.client_id, row.correspondent || row.sender_name || row.recipient_name || '');
     const assignedClient = assignedChoice || documentClientById(row.client_id);
-    const assignedDeal = (typeof crmDealsDB !== 'undefined' && Array.isArray(crmDealsDB) ? crmDealsDB : []).find(deal => Number(deal.id || 0) === Number(row.deal_id || 0)) || null;
     const assignedContract = documentContractChoices().find(contract => Number(contract.id || 0) === Number(row.contract_id || 0)) || null;
     const assignedOrder = (typeof productionOrdersDB !== 'undefined' && Array.isArray(productionOrdersDB) ? productionOrdersDB : []).find(order => Number(order.id || 0) === Number(row.production_order_id || 0)) || null;
     const fileUrl = String(row.file_url || '').trim();
@@ -1466,9 +1465,8 @@ window.openDocumentPreview = function(id) {
                 ${documentPreviewRow('Кому', row.recipient_name || row.correspondent)}
                 ${documentPreviewRow('Ответственный', row.executor_name || row.resolution_assignee)}
                 ${documentPreviewRow('Срок ответа', row.resolution_deadline)}
-                ${documentPreviewRow('Клиент', assignedClient ? `${assignedClient.name || 'Без названия'}${assignedChoice?.source === 'bitrix24' ? ' · Bitrix24' : ' · CRM'}` : '')}
+                ${documentPreviewRow('Клиент', assignedClient ? (assignedClient.name || 'Без названия') : '')}
                 ${documentPreviewRow('Договор', assignedContract ? documentContractLabel(assignedContract) : '')}
-                ${documentPreviewRow('Сделка', assignedDeal ? (assignedDeal.title || assignedDeal.client_name || `#${assignedDeal.id}`) : '')}
                 ${documentPreviewRow('Заказ КБ', assignedOrder ? (assignedOrder.order_name || assignedOrder.project_name || `Заказ #${assignedOrder.id}`) : '')}
                 ${documentPreviewRow('Файл', fileUrl ? 'Файл прикреплён' : 'Файл ещё не загружен')}
             </div>
@@ -1480,8 +1478,6 @@ window.openDocumentPreview = function(id) {
     `;
     document.getElementById('genModalFooter').innerHTML = `
         ${fileUrl ? '<button class="btn-primary" id="docPreviewOpenFile">Открыть файл</button>' : '<button class="btn-primary" id="docPreviewUploadFile">Загрузить файл</button>'}
-        ${Number(row.contract_id || 0) > 0 ? '<button class="btn-secondary" id="docPreviewOpenContract">Открыть договор</button>' : ''}
-        <button class="btn-secondary" id="docPreviewEdit">Редактировать</button>
         <button class="btn-secondary" id="docPreviewClose">Закрыть</button>
     `;
     modal.style.display = 'flex';
@@ -1495,15 +1491,6 @@ window.openDocumentPreview = function(id) {
     if (uploadBtn) uploadBtn.onclick = () => {
         close();
         uploadDocFile(Number(row.id || 0));
-    };
-    const openContractBtn = document.getElementById('docPreviewOpenContract');
-    if (openContractBtn) openContractBtn.onclick = () => {
-        close();
-        openContractCard(Number(row.contract_id || 0));
-    };
-    document.getElementById('docPreviewEdit').onclick = () => {
-        close();
-        editDocument(Number(row.id || 0));
     };
     document.getElementById('docPreviewClose').onclick = close;
 };
@@ -1644,46 +1631,12 @@ function renderDocuments() {
 
     const renderRows = () => filtered.map(doc => {
         const id = Number(doc.id || 0);
-        const assignedChoice = documentClientChoiceByReference(doc.client_source, doc.client_source_id, doc.client_id, doc.correspondent || doc.sender_name || doc.recipient_name || '');
-        const assignedClient = assignedChoice || documentClientById(doc.client_id);
-        const assignedDeal = (typeof crmDealsDB !== 'undefined' && Array.isArray(crmDealsDB) ? crmDealsDB : []).find(deal => Number(deal.id || 0) === Number(doc.deal_id || 0)) || null;
         const hasFile = !!doc.file_url;
         const status = statusMap[doc.status] || statusMap.archived;
-        const subtype = typeLabels[doc.type];
-        const kindLabel = documentKindLabel(inferredDocumentKindCode(doc));
-        const isHighPriority = doc.priority === 'high';
-        const favBtn = typeof renderEntityFavoriteButton === 'function'
-            ? renderEntityFavoriteButton('document', doc.id, doc.number || doc.subject || `Документ #${doc.id}`, `${doc.type || ''} · ${doc.status || ''} · ${doc.correspondent || ''}`, 'documents', 'renderDocuments') : '';
-        const watchBtn = typeof renderEntityWatchButton === 'function'
-            ? renderEntityWatchButton('document', doc.id, doc.number || doc.subject || `Документ #${doc.id}`, `${doc.type || ''} · ${doc.status || ''} · ${doc.correspondent || ''}`, 'documents', 'renderDocuments', 'signed') : '';
         const rowHighlight = typeof isWorkflowFocused === 'function' && isWorkflowFocused('document', doc.id) ? ' krd-file-row--focused' : '';
-        const resolution = doc.resolution_task_id
-            ? `<span class="krd-badge krd-badge--info krd-badge--sm">Поручение #${esc(doc.resolution_task_id)}</span>`
-            : '';
-        const routeMeta = [doc.sender_name, doc.recipient_name].filter(Boolean).join(' -> ');
-        const linkMeta = [
-            assignedClient ? `Клиент: ${esc(assignedClient.name || 'Без названия')}` : '',
-            assignedDeal ? `Сделка: ${esc(assignedDeal.title || assignedDeal.client_name || `№${assignedDeal.id}`)}` : '',
-            Number(doc.contract_id || 0) > 0 ? `Договор #${esc(doc.contract_id)}` : '',
-            Number(doc.project_id || 0) > 0 ? `Проект #${esc(doc.project_id)}` : '',
-            Number(doc.object_id || 0) > 0 ? `Объект #${esc(doc.object_id)}` : '',
-        ].filter(Boolean).join(' · ');
-        const controlMeta = [
-            doc.delivery_method || '',
-            doc.source_number ? `Исх. №${esc(doc.source_number)}` : '',
-            doc.resolution_deadline ? `Ответ до ${esc(doc.resolution_deadline)}` : '',
-        ].filter(Boolean).join(' · ');
-        const executorMeta = [
-            doc.executor_name || doc.resolution_assignee || doc.signer_name || 'Не назначен',
-            doc.resolution_author ? `Поставил: ${esc(doc.resolution_author)}` : '',
-        ].filter(Boolean).join(' · ');
-
-        // version badge on row — shows current known state; actual count loaded on expand
-        const versionBadge = hasFile
-            ? `<span class="krd-version-badge krd-version-badge--active">v${Number(doc.file_revision_no || 1)}</span>`
-            : '';
-
-        // right-side actions
+        const routeMeta = [doc.sender_name, doc.recipient_name].filter(Boolean).join(' -> ') || doc.correspondent || 'Не указано';
+        const dueMeta = doc.resolution_deadline ? `Ответ до ${esc(doc.resolution_deadline)}` : 'Без срока ответа';
+        const executor = doc.executor_name || doc.resolution_assignee || doc.signer_name || 'Не назначен';
         const previewAction = `<button class="krd-btn krd-btn--primary krd-btn--xs" onclick="openDocumentPreview(${id})">Просмотр</button>`;
         const fileAction = hasFile
             ? `<a class="krd-btn krd-btn--outline krd-btn--xs" href="${esc(doc.file_url)}" target="_blank" rel="noopener">
@@ -1694,71 +1647,36 @@ function renderDocuments() {
                 <svg class="krd-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                 Добавить файл
               </button>`;
-
-        const newVersionBtn = hasFile
-            ? `<button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="uploadDocFile(${id})" title="Загрузить новую версию">+ версия</button>`
-            : '';
-
-        const expandBtn = `<button class="krd-file-row__expand" onclick="toggleDocumentVersions(${id}, this)" aria-label="Показать версии файла" aria-controls="docVersions-${id}" ${hasFile ? '' : 'disabled'}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
-        </button>`;
+        const deleteAction = `<button class="krd-btn krd-btn--danger-ghost krd-btn--xs" onclick="deleteDocument(${id})">Удалить</button>`;
 
         // main row
         const mainRow = `
         <div class="krd-file-row${rowHighlight}" data-document-id="${id}" id="docRow-${id}">
-            ${expandBtn}
             <div class="krd-file-row__name">
                 <div class="krd-file-row__name-main">
-                    ${favBtn}${watchBtn}
                     <span>${esc(doc.number || `#${id}`)}</span>
-                    ${versionBadge}
-                    <span class="krd-badge krd-badge--primary krd-badge--sm">${esc(kindLabel)}</span>
-                    ${subtype ? `<span class="krd-badge ${subtype.cls} krd-badge--sm">${esc(subtype.label)}</span>` : ''}
-                    ${isHighPriority ? `<span class="krd-badge krd-badge--danger krd-badge--sm">Приоритет</span>` : ''}
-                    ${assignedClient ? `<span class="krd-badge krd-badge--success krd-badge--sm">Для клиента: ${esc(assignedClient.name || 'Без названия')} · ${assignedChoice?.source === 'bitrix24' ? 'Bitrix24' : 'CRM'}</span>` : ''}
-                    ${assignedDeal ? `<span class="krd-badge krd-badge--primary krd-badge--sm">В сделке</span>` : ''}
                 </div>
                 <div class="krd-file-row__name-meta">
                     <span>${esc(doc.subject || 'Без темы')}</span>
-                    ${routeMeta ? `<span> · ${esc(routeMeta)}</span>` : ''}
-                    ${resolution}
                 </div>
             </div>
             <div class="krd-file-row__route">
-                <div class="krd-file-row__cell-main">${esc(routeMeta || doc.correspondent || 'Маршрут не задан')}</div>
-                <div class="krd-file-row__cell-meta">${esc(linkMeta || 'Без привязки к сущностям')}</div>
+                <div class="krd-file-row__cell-main">${esc(routeMeta)}</div>
             </div>
             <div class="krd-file-row__control">
                 <div class="krd-file-row__cell-main">${esc(doc.d_date || 'Без даты')}</div>
-                <div class="krd-file-row__cell-meta">${esc(controlMeta || 'Без срока ответа и способа доставки')}</div>
+                <div class="krd-file-row__cell-meta">${dueMeta}</div>
             </div>
             <div class="krd-file-row__executor">
-                <div class="krd-file-row__cell-main">${esc(doc.executor_name || doc.resolution_assignee || 'Не назначен')}</div>
-                <div class="krd-file-row__cell-meta">${esc(executorMeta || 'Исполнитель не определён')}</div>
+                <div class="krd-file-row__cell-main">${esc(executor)}</div>
             </div>
             <div class="krd-file-row__status"><span class="krd-badge ${status.cls}">${esc(status.label)}</span></div>
             <div class="krd-file-row__actions krd-file-row__actions--wrap">
-                <input type="checkbox" ${selectedDocuments.has(id) ? 'checked' : ''} onchange="toggleDocumentSelection(${id}, this.checked)" aria-label="Выделить документ">
                 ${previewAction}
                 ${fileAction}
-                ${Number(doc.contract_id || 0) > 0 ? `<button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="openContractCard(${Number(doc.contract_id || 0)})">Открыть договор</button>` : ''}
-                <button class="krd-btn krd-btn--outline krd-btn--xs" onclick="quickAssignDocument(${id})">Назначить ответственного</button>
-                <details class="document-row-menu">
-                    <summary class="krd-btn krd-btn--ghost krd-btn--xs">Ещё</summary>
-                    <div class="document-row-menu__items">
-                        ${newVersionBtn}
-                        <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="quickDocumentStatus(${id})">Изменить статус</button>
-                        <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="quickDocumentComment(${id})">Добавить комментарий</button>
-                        <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="quickDocumentTask(${id})">Создать задачу</button>
-                        <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="quickDocumentReminder(${id})">Установить срок</button>
-                        ${Number(doc.contract_id || 0) > 0 ? '' : `<button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="openDocumentLinkedContext(${id})">Открыть проект</button>`}
-                        <button class="krd-btn krd-btn--ghost krd-btn--xs" onclick="editDocument(${id})">Изменить данные</button>
-                        <button class="krd-btn krd-btn--danger-ghost krd-btn--xs" onclick="deleteDocument(${id})">Удалить документ</button>
-                    </div>
-                </details>
+                ${deleteAction}
             </div>
-        </div>
-        <div class="krd-file-history" id="docVersions-${id}" data-document-id="${id}" hidden></div>`;
+        </div>`;
         return mainRow;
     }).join('');
 
@@ -1788,11 +1706,11 @@ async function submitDocument(status = 'registered') {
     const clientId = parseInt(document.getElementById('docClientId')?.value || '0', 10) || 0;
     const clientSource = document.getElementById('docClientSource')?.value || '';
     const clientSourceId = parseInt(document.getElementById('docClientSourceId')?.value || '0', 10) || 0;
-    const dealId = parseInt(document.getElementById('docDealId')?.value || '0', 10) || 0;
+    const dealId = 0;
     const contractId = parseInt(document.getElementById('docContractId')?.value || '0', 10) || 0;
     const productionOrderId = parseInt(document.getElementById('docProductionOrderId')?.value || '0', 10) || 0;
     const parentId = parseInt(document.getElementById('docParentId')?.value || '0', 10) || 0;
-    const priority = document.getElementById('docPriority')?.checked ? 'high' : 'normal';
+    const priority = 'normal';
     const file = document.getElementById('docFile')?.files?.[0] || null;
 
     const errors = [];
@@ -1862,10 +1780,8 @@ async function submitDocument(status = 'registered') {
     if (document.getElementById('docContractId')) document.getElementById('docContractId').value = '0';
     if (document.getElementById('docProductionOrderSearch')) document.getElementById('docProductionOrderSearch').value = '';
     if (document.getElementById('docProductionOrderId')) document.getElementById('docProductionOrderId').value = '0';
-    if (document.getElementById('docPriority')) document.getElementById('docPriority').checked = false;
     if (document.getElementById('docFile')) document.getElementById('docFile').value = '';
     updateDocumentFileName();
-    if (document.getElementById('docDealId')) document.getElementById('docDealId').innerHTML = '<option value="0">Сначала выберите клиента</option>';
     if (document.getElementById('docParentId')) document.getElementById('docParentId').value = '0';
 
     await Promise.all([

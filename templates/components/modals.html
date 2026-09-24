@@ -215,11 +215,6 @@
                         <small id="docContractHint">Если выбрать договор, документ появится в его карточке.</small>
                     </label>
                     <label class="form-field form-field--full">
-                        <span class="form-label">Сделка клиента</span>
-                        <select id="docDealId" class="auth-input"><option value="0">Сначала выберите клиента</option></select>
-                        <small>Если выбрать сделку, документ сразу появится на её пятом шаге.</small>
-                    </label>
-                    <label class="form-field form-field--full">
                         <span class="form-label">Заказ КБ / производства</span>
                         <input type="search" id="docProductionOrderSearch" class="auth-input" list="docProductionOrderOptions" placeholder="Необязательно: найдите производственный заказ" autocomplete="off" oninput="handleDocumentProductionOrderChoice(this.value)">
                         <input type="hidden" id="docProductionOrderId" value="0">
@@ -246,10 +241,6 @@
                     <span class="form-label">Название документа <span class="form-required">*</span></span>
                     <textarea id="docSubject" data-field="docSubject" class="auth-input" rows="3" placeholder="Например: КП на поставку двух шумозащитных кожухов"></textarea>
                     <span class="form-error" data-error-for="docSubject"></span>
-                </label>
-                <label class="document-priority-field">
-                    <input type="checkbox" id="docPriority">
-                    <span><strong>Важный документ</strong><small>Отметьте, если документ требует особого внимания.</small></span>
                 </label>
             </section>
 
