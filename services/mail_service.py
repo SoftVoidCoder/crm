@@ -6,6 +6,14 @@ from email.utils import parsedate_to_datetime
 
 
 EMAIL_PROVIDER_DEFAULTS = {
+    "korda": {
+        "imap_host": "mail.korda.spb.ru",
+        "imap_port": 993,
+        "smtp_host": "mail.korda.spb.ru",
+        "smtp_port": 465,
+        "inbox_folder": "INBOX",
+        "archive_folder": "Archive",
+    },
     "yandex": {
         "imap_host": "imap.yandex.ru",
         "imap_port": 993,
@@ -58,6 +66,8 @@ def email_provider_key(address: str) -> str:
         return "outlook"
     if domain in {"mail.ru", "bk.ru", "inbox.ru", "list.ru"}:
         return "mailru"
+    if domain == "korda.spb.ru":
+        return "korda"
     return ""
 
 

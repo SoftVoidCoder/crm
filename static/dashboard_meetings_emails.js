@@ -11,6 +11,14 @@ let emailOAuthProvidersDB = [];
 let emailOAuthListenerReady = false;
 
 const EMAIL_PROVIDER_DEFAULTS = {
+    korda: {
+        imap_host: 'mail.korda.spb.ru',
+        imap_port: 993,
+        smtp_host: 'mail.korda.spb.ru',
+        smtp_port: 465,
+        inbox_folder: 'INBOX',
+        archive_folder: 'Archive',
+    },
     yandex: {
         imap_host: 'imap.yandex.ru',
         imap_port: 993,
@@ -43,12 +51,13 @@ function getEmailProviderKey(address) {
     if (['yandex.ru', 'ya.ru', 'yandex.com', 'yandex.kz', 'yandex.by', 'yandex.ua', 'yandex.uz'].includes(domain)) return 'yandex';
     if (domain === 'gmail.com') return 'gmail';
     if (['outlook.com', 'office365.com', 'hotmail.com', 'live.com', 'msn.com'].includes(domain)) return 'outlook';
+    if (domain === 'korda.spb.ru') return 'korda';
     return '';
 }
 
 function getEmailProviderDefaults(address) {
     const provider = getEmailProviderKey(address);
-    const defaults = EMAIL_PROVIDER_DEFAULTS[provider] || EMAIL_PROVIDER_DEFAULTS.yandex;
+    const defaults = EMAIL_PROVIDER_DEFAULTS[provider] || EMAIL_PROVIDER_DEFAULTS.korda;
     const email = String(address || '').trim();
     const localPart = email.split('@')[0] || email;
     return {
@@ -73,9 +82,13 @@ function getEmailSetupCopy(provider) {
             hint: 'Для Outlook чаще всего хватает адреса ящика и пароля приложения или пароля учетной записи Microsoft 365.',
             note: 'Если компания использует отдельные серверы, при необходимости открой дополнительные настройки.'
         },
+        korda: {
+            hint: 'Введи корпоративную почту Korda и пароль. Сервер mail.korda.spb.ru подставлен автоматически.',
+            note: 'Для ящиков @korda.spb.ru используется IMAP/SMTP через mail.korda.spb.ru.'
+        },
         default: {
-    hint: 'Выбери одну из трёх почт и войди в аккаунт провайдера.',
-            note: 'Подключение выполняется через официальный вход провайдера.'
+            hint: 'Введи адрес почты и пароль. Для Korda сервер mail.korda.spb.ru уже подставлен.',
+            note: 'Если ящик не @korda.spb.ru, укажи его IMAP/SMTP серверы в дополнительных настройках.'
         }
     };
     return copyMap[provider] || copyMap.default;
@@ -90,11 +103,9 @@ function updateEmailSetupCopy(provider = '') {
 }
 
 function focusEmailOAuthConnect() {
-    const grid = document.getElementById('emailOAuthProviderGrid');
-    if (!grid) return;
-    grid.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    const firstButton = grid.querySelector('button');
-    if (firstButton) firstButton.focus();
+    const form = document.getElementById('emailAccountForm');
+    if (form) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.getElementById('emailAccountAddress')?.focus();
 }
 
 async function loadEmailOAuthProviders() {
@@ -126,9 +137,7 @@ function renderEmailOAuthProviders() {
             button.addEventListener('click', () => connectEmailOAuth(provider));
         }
     });
-    if (status) {
-        status.textContent = 'Выберите Google, Яндекс или Microsoft. Откроется официальный вход провайдера.';
-    }
+    if (status) status.textContent = '';
 }
 
 function ensureEmailOAuthListener() {
@@ -176,7 +185,8 @@ function startEmailConnect(provider = '') {
         applyEmailProviderPreset(provider);
         updateEmailSetupCopy(provider);
     } else {
-        updateEmailSetupCopy(provider || 'default');
+        applyEmailProviderPreset('korda');
+        updateEmailSetupCopy(provider || 'korda');
     }
     const advanced = document.querySelector('.email-account-advanced');
     if (advanced && provider === 'manual') advanced.open = true;
@@ -369,14 +379,14 @@ function resetEmailAccountForm() {
         emailAccountAddress: '',
         emailAccountLogin: '',
         emailAccountPassword: '',
-        emailAccountImapHost: EMAIL_PROVIDER_DEFAULTS.yandex.imap_host,
-        emailAccountImapPort: String(EMAIL_PROVIDER_DEFAULTS.yandex.imap_port),
-        emailAccountSmtpHost: EMAIL_PROVIDER_DEFAULTS.yandex.smtp_host,
-        emailAccountSmtpPort: String(EMAIL_PROVIDER_DEFAULTS.yandex.smtp_port),
+        emailAccountImapHost: EMAIL_PROVIDER_DEFAULTS.korda.imap_host,
+        emailAccountImapPort: String(EMAIL_PROVIDER_DEFAULTS.korda.imap_port),
+        emailAccountSmtpHost: EMAIL_PROVIDER_DEFAULTS.korda.smtp_host,
+        emailAccountSmtpPort: String(EMAIL_PROVIDER_DEFAULTS.korda.smtp_port),
         emailAccountSmtpLogin: '',
         emailAccountSmtpPassword: '',
-        emailAccountInboxFolder: EMAIL_PROVIDER_DEFAULTS.yandex.inbox_folder,
-        emailAccountArchiveFolder: EMAIL_PROVIDER_DEFAULTS.yandex.archive_folder
+        emailAccountInboxFolder: EMAIL_PROVIDER_DEFAULTS.korda.inbox_folder,
+        emailAccountArchiveFolder: EMAIL_PROVIDER_DEFAULTS.korda.archive_folder
     };
     Object.entries(defaults).forEach(([id, value]) => {
         const input = document.getElementById(id);
@@ -388,7 +398,7 @@ function resetEmailAccountForm() {
     if (isActive) isActive.checked = true;
     const advanced = document.querySelector('.email-account-advanced');
     if (advanced) advanced.open = false;
-    updateEmailSetupCopy('default');
+    updateEmailSetupCopy('korda');
 }
 
 function editEmailAccount(accountId) {
@@ -399,8 +409,8 @@ function editEmailAccount(accountId) {
     document.getElementById('emailAccountAddress').value = account.address || '';
     document.getElementById('emailAccountLogin').value = account.login || account.address || '';
     document.getElementById('emailAccountPassword').value = '';
-    document.getElementById('emailAccountImapHost').value = account.imap_host || 'imap.yandex.ru';
-    document.getElementById('emailAccountSmtpHost').value = account.smtp_host || 'smtp.yandex.ru';
+    document.getElementById('emailAccountImapHost').value = account.imap_host || 'mail.korda.spb.ru';
+    document.getElementById('emailAccountSmtpHost').value = account.smtp_host || 'mail.korda.spb.ru';
     document.getElementById('emailAccountSmtpLogin').value = account.smtp_login || account.login || '';
     document.getElementById('emailAccountSmtpPassword').value = '';
     document.getElementById('emailAccountInboxFolder').value = account.inbox_folder || 'INBOX';
@@ -493,8 +503,6 @@ async function renderEmails(forceRefresh = false) {
     if (typeof loadEmailAccounts === 'function') {
         await loadEmailAccounts();
     }
-    await loadEmailOAuthProviders();
-    ensureEmailOAuthListener();
     renderEmailAccounts();
 
     if (emailAccountsDB.length === 0) {

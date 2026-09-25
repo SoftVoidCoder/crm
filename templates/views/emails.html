@@ -13,54 +13,54 @@
             <button class="btn-secondary" onclick="retryFailedMailOps()">
                 Повторить сбойные
             </button>
-            <button id="newMailboxBtn" class="btn-secondary" onclick="focusEmailOAuthConnect()">Привязать почту</button>
+            <button id="newMailboxBtn" class="btn-secondary" onclick="focusEmailOAuthConnect()">Добавить почту</button>
         </div>
     </div>
     <div class="ops-overview-card">
         <div>
             <div class="ops-overview-title">Привязка корпоративной почты</div>
-      <div class="ops-overview-text">Подключай почту через официальный вход провайдера. CRM получит разрешение на синхронизацию писем и ответов без хранения обычного пароля от аккаунта.</div>
+      <div class="ops-overview-text">Добавляй корпоративный ящик Korda через IMAP/SMTP. CRM проверит вход, сохранит ящик за текущим пользователем и начнёт синхронизацию писем.</div>
         </div>
         <div class="ops-overview-pills">
         <span class="ops-pill">Входящая почта</span>
         <span class="ops-pill">Исходящая почта</span>
-            <span class="ops-pill">OAuth-вход</span>
+            <span class="ops-pill">mail.korda.spb.ru</span>
             <span class="ops-pill">Синхронизация</span>
         </div>
     </div>
     <section class="surface-card surface-card--padded usage-guide">
         <div class="section-header">
             <div>
-                <h3 class="section-title">Подключение без ручных серверов</h3>
-                <p class="section-subtitle">Основной путь теперь такой же, как в привычных сервисах: выбрать почту, войти в аккаунт и разрешить синхронизацию.</p>
+                <h3 class="section-title">Подключение ящика Korda</h3>
+                <p class="section-subtitle">Основной путь: указать адрес, пароль, нажать подключение. Серверы Korda уже подставлены.</p>
             </div>
         </div>
         <div class="usage-guide-grid">
             <div class="usage-guide-item">
-          <h4 class="usage-guide-title">Почта Гугл</h4>
-          <p class="usage-guide-text">Вход идёт через официальный экран Google. После разрешения CRM синхронизирует входящие и сможет отправлять ответы из карточки письма.</p>
+          <h4 class="usage-guide-title">Адрес ящика</h4>
+          <p class="usage-guide-text">Введи рабочую почту вида name@korda.spb.ru. Логин для входа подставится таким же адресом.</p>
                 <ol class="usage-guide-list">
-            <li>Нажми кнопку Google.</li>
-                    <li>Войди в нужный аккаунт.</li>
-            <li>Разреши доступ к почте и вернись в CRM.</li>
+            <li>Нажми “Добавить почту”.</li>
+                    <li>Заполни адрес и пароль.</li>
+            <li>Нажми “Подключить ящик”.</li>
                 </ol>
             </div>
             <div class="usage-guide-item">
-          <h4 class="usage-guide-title">Яндекс 360</h4>
-          <p class="usage-guide-text">Яндекс подключается через OAuth-токен. Пользователь входит на стороне Яндекса, а CRM получает разрешение на работу с почтой.</p>
+          <h4 class="usage-guide-title">Сервер Korda</h4>
+          <p class="usage-guide-text">Для входящей и исходящей почты используется один сервер mail.korda.spb.ru с защищённым подключением.</p>
                 <ol class="usage-guide-list">
-            <li>Нажми кнопку Яндекс.</li>
-                    <li>Войди в Яндекс ID.</li>
-            <li>Подтверди доступ к почте.</li>
+            <li>IMAP: порт 993.</li>
+                    <li>SMTP: порт 465.</li>
+            <li>Папка входящих: INBOX.</li>
                 </ol>
             </div>
             <div class="usage-guide-item">
-          <h4 class="usage-guide-title">Почта Майкрософт</h4>
-          <p class="usage-guide-text">Outlook и Microsoft 365 подключаются через Microsoft Graph. Это самый стабильный путь для корпоративной почты.</p>
+          <h4 class="usage-guide-title">Проверка входа</h4>
+          <p class="usage-guide-text">После сохранения CRM сразу проверяет входящую почту, подтягивает письма и показывает статус в карточке ящика.</p>
                 <ol class="usage-guide-list">
-            <li>Нажми кнопку Microsoft.</li>
-            <li>Войди в рабочий или личный аккаунт.</li>
-                    <li>Разреши чтение и отправку почты.</li>
+            <li>Если пароль неверный, появится ошибка.</li>
+            <li>Если сервер не отвечает, карточка покажет причину.</li>
+                    <li>Кнопка “Проверить” повторяет тест.</li>
                 </ol>
             </div>
         </div>
@@ -74,27 +74,41 @@
                 </div>
             </div>
             <div class="email-setup-card">
-                <div class="email-setup-title">Войти в почту</div>
-                <div id="emailOAuthProviderGrid" class="email-oauth-grid">
-                    <button class="email-oauth-card" data-provider="google">
-                        <strong>Войти через Google</strong>
-                        <small>Gmail / Workspace</small>
-                    </button>
-                    <button class="email-oauth-card" data-provider="yandex">
-                        <strong>Войти через Яндекс</strong>
-                        <small>Яндекс 360</small>
-                    </button>
-                    <button class="email-oauth-card" data-provider="microsoft">
-                        <strong>Войти через Microsoft</strong>
-                        <small>Outlook / 365</small>
-                    </button>
-                </div>
-      <div id="emailSetupHint" class="email-setup-hint">Выбери одну из трёх почт и войди в аккаунт провайдера. CRM сама привяжет ящик после разрешения доступа.</div>
-                <div id="emailOAuthStatus" class="email-oauth-status"></div>
+                <div class="email-setup-title">Добавить свою почту</div>
+                <form id="emailAccountForm" class="email-account-form" onsubmit="event.preventDefault(); saveEmailAccount();">
+                    <div class="email-account-form-grid">
+                        <label><span>Название</span><input id="emailAccountLabel" class="auth-input" placeholder="Korda почта"></label>
+                        <label><span>Адрес почты</span><input id="emailAccountAddress" class="auth-input" type="email" placeholder="name@korda.spb.ru" autocomplete="email" oninput="syncEmailAccountQuickSetup(); updateEmailSetupHintFromAddress();"></label>
+                        <label><span>Логин</span><input id="emailAccountLogin" class="auth-input" placeholder="name@korda.spb.ru" autocomplete="username"></label>
+                        <label><span>Пароль</span><input id="emailAccountPassword" class="auth-input" type="password" placeholder="Пароль от ящика" autocomplete="current-password"></label>
+                    </div>
+                    <details class="email-account-advanced">
+                        <summary>Настройки сервера</summary>
+                        <div class="email-account-form-grid">
+                            <label><span>IMAP сервер</span><input id="emailAccountImapHost" class="auth-input" value="mail.korda.spb.ru"></label>
+                            <label><span>IMAP порт</span><input id="emailAccountImapPort" class="auth-input" type="number" value="993"></label>
+                            <label><span>SMTP сервер</span><input id="emailAccountSmtpHost" class="auth-input" value="mail.korda.spb.ru"></label>
+                            <label><span>SMTP порт</span><input id="emailAccountSmtpPort" class="auth-input" type="number" value="465"></label>
+                            <label><span>SMTP логин</span><input id="emailAccountSmtpLogin" class="auth-input" placeholder="name@korda.spb.ru"></label>
+                            <label><span>SMTP пароль</span><input id="emailAccountSmtpPassword" class="auth-input" type="password" placeholder="если отличается"></label>
+                            <label><span>Папка входящих</span><input id="emailAccountInboxFolder" class="auth-input" value="INBOX"></label>
+                            <label><span>Папка архива</span><input id="emailAccountArchiveFolder" class="auth-input" value="Archive"></label>
+                        </div>
+                    </details>
+                    <div class="email-account-checkboxes">
+                        <label><input id="emailAccountDefault" type="checkbox" checked> Сделать основным ящиком</label>
+                        <label><input id="emailAccountActive" type="checkbox" checked> Синхронизировать почту</label>
+                    </div>
+                    <div class="email-account-actions">
+                        <button class="btn-primary" type="submit">Подключить ящик</button>
+                        <button class="btn-secondary" type="button" onclick="resetEmailAccountForm()">Очистить</button>
+                    </div>
+                </form>
+      <div id="emailSetupHint" class="email-setup-hint">Введи корпоративную почту Korda и пароль. Сервер mail.korda.spb.ru подставлен автоматически.</div>
                 <div class="email-setup-checklist">
-                    <div class="email-setup-line">1. Нажми провайдера и войди в аккаунт.</div>
-                    <div class="email-setup-line">2. Разреши CRM читать почту и отправлять ответы.</div>
-      <div class="email-setup-line">3. После возврата ящик появится в списке и начнёт синхронизацию.</div>
+                    <div class="email-setup-line">1. Адрес и пароль вводятся прямо здесь.</div>
+                    <div class="email-setup-line">2. CRM проверяет IMAP и SMTP через mail.korda.spb.ru.</div>
+      <div class="email-setup-line">3. Ящик сохраняется только за текущим аккаунтом CRM.</div>
                 </div>
             </div>
             <div id="emailAccountsList" class="email-accounts-list"></div>
