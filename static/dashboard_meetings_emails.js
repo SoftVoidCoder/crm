@@ -12,6 +12,7 @@ let emailOAuthListenerReady = false;
 let emailRecentSentRefreshTimer = null;
 let emailInboxAutoRefreshTimer = null;
 let emailInboxAutoRefreshInFlight = false;
+let emailListSignature = '';
 const KORDA_WEBMAIL_LOGIN_URL = 'https://mail.korda.spb.ru/owa/auth/logon.aspx?url=https%3a%2f%2fmail.korda.spb.ru%2fowa%2f&reason=0';
 
 const EMAIL_PROVIDER_DEFAULTS = {
@@ -319,7 +320,7 @@ function manageRecentSentAutoRefresh() {
         emailRecentSentRefreshTimer = null;
     }
     if (currentEmailFilter === 'recent_sent') {
-        emailRecentSentRefreshTimer = setInterval(() => renderEmails(), 60000);
+        emailRecentSentRefreshTimer = setInterval(() => renderEmails(false, { silent: true }), 60000);
     }
 }
 
@@ -332,7 +333,7 @@ function ensureEmailInboxAutoRefresh() {
         if (!isVisible || bindDialogOpen || emailInboxAutoRefreshInFlight) return;
         emailInboxAutoRefreshInFlight = true;
         try {
-            await renderEmails(true);
+            await renderEmails(true, { silent: true });
         } finally {
             emailInboxAutoRefreshInFlight = false;
         }
@@ -564,6 +565,8 @@ async function syncMailbox(accountId) {
 }
 
 async function renderEmails(forceRefresh = false) {
+    const options = typeof arguments[1] === 'object' && arguments[1] ? arguments[1] : {};
+    const silent = !!options.silent;
     const container = document.getElementById('emailsListContainer'); 
     if (!container) return;
     ensureEmailInboxAutoRefresh();
@@ -578,14 +581,32 @@ async function renderEmails(forceRefresh = false) {
         return;
     }
 
-    container.innerHTML = '<div class="email-loading">Собираем письма, статусы и архив по выбранным ящикам...</div>';
+    if (!silent) {
+        container.innerHTML = '<div class="email-loading">Собираем письма, статусы и архив по выбранным ящикам...</div>';
+    }
     const params = new URLSearchParams();
     if (currentEmailAccountId) params.set('account_id', currentEmailAccountId);
     params.set('filter_name', currentEmailFilter);
     if (currentEmailQuery) params.set('query', currentEmailQuery);
     if (forceRefresh) params.set('force_refresh', '1');
     const data = await apiCall(`/emails?${params.toString()}`);
-    emailsDB = Array.isArray(data) ? data : [];
+    const nextEmails = Array.isArray(data) ? data : [];
+    const nextSignature = nextEmails.map(item => [
+        item.id,
+        item.is_read,
+        item.is_archived,
+        item.delivery_status,
+        item.last_action_at || '',
+        item.created_at || '',
+    ].join(':')).join('|');
+    if (silent && nextSignature === emailListSignature) {
+        emailsDB = nextEmails;
+        return;
+    }
+    const restoreScrollY = window.scrollY;
+    const restoreContainerTop = container.scrollTop || 0;
+    emailsDB = nextEmails;
+    emailListSignature = nextSignature;
 
     if (emailsDB.length === 0) {
         container.innerHTML = currentEmailFilter === 'recent_sent'
@@ -661,6 +682,10 @@ async function renderEmails(forceRefresh = false) {
         </div>
     `;
     }).join('');
+    if (silent) {
+        container.scrollTop = restoreContainerTop;
+        window.scrollTo({ top: restoreScrollY, behavior: 'auto' });
+    }
 }
 
 function createProjectFromEmail(id) { 
