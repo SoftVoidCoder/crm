@@ -104,10 +104,26 @@ function updateEmailSetupCopy(provider = '') {
 }
 
 function focusEmailOAuthConnect() {
-    const form = document.getElementById('emailAccountForm');
-    if (form) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    document.getElementById('emailAccountAddress')?.focus();
+    openKordaMailBindDialog();
 }
+
+function openKordaMailBindDialog() {
+    const form = document.getElementById('emailAccountForm');
+    if (!form) return;
+    form.classList.add('open');
+    const hint = document.getElementById('emailSetupHint');
+    if (hint) {
+        hint.textContent = 'Введи адрес и пароль Korda Mail в открывшемся окне, затем нажми “Войти и привязать”.';
+    }
+    syncEmailAccountQuickSetup();
+    setTimeout(() => document.getElementById('emailAccountAddress')?.focus(), 0);
+}
+window.openKordaMailBindDialog = openKordaMailBindDialog;
+
+function closeKordaMailBindDialog() {
+    document.getElementById('emailAccountForm')?.classList.remove('open');
+}
+window.closeKordaMailBindDialog = closeKordaMailBindDialog;
 
 function openKordaWebmailLogin() {
     window.open(KORDA_WEBMAIL_LOGIN_URL, '_blank', 'noopener,noreferrer');
@@ -329,7 +345,7 @@ function renderEmailAccounts() {
     const canManageAccounts = Array.isArray(currentPermissions?.emails) && currentPermissions.emails.includes('manage_accounts');
     const form = document.querySelector('.email-account-form');
     const newMailboxBtn = document.getElementById('newMailboxBtn');
-    if (form) form.style.display = canManageAccounts ? 'flex' : 'none';
+    if (form) form.classList.toggle('is-disabled', !canManageAccounts);
     if (newMailboxBtn) newMailboxBtn.style.display = canManageAccounts ? 'inline-flex' : 'none';
     if (!emailAccountsDB || emailAccountsDB.length === 0) {
         container.innerHTML = '<div class="empty-state">Почтовые ящики ещё не добавлены. Создай первый ящик выше.</div>';
@@ -472,6 +488,7 @@ async function saveEmailAccount() {
     await loadEmailAccounts();
     renderEmailAccounts();
     resetEmailAccountForm();
+    closeKordaMailBindDialog();
     await renderEmails(true);
     showToast('Почта', 'Почтовый ящик сохранён');
 }

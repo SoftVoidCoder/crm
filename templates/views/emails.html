@@ -19,7 +19,7 @@
     <div class="ops-overview-card">
         <div>
             <div class="ops-overview-title">Привязка корпоративной почты</div>
-      <div class="ops-overview-text">Подключай корпоративный ящик через привычный вход Korda Mail. CRM проверит доступ, сохранит ящик за текущим пользователем и начнёт синхронизацию писем.</div>
+      <div class="ops-overview-text">Сначала можно открыть обычный вход Korda Mail и проверить пароль, затем этим же адресом привязать ящик к CRM для синхронизации писем.</div>
         </div>
         <div class="ops-overview-pills">
         <span class="ops-pill">Входящая почта</span>
@@ -32,22 +32,22 @@
         <div class="section-header">
             <div>
                 <h3 class="section-title">Вход в корпоративную почту</h3>
-                <p class="section-subtitle">Открывается тот же вход Korda Mail, которым пользуются в браузере. После проверки CRM привяжет ящик к аккаунту.</p>
+                <p class="section-subtitle">Нажми вход Korda Mail, введи адрес и пароль в окне CRM, после этого ящик привяжется к аккаунту.</p>
             </div>
         </div>
         <div class="usage-guide-grid">
             <div class="usage-guide-item">
           <h4 class="usage-guide-title">Обычный вход</h4>
-          <p class="usage-guide-text">Нажми “Войти через Korda Mail”, откроется корпоративная страница входа mail.korda.spb.ru.</p>
+          <p class="usage-guide-text">Нажми “Войти через Korda Mail”, CRM откроет отдельное окно входа для корпоративной почты.</p>
                 <ol class="usage-guide-list">
-            <li>Открой вход Korda Mail.</li>
-                    <li>Проверь, что логин и пароль подходят.</li>
-            <li>Вернись в CRM для привязки.</li>
+            <li>Открой окно входа.</li>
+                    <li>Введи адрес и пароль почты.</li>
+            <li>Нажми “Войти и привязать”.</li>
                 </ol>
             </div>
             <div class="usage-guide-item">
-          <h4 class="usage-guide-title">Привязка в CRM</h4>
-          <p class="usage-guide-text">В CRM вводится тот же адрес и пароль ящика, чтобы система могла забрать письма в раздел “Почта”.</p>
+          <h4 class="usage-guide-title">Автопривязка</h4>
+          <p class="usage-guide-text">После отправки формы CRM сама проверяет доступ к mail.korda.spb.ru и добавляет ящик в список.</p>
                 <ol class="usage-guide-list">
             <li>Адрес вида name@korda.spb.ru.</li>
                     <li>Пароль от этого же ящика.</li>
@@ -56,7 +56,7 @@
             </div>
             <div class="usage-guide-item">
           <h4 class="usage-guide-title">Проверка доступа</h4>
-          <p class="usage-guide-text">После нажатия “Войти и привязать” CRM проверяет доступ к ящику и показывает результат в карточке.</p>
+          <p class="usage-guide-text">После входа CRM синхронизирует входящие письма и показывает результат в карточке ящика.</p>
                 <ol class="usage-guide-list">
             <li>Если пароль неверный, появится ошибка.</li>
             <li>Если сервер не отвечает, карточка покажет причину.</li>
@@ -74,15 +74,22 @@
                 </div>
             </div>
             <div class="email-setup-card">
-                <div class="email-setup-title">Войти через Korda Mail</div>
+                <div class="email-setup-title">Подключить Korda Mail</div>
                 <div class="korda-mail-login-card">
                     <div>
-                        <div class="korda-mail-login-title">Korda Mail</div>
-                        <div class="korda-mail-login-url">mail.korda.spb.ru/owa</div>
+                        <div class="korda-mail-login-title">Войти через Korda Mail</div>
+                        <div class="korda-mail-login-url">Адрес и пароль вводятся в окне CRM</div>
                     </div>
-                    <button class="btn-primary" type="button" onclick="openKordaWebmailLogin()">Открыть вход</button>
+                    <button class="btn-primary" type="button" onclick="openKordaMailBindDialog()">Войти</button>
                 </div>
-                <form id="emailAccountForm" class="email-account-form" onsubmit="event.preventDefault(); saveEmailAccount();">
+                <form id="emailAccountForm" class="email-account-form korda-mail-bind-dialog" onsubmit="event.preventDefault(); saveEmailAccount();">
+                    <div class="korda-mail-bind-header">
+                        <div>
+                            <div class="korda-mail-bind-brand">Korda Mail</div>
+                            <div class="korda-mail-bind-subtitle">mail.korda.spb.ru</div>
+                        </div>
+                        <button class="icon-btn" type="button" onclick="closeKordaMailBindDialog()" aria-label="Закрыть">×</button>
+                    </div>
                     <div class="email-account-form-grid">
                         <label><span>Адрес почты</span><input id="emailAccountAddress" class="auth-input" type="email" placeholder="name@korda.spb.ru" autocomplete="email" oninput="syncEmailAccountQuickSetup(); updateEmailSetupHintFromAddress();"></label>
                         <label><span>Пароль</span><input id="emailAccountPassword" class="auth-input" type="password" placeholder="Пароль от ящика" autocomplete="current-password"></label>
@@ -111,10 +118,10 @@
                         <button class="btn-secondary" type="button" onclick="resetEmailAccountForm()">Очистить</button>
                     </div>
                 </form>
-      <div id="emailSetupHint" class="email-setup-hint">Вход идёт через корпоративную почту Korda. Для синхронизации в CRM введи тот же адрес и пароль ящика.</div>
+      <div id="emailSetupHint" class="email-setup-hint">Нажми “Войти”, введи данные почты Korda в открывшемся окне, и CRM привяжет ящик к текущему аккаунту.</div>
                 <div class="email-setup-checklist">
-                    <div class="email-setup-line">1. Кнопка “Открыть вход” ведёт на официальный Korda Mail.</div>
-                    <div class="email-setup-line">2. “Войти и привязать” подключает этот ящик к CRM.</div>
+                    <div class="email-setup-line">1. “Войти” открывает окно подключения Korda Mail.</div>
+                    <div class="email-setup-line">2. “Войти и привязать” проверяет данные и подключает ящик к CRM.</div>
       <div class="email-setup-line">3. Ящик сохраняется только за текущим аккаунтом CRM.</div>
                 </div>
             </div>

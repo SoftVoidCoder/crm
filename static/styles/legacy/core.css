@@ -3305,6 +3305,46 @@ button.btn-danger {
     font-size: 12px;
     color: var(--secondary);
 }
+.korda-mail-bind-dialog {
+    display: none;
+    position: fixed;
+    z-index: 10040;
+    left: 50%;
+    top: 50%;
+    width: min(92vw, 460px);
+    max-height: min(86vh, 720px);
+    overflow: auto;
+    transform: translate(-50%, -50%);
+    padding: 24px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+}
+.korda-mail-bind-dialog.open {
+    display: flex;
+}
+.korda-mail-bind-dialog.is-disabled {
+    display: none !important;
+}
+.korda-mail-bind-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+}
+.korda-mail-bind-brand {
+    font-size: 22px;
+    font-weight: 900;
+    color: var(--text);
+}
+.korda-mail-bind-subtitle {
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--secondary);
+}
 .email-setup-actions {
     display: flex;
     gap: 8px;
