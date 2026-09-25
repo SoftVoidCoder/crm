@@ -1,4 +1,4 @@
-import json, time, email, datetime, asyncio, os, secrets, imaplib, html
+import json, time, email, datetime, asyncio, os, secrets, imaplib, html, mimetypes
 from email.utils import parseaddr
 import smtplib
 from email.mime.text import MIMEText
@@ -1087,6 +1087,111 @@ def _load_email_account(account_id: int, actor: dict | None = None):
     return _hydrate_email_oauth_row(dict(row)) if row else None
 
 
+def _parse_email_document_ids(raw_value: str = "") -> list[int]:
+    raw = _safe_text(raw_value)
+    if not raw:
+        return []
+    values = []
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            values = parsed
+        else:
+            values = [parsed]
+    except Exception:
+        values = raw.replace(";", ",").split(",")
+    result: list[int] = []
+    for value in values:
+        try:
+            item = int(value)
+        except Exception:
+            continue
+        if item > 0 and item not in result:
+            result.append(item)
+    return result
+
+
+def _upload_url_to_disk_path(file_url: str = "") -> str:
+    raw = _safe_text(file_url)
+    if not raw.startswith("/uploads/"):
+        return ""
+    relative = raw.removeprefix("/uploads/").replace("\\", "/")
+    parts = [part for part in relative.split("/") if part and part not in {".", ".."}]
+    if not parts:
+        return ""
+    disk_path = os.path.abspath(os.path.join(UPLOADS_DIR, *parts))
+    uploads_root = os.path.abspath(UPLOADS_DIR)
+    try:
+        if os.path.commonpath([uploads_root, disk_path]) != uploads_root:
+            return ""
+    except Exception:
+        return ""
+    return disk_path
+
+
+def _load_email_reply_documents(document_ids: list[int]) -> list[dict]:
+    if not document_ids:
+        return []
+    conn = get_connection(row_factory=True)
+    c = conn.cursor()
+    placeholders = ",".join("?" for _ in document_ids)
+    c.execute(
+        f"""
+        SELECT
+            d.id,
+            d.type,
+            d.number,
+            d.d_date,
+            d.correspondent,
+            d.subject,
+            d.file_url,
+            r.original_filename,
+            r.mime_type,
+            r.file_url AS revision_file_url
+        FROM documents d
+        LEFT JOIN document_file_revisions r ON r.document_id = d.id AND r.is_current=1
+        WHERE d.id IN ({placeholders})
+        """,
+        document_ids,
+    )
+    rows_by_id = {int(row["id"]): dict(row) for row in c.fetchall()}
+    conn.close()
+    result = []
+    for doc_id in document_ids:
+        row = rows_by_id.get(int(doc_id))
+        if not row:
+            continue
+        file_url = _safe_text(row.get("revision_file_url") or row.get("file_url"))
+        disk_path = _upload_url_to_disk_path(file_url)
+        if not disk_path or not os.path.isfile(disk_path):
+            row["missing_file"] = True
+        row["disk_path"] = disk_path
+        row["file_url"] = file_url
+        result.append(row)
+    return result
+
+
+def _format_email_document_note(documents: list[dict]) -> str:
+    lines = []
+    for doc in documents:
+        parts = [
+            f"Документ #{doc.get('id')}",
+            _safe_text(doc.get("number")),
+            _safe_text(doc.get("d_date")),
+            _safe_text(doc.get("subject")),
+        ]
+        primary = " | ".join([part for part in parts if part])
+        meta = []
+        if _safe_text(doc.get("type")):
+            meta.append(f"тип: {_safe_text(doc.get('type'))}")
+        if _safe_text(doc.get("correspondent")):
+            meta.append(f"контрагент: {_safe_text(doc.get('correspondent'))}")
+        if doc.get("missing_file"):
+            meta.append("файл не найден")
+        lines.append(f"- {primary}" + (f" ({'; '.join(meta)})" if meta else ""))
+    return "\n".join(lines)
+
+
 def _sync_active_email_accounts(force: bool = False, actor: dict | None = None):
     conn = get_connection(row_factory=True)
     c = conn.cursor()
@@ -1838,7 +1943,13 @@ def delete_email(message_id: int, request: Request):
 
 
 @router.post("/api/emails/{message_id}/reply")
-async def reply_email(message_id: int, request: Request, body: str = Form(...), files: list[UploadFile] = File(default=[])):
+async def reply_email(
+    message_id: int,
+    request: Request,
+    body: str = Form(""),
+    document_ids: str = Form(""),
+    files: list[UploadFile] = File(default=[]),
+):
     actor = require_approved_user(request)
     if not actor or not has_permission(actor, "emails", "reply"):
         return {"error": "forbidden"}
@@ -1857,7 +1968,20 @@ async def reply_email(message_id: int, request: Request, body: str = Form(...), 
     if message.get("message_id_header"):
         email_message["In-Reply-To"] = message["message_id_header"]
         email_message["References"] = message["message_id_header"]
-    email_message.set_content(body)
+    parsed_document_ids = _parse_email_document_ids(document_ids)
+    if parsed_document_ids and not has_permission(actor, "documents", "read"):
+        return {"error": "forbidden"}
+    selected_documents = _load_email_reply_documents(parsed_document_ids)
+    missing_documents = [doc for doc in selected_documents if doc.get("missing_file")]
+    if missing_documents:
+        return {"error": "document_file_missing", "message": "У выбранного документа не найден файл. Открой карточку документа и прикрепи файл."}
+    document_note = _format_email_document_note(selected_documents)
+    message_body = body
+    if document_note:
+        message_body = f"{body.rstrip()}\n\nПрикрепленные документы из CRM:\n{document_note}"
+    if not message_body.strip() and selected_documents:
+        message_body = "Направляю документы из CRM."
+    email_message.set_content(message_body or " ")
 
     for upload in files or []:
         payload = await upload.read()
@@ -1866,6 +1990,19 @@ async def reply_email(message_id: int, request: Request, body: str = Form(...), 
         content_type = upload.content_type or "application/octet-stream"
         maintype, _, subtype = content_type.partition("/")
         email_message.add_attachment(payload, maintype=maintype or "application", subtype=subtype or "octet-stream", filename=upload.filename or "attachment")
+
+    for doc in selected_documents:
+        disk_path = doc.get("disk_path") or ""
+        if not disk_path or not os.path.isfile(disk_path):
+            continue
+        with open(disk_path, "rb") as fh:
+            payload = fh.read()
+        if not payload:
+            continue
+        filename = _safe_text(doc.get("original_filename")) or os.path.basename(disk_path) or f"document_{doc.get('id')}.bin"
+        content_type = _safe_text(doc.get("mime_type")) or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        maintype, _, subtype = content_type.partition("/")
+        email_message.add_attachment(payload, maintype=maintype or "application", subtype=subtype or "octet-stream", filename=filename)
 
     try:
         outbound_account = {

@@ -693,6 +693,7 @@ async function renderEmails(forceRefresh = false, options = {}) {
             ${expandedReplyEmailId === e.id ? `
                 <div class="email-reply-box">
                     <textarea id="replyBody_${e.id}" class="auth-input" rows="4" style="margin:0;" placeholder="Ответ для ${e.sender_email || e.sender}..."></textarea>
+                    ${emailReplyDocumentOptions(e.id)}
                     <input id="replyFiles_${e.id}" type="file" class="auth-input" style="margin:0;" multiple>
                     <div class="email-reply-actions">
                         <button class="btn-primary" onclick="sendEmailReply(${e.id})">Отправить ответ</button>
@@ -730,19 +731,68 @@ async function toggleEmailRead(messageId, read) {
 function toggleEmailReply(messageId) {
     expandedReplyEmailId = expandedReplyEmailId === messageId ? null : messageId;
     renderEmails();
+    if (expandedReplyEmailId) ensureEmailReplyDocumentsLoaded();
+}
+
+async function ensureEmailReplyDocumentsLoaded() {
+    if (Array.isArray(documentsDB) && documentsDB.length) return;
+    if (typeof loadDocuments === 'function') {
+        await loadDocuments();
+        renderEmails(false, { silent: true });
+    }
+}
+
+function emailReplyDocumentOptions(messageId) {
+    const docs = (Array.isArray(documentsDB) ? documentsDB : [])
+        .filter(doc => doc && doc.id && doc.file_url)
+        .slice(0, 30);
+    if (!docs.length) {
+        return '<div class="ops-note">В CRM пока нет документов с загруженным файлом.</div>';
+    }
+    return `
+        <div class="email-reply-documents">
+            <div class="email-reply-documents__title">Документы CRM для отправки</div>
+            <div class="email-reply-documents__list">
+                ${docs.map(doc => {
+                    const title = escapeHtml(doc.subject || doc.number || `Документ #${doc.id}`);
+                    const meta = [doc.number, doc.d_date, doc.correspondent].filter(Boolean).join(' · ');
+                    return `
+                        <label class="email-reply-document">
+                            <input type="checkbox" class="emailReplyDocument_${messageId}" value="${Number(doc.id)}">
+                            <span>
+                                <strong>${title}</strong>
+                                <small>${escapeHtml(meta || 'Файл из документов CRM')}</small>
+                            </span>
+                        </label>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function selectedEmailReplyDocumentIds(messageId) {
+    return Array.from(document.querySelectorAll(`.emailReplyDocument_${messageId}:checked`))
+        .map(input => Number(input.value || 0))
+        .filter(Boolean);
 }
 
 async function sendEmailReply(messageId) {
     const bodyInput = document.getElementById(`replyBody_${messageId}`);
     const fileInput = document.getElementById(`replyFiles_${messageId}`);
     const body = bodyInput ? bodyInput.value.trim() : '';
-    if (!body) return customAlert('Напиши текст ответа.');
+    const selectedDocumentIds = selectedEmailReplyDocumentIds(messageId);
+    const selectedFiles = Array.from(fileInput?.files || []);
+    if (!body && selectedFiles.length === 0 && selectedDocumentIds.length === 0) {
+        return customAlert('Напиши текст ответа или выбери документ для отправки.');
+    }
 
     const formData = new FormData();
     formData.append('body', body);
-    Array.from(fileInput?.files || []).forEach(file => formData.append('files', file));
+    formData.append('document_ids', JSON.stringify(selectedDocumentIds));
+    selectedFiles.forEach(file => formData.append('files', file));
     const res = await apiCall(`/emails/${messageId}/reply`, 'POST', formData);
-    if (!res || res.error) return customAlert(res?.error || 'Не удалось отправить ответ.');
+    if (!res || res.error) return customAlert(res?.message || res?.error || 'Не удалось отправить ответ.');
     showToast('Почта', 'Ответ отправлен');
     expandedReplyEmailId = null;
     setEmailFilter('recent_sent');

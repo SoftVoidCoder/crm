@@ -3017,6 +3017,15 @@ button.btn-danger {
 .email-system-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; color: var(--danger); background: rgba(225, 72, 82, 0.08); border: 1px solid rgba(225, 72, 82, 0.12); margin-bottom: 12px; }
 .email-body { font-size: 13px; white-space: pre-wrap; color: var(--text); background: #f8fafc; padding: 12px; border-radius: 6px; line-height: 1.6; border: 1px solid rgba(148, 163, 184, 0.22); max-height: 240px; overflow: auto; }
 .email-reply-box { margin-top: 12px; padding: 12px; border-radius: 6px; background: var(--surface-muted); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+.email-reply-documents { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 6px; background: #fff; }
+.email-reply-documents__title { font-size: 12px; font-weight: 800; color: var(--text); }
+.email-reply-documents__list { display: grid; gap: 6px; max-height: 180px; overflow: auto; }
+.email-reply-document { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; align-items: flex-start; padding: 8px; border-radius: 6px; border: 1px solid rgba(148, 163, 184, 0.18); cursor: pointer; }
+.email-reply-document:hover { border-color: rgba(20, 156, 114, 0.45); background: rgba(20, 156, 114, 0.04); }
+.email-reply-document strong,
+.email-reply-document small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.email-reply-document strong { font-size: 12px; color: var(--text); }
+.email-reply-document small { margin-top: 2px; font-size: 11px; color: var(--secondary); }
 .email-reply-actions { display: flex; justify-content: flex-end; }
 .email-refresh-btn svg { width: 16px; height: 16px; }
 .email-view {
