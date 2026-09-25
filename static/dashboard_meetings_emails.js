@@ -10,6 +10,8 @@ let expandedReplyEmailId = null;
 let emailOAuthProvidersDB = [];
 let emailOAuthListenerReady = false;
 let emailRecentSentRefreshTimer = null;
+let emailInboxAutoRefreshTimer = null;
+let emailInboxAutoRefreshInFlight = false;
 const KORDA_WEBMAIL_LOGIN_URL = 'https://mail.korda.spb.ru/owa/auth/logon.aspx?url=https%3a%2f%2fmail.korda.spb.ru%2fowa%2f&reason=0';
 
 const EMAIL_PROVIDER_DEFAULTS = {
@@ -321,6 +323,26 @@ function manageRecentSentAutoRefresh() {
     }
 }
 
+function ensureEmailInboxAutoRefresh() {
+    if (emailInboxAutoRefreshTimer) return;
+    const refreshIfVisible = async () => {
+        const view = document.getElementById('emailsView');
+        const isVisible = view && view.style.display !== 'none';
+        const bindDialogOpen = document.getElementById('emailAccountForm')?.classList.contains('open');
+        if (!isVisible || bindDialogOpen || emailInboxAutoRefreshInFlight) return;
+        emailInboxAutoRefreshInFlight = true;
+        try {
+            await renderEmails(true);
+        } finally {
+            emailInboxAutoRefreshInFlight = false;
+        }
+    };
+    emailInboxAutoRefreshTimer = setInterval(() => {
+        refreshIfVisible();
+    }, 10000);
+    setTimeout(refreshIfVisible, 1200);
+}
+
 function setEmailAccount(accountId) {
     currentEmailAccountId = Number(accountId) || 0;
     renderEmailAccounts();
@@ -544,6 +566,7 @@ async function syncMailbox(accountId) {
 async function renderEmails(forceRefresh = false) {
     const container = document.getElementById('emailsListContainer'); 
     if (!container) return;
+    ensureEmailInboxAutoRefresh();
 
     if (typeof loadEmailAccounts === 'function') {
         await loadEmailAccounts();
