@@ -564,19 +564,18 @@ async function syncMailbox(accountId) {
     showToast('Почта', 'Синхронизация завершена');
 }
 
-async function renderEmails(forceRefresh = false) {
-    const options = typeof arguments[1] === 'object' && arguments[1] ? arguments[1] : {};
+async function renderEmails(forceRefresh = false, options = {}) {
     const silent = !!options.silent;
     const container = document.getElementById('emailsListContainer'); 
     if (!container) return;
     ensureEmailInboxAutoRefresh();
 
-    if (typeof loadEmailAccounts === 'function') {
+    if (!silent && typeof loadEmailAccounts === 'function') {
         await loadEmailAccounts();
     }
-    renderEmailAccounts();
+    if (!silent) renderEmailAccounts();
 
-    if (emailAccountsDB.length === 0) {
+    if (!silent && emailAccountsDB.length === 0) {
         container.innerHTML = '<div class="email-empty">Сначала добавь хотя бы один корпоративный почтовый ящик.</div>';
         return;
     }
@@ -590,7 +589,9 @@ async function renderEmails(forceRefresh = false) {
     if (currentEmailQuery) params.set('query', currentEmailQuery);
     if (forceRefresh) params.set('force_refresh', '1');
     const data = await apiCall(`/emails?${params.toString()}`);
+    if (silent && !Array.isArray(data)) return;
     const nextEmails = Array.isArray(data) ? data : [];
+    if (silent && nextEmails.length === 0 && emailsDB.length > 0) return;
     const nextSignature = nextEmails.map(item => [
         item.id,
         item.is_read,
