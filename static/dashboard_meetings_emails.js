@@ -9,6 +9,7 @@ let editingEmailAccountId = null;
 let expandedReplyEmailId = null;
 let emailOAuthProvidersDB = [];
 let emailOAuthListenerReady = false;
+let emailRecentSentRefreshTimer = null;
 const KORDA_WEBMAIL_LOGIN_URL = 'https://mail.korda.spb.ru/owa/auth/logon.aspx?url=https%3a%2f%2fmail.korda.spb.ru%2fowa%2f&reason=0';
 
 const EMAIL_PROVIDER_DEFAULTS = {
@@ -295,11 +296,29 @@ function applyEmailProviderPreset(provider) {
 
 function setEmailFilter(filter) {
     currentEmailFilter = filter;
-    ['all', 'new', 'read', 'archived'].forEach(key => {
-        const btn = document.getElementById(`emailFilter${key.charAt(0).toUpperCase()}${key.slice(1)}`);
+    const filterButtons = {
+        all: 'emailFilterAll',
+        new: 'emailFilterNew',
+        read: 'emailFilterRead',
+        archived: 'emailFilterArchived',
+        recent_sent: 'emailFilterRecentSent',
+    };
+    Object.entries(filterButtons).forEach(([key, id]) => {
+        const btn = document.getElementById(id);
         if (btn) btn.classList.toggle('active', key === filter);
     });
+    manageRecentSentAutoRefresh();
     renderEmails();
+}
+
+function manageRecentSentAutoRefresh() {
+    if (emailRecentSentRefreshTimer) {
+        clearInterval(emailRecentSentRefreshTimer);
+        emailRecentSentRefreshTimer = null;
+    }
+    if (currentEmailFilter === 'recent_sent') {
+        emailRecentSentRefreshTimer = setInterval(() => renderEmails(), 60000);
+    }
 }
 
 function setEmailAccount(accountId) {
@@ -353,27 +372,29 @@ function renderEmailAccounts() {
     }
 
     container.innerHTML = `
-        <button class="email-account-card ${currentEmailAccountId === 0 ? 'active' : ''}" onclick="setEmailAccount(0)">
+        <button class="email-account-card email-account-card--all ${currentEmailAccountId === 0 ? 'active' : ''}" onclick="setEmailAccount(0)">
+            <div class="email-account-avatar">∑</div>
             <div class="email-account-card-main">
                 <div class="email-account-name">Все ящики</div>
-                <div class="email-account-meta">Общая лента по всем активным адресам</div>
+                <div class="email-account-meta">Единая входящая лента</div>
             </div>
         </button>
         ${emailAccountsDB.map(account => `
             <div class="email-account-card ${currentEmailAccountId === account.id ? 'active' : ''}">
                 <button class="email-account-select" onclick="setEmailAccount(${account.id})">
+                    <div class="email-account-avatar">${(account.address || account.label || 'K').slice(0, 1).toUpperCase()}</div>
                     <div class="email-account-card-main">
                         <div class="email-account-name">${account.label || account.address}</div>
                         <div class="email-account-meta">${account.address}</div>
-                        <div class="email-account-meta">${account.auth_type === 'oauth' ? `Вход через ${emailOAuthProviderLabel(account.oauth_provider)}` : 'Подключённый ящик'}</div>
+                        <div class="email-account-meta">${account.auth_type === 'oauth' ? `Вход через ${emailOAuthProviderLabel(account.oauth_provider)}` : 'Korda Mail'}</div>
                     </div>
                     <div class="email-account-counters">
-                        <span>${account.unread_count || 0} новых</span>
-                        <span>${account.archived_count || 0} в архиве</span>
+                        <span><strong>${account.unread_count || 0}</strong> новых</span>
+                        <span><strong>${account.archived_count || 0}</strong> архив</span>
                     </div>
                     <div class="email-account-status-line">
                         <span class="email-status-pill ${account.last_sync_status === 'error' ? 'email-status-pill--error' : 'email-status-pill--ok'}">
-                            ${account.last_sync_status === 'error' ? 'Обмен с ошибкой' : 'Обмен в норме'}
+                            ${account.last_sync_status === 'error' ? 'Ошибка' : 'Активен'}
                         </span>
                 ${account.sync_fail_count ? `<span class="email-status-pill email-status-pill--muted">${account.sync_fail_count} повтор</span>` : ''}
                     </div>
@@ -385,7 +406,7 @@ function renderEmailAccounts() {
                     <div class="email-account-card-actions">
                         <button class="btn-secondary" onclick="testMailbox(${account.id})">Проверить</button>
                         <button class="btn-secondary" onclick="syncMailbox(${account.id})">Обновить</button>
-                        <button class="btn-secondary" onclick="retryFailedMailOps(${account.id})">Повторить сбои</button>
+                        <button class="btn-secondary" onclick="retryFailedMailOps(${account.id})">Повторить</button>
                         <button class="btn-danger" onclick="deleteMailbox(${account.id})">Удалить</button>
                     </div>
                 ` : ''}
@@ -544,11 +565,31 @@ async function renderEmails(forceRefresh = false) {
     emailsDB = Array.isArray(data) ? data : [];
 
     if (emailsDB.length === 0) {
-        container.innerHTML = '<div class="email-empty">По этому фильтру писем пока нет. Попробуй другой ящик, архив или обновление.</div>';
+        container.innerHTML = currentEmailFilter === 'recent_sent'
+            ? '<div class="email-empty">За последние 30 минут отправленных писем нет.</div>'
+            : '<div class="email-empty">По этому фильтру писем пока нет. Попробуй другой ящик, архив или обновление.</div>';
         return;
     }
 
     container.innerHTML = emailsDB.map(e => {
+        if (e.is_sent_event) {
+            return `
+                <div data-email-id="${e.id}" class="email-card email-card--sent">
+                    <div class="email-card-top">
+                        <div class="email-card-main">
+                            <div class="email-card-tags">
+                                <span class="status-badge status-completed">Отправлено</span>
+                                <span class="email-mailbox-chip">${e.account_label || e.account_address || 'Korda Mail'}</span>
+                            </div>
+                            <div class="email-subject">${e.subject || 'Без темы'}</div>
+                            <div class="email-sender">Кому: <strong>${e.recipient || 'получатель не указан'}</strong> · ${e.received_at || 'только что'}</div>
+                            <div class="ops-note">${e.account_address ? `Отправлено с ящика: ${e.account_address}` : 'Ящик отправителя не указан'}</div>
+                        </div>
+                    </div>
+                    <div class="email-body">${e.body_text || 'Письмо отправлено из CRM.'}</div>
+                </div>
+            `;
+        }
         const canCreateProject = !!(e.sender_email || '').trim() && !/система/i.test(e.sender || '') && !/login command error|syntax error/i.test(`${e.subject || ''} ${e.body_text || ''}`);
         return `
         <div data-email-id="${e.id}" class="email-card ${e.is_read ? '' : 'unread'} ${typeof isWorkflowFocused === 'function' && isWorkflowFocused('email', e.id) ? 'workflow-row-highlight' : ''}">
@@ -636,7 +677,7 @@ async function sendEmailReply(messageId) {
     if (!res || res.error) return customAlert(res?.error || 'Не удалось отправить ответ.');
     showToast('Почта', 'Ответ отправлен');
     expandedReplyEmailId = null;
-    await renderEmails();
+    setEmailFilter('recent_sent');
 }
 
 async function archiveEmailMessage(messageId) {

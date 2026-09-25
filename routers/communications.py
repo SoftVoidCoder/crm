@@ -1597,9 +1597,66 @@ def get_emails(request: Request, account_id: int = 0, filter_name: str = "all", 
 
     conn = get_connection(row_factory=True)
     c = conn.cursor()
+    owner_clause, owner_params = _mail_account_owner_clause(actor)
+    if filter_name == "recent_sent":
+        clauses = ["e.status='success'", "e.created_at>=?", owner_clause]
+        params = [int(time.time()) - 1800, *owner_params]
+        if account_id:
+            clauses.append("e.account_id=?")
+            params.append(account_id)
+        if query:
+            clauses.append("(e.subject LIKE ? OR e.recipient LIKE ?)")
+            like = f"%{query}%"
+            params.extend([like, like])
+        c.execute(
+            f"""
+            SELECT
+                e.id,
+                e.account_id,
+                e.message_id,
+                e.recipient,
+                e.subject,
+                e.status,
+                e.created_at,
+                a.label AS account_label,
+                a.address AS account_address
+            FROM email_delivery_events e
+            JOIN email_accounts a ON a.id = e.account_id
+            JOIN email_account_owners eo ON eo.account_id = a.id
+            WHERE {' AND '.join(clauses)}
+            ORDER BY e.created_at DESC, e.id DESC
+            LIMIT 80
+            """,
+            params,
+        )
+        rows = []
+        for row in c.fetchall():
+            item = dict(row)
+            sent_at = int(item.get("created_at") or 0)
+            rows.append({
+                "id": f"sent_{item.get('id')}",
+                "is_sent_event": 1,
+                "account_id": item.get("account_id"),
+                "account_label": item.get("account_label") or item.get("account_address") or "Korda Mail",
+                "account_address": item.get("account_address") or "",
+                "subject": item.get("subject") or "Без темы",
+                "sender": item.get("account_address") or "",
+                "sender_email": item.get("account_address") or "",
+                "recipient": item.get("recipient") or "",
+                "body_preview": "Письмо отправлено из CRM.",
+                "body_text": f"Кому: {item.get('recipient') or ''}",
+                "received_at": datetime.datetime.fromtimestamp(sent_at).strftime("%d.%m.%Y %H:%M") if sent_at else "",
+                "created_at": sent_at,
+                "is_read": 1,
+                "is_archived": 0,
+                "delivery_status": "sent",
+                "attachments": [],
+            })
+        conn.close()
+        return rows
+
     clauses = ["m.is_deleted=0"]
     params = []
-    owner_clause, owner_params = _mail_account_owner_clause(actor)
     clauses.append(owner_clause)
     params.extend(owner_params)
     if account_id:

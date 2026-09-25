@@ -19,7 +19,7 @@
     <div class="ops-overview-card">
         <div>
             <div class="ops-overview-title">Привязка корпоративной почты</div>
-      <div class="ops-overview-text">Сначала можно открыть обычный вход Korda Mail и проверить пароль, затем этим же адресом привязать ящик к CRM для синхронизации писем.</div>
+      <div class="ops-overview-text">Каждый пользователь CRM подключает свой ящик Korda Mail. Письма и привязка остаются внутри его аккаунта.</div>
         </div>
         <div class="ops-overview-pills">
         <span class="ops-pill">Входящая почта</span>
@@ -28,49 +28,12 @@
             <span class="ops-pill">Синхронизация</span>
         </div>
     </div>
-    <section class="surface-card surface-card--padded usage-guide">
-        <div class="section-header">
-            <div>
-                <h3 class="section-title">Вход в корпоративную почту</h3>
-                <p class="section-subtitle">Нажми вход Korda Mail, введи адрес и пароль в окне CRM, после этого ящик привяжется к аккаунту.</p>
-            </div>
-        </div>
-        <div class="usage-guide-grid">
-            <div class="usage-guide-item">
-          <h4 class="usage-guide-title">Обычный вход</h4>
-          <p class="usage-guide-text">Нажми “Войти через Korda Mail”, CRM откроет отдельное окно входа для корпоративной почты.</p>
-                <ol class="usage-guide-list">
-            <li>Открой окно входа.</li>
-                    <li>Введи адрес и пароль почты.</li>
-            <li>Нажми “Войти и привязать”.</li>
-                </ol>
-            </div>
-            <div class="usage-guide-item">
-          <h4 class="usage-guide-title">Автопривязка</h4>
-          <p class="usage-guide-text">После отправки формы CRM сама проверяет доступ к mail.korda.spb.ru и добавляет ящик в список.</p>
-                <ol class="usage-guide-list">
-            <li>Адрес вида name@korda.spb.ru.</li>
-                    <li>Пароль от этого же ящика.</li>
-            <li>Серверы подставлены автоматически.</li>
-                </ol>
-            </div>
-            <div class="usage-guide-item">
-          <h4 class="usage-guide-title">Проверка доступа</h4>
-          <p class="usage-guide-text">После входа CRM синхронизирует входящие письма и показывает результат в карточке ящика.</p>
-                <ol class="usage-guide-list">
-            <li>Если пароль неверный, появится ошибка.</li>
-            <li>Если сервер не отвечает, карточка покажет причину.</li>
-                    <li>Кнопка “Проверить” повторяет тест.</li>
-                </ol>
-            </div>
-        </div>
-    </section>
     <div class="email-workspace">
         <aside class="email-sidebar-panel surface-card surface-card--padded">
             <div class="section-header">
                 <div>
                     <h3 class="section-title">Почтовые ящики</h3>
-      <p class="section-subtitle">Добавляй несколько почтовых ящиков и держи общий входящий поток под рукой.</p>
+      <p class="section-subtitle">Личные ящики текущего аккаунта CRM.</p>
                 </div>
             </div>
             <div class="email-setup-card">
@@ -119,11 +82,6 @@
                     </div>
                 </form>
       <div id="emailSetupHint" class="email-setup-hint">Нажми “Войти”, введи данные почты Korda в открывшемся окне, и CRM привяжет ящик к текущему аккаунту.</div>
-                <div class="email-setup-checklist">
-                    <div class="email-setup-line">1. “Войти” открывает окно подключения Korda Mail.</div>
-                    <div class="email-setup-line">2. “Войти и привязать” проверяет данные и подключает ящик к CRM.</div>
-      <div class="email-setup-line">3. Ящик сохраняется только за текущим аккаунтом CRM.</div>
-                </div>
             </div>
             <div id="emailAccountsList" class="email-accounts-list"></div>
         </aside>
@@ -136,6 +94,7 @@
                         <button class="tab" id="emailFilterNew" onclick="setEmailFilter('new')">Новые</button>
                         <button class="tab" id="emailFilterRead" onclick="setEmailFilter('read')">Старые</button>
                         <button class="tab" id="emailFilterArchived" onclick="setEmailFilter('archived')">Архив</button>
+                        <button class="tab" id="emailFilterRecentSent" onclick="setEmailFilter('recent_sent')">Последние письма</button>
                     </div>
                     <div class="email-search-box">
                         <input id="emailSearchInput" class="auth-input" placeholder="Поиск по теме, отправителю, тексту..." oninput="applyEmailSearch(this.value)">
