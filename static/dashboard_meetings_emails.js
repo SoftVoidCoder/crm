@@ -1315,3 +1315,22 @@ function generateProtocolPDF() {
     
     html2pdf().set(opt).from(container).save(); 
 }
+
+Object.assign(window, {
+    applyEmailSearch,
+    closeKordaMailBindDialog,
+    deleteMailbox,
+    focusEmailOAuthConnect,
+    openKordaMailBindDialog,
+    openKordaWebmailLogin,
+    renderEmailAccounts,
+    renderEmails,
+    retryFailedMailOps,
+    resetEmailAccountForm,
+    saveEmailAccount,
+    setEmailAccount,
+    setEmailFilter,
+    syncMailbox,
+    testMailbox,
+    updateEmailSetupHintFromAddress,
+});

@@ -3327,6 +3327,12 @@ button.btn-danger {
 .korda-mail-bind-dialog.is-disabled {
     display: none !important;
 }
+.email-account-form.korda-mail-bind-dialog {
+    display: none;
+}
+.email-account-form.korda-mail-bind-dialog.open {
+    display: flex;
+}
 .korda-mail-bind-header {
     display: flex;
     align-items: flex-start;
