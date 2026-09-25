@@ -12,6 +12,7 @@ let emailOAuthListenerReady = false;
 let emailRecentSentRefreshTimer = null;
 let emailInboxAutoRefreshTimer = null;
 let emailInboxAutoRefreshInFlight = false;
+let emailMailboxAutoSyncInFlight = false;
 let emailVisibilityRefreshBound = false;
 let emailListSignature = '';
 const KORDA_WEBMAIL_LOGIN_URL = 'https://mail.korda.spb.ru/owa/auth/logon.aspx?url=https%3a%2f%2fmail.korda.spb.ru%2fowa%2f&reason=0';
@@ -327,12 +328,13 @@ function ensureEmailInboxAutoRefresh() {
         const view = document.getElementById('emailsView');
         const isVisible = view && view.style.display !== 'none';
         const bindDialogOpen = document.getElementById('emailAccountForm')?.classList.contains('open');
-        if (!isVisible || bindDialogOpen || emailInboxAutoRefreshInFlight) return;
-        emailInboxAutoRefreshInFlight = true;
+        if (!isVisible || bindDialogOpen || emailInboxAutoRefreshInFlight || emailMailboxAutoSyncInFlight) return;
+        emailMailboxAutoSyncInFlight = true;
         try {
-            await renderEmails(true, { silent: true });
+            await syncVisibleMailboxesSilently();
+            await renderEmails(false, { silent: true });
         } finally {
-            emailInboxAutoRefreshInFlight = false;
+            emailMailboxAutoSyncInFlight = false;
         }
     };
     if (!emailVisibilityRefreshBound) {
@@ -347,6 +349,18 @@ function ensureEmailInboxAutoRefresh() {
         refreshIfVisible();
     }, 5000);
     setTimeout(refreshIfVisible, 1200);
+}
+
+async function syncVisibleMailboxesSilently() {
+    if (!Array.isArray(emailAccountsDB) || emailAccountsDB.length === 0) {
+        if (typeof loadEmailAccounts === 'function') await loadEmailAccounts();
+    }
+    const accounts = (emailAccountsDB || [])
+        .filter(account => account && account.id && (currentEmailAccountId ? Number(account.id) === Number(currentEmailAccountId) : true));
+    for (const account of accounts) {
+        const res = await apiCall(`/email/accounts/${account.id}/sync`, 'POST');
+        if (res && res.error === 'forbidden') return;
+    }
 }
 
 function setEmailAccount(accountId) {
