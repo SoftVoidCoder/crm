@@ -9,6 +9,7 @@ let editingEmailAccountId = null;
 let expandedReplyEmailId = null;
 let emailOAuthProvidersDB = [];
 let emailOAuthListenerReady = false;
+const KORDA_WEBMAIL_LOGIN_URL = 'https://mail.korda.spb.ru/owa/auth/logon.aspx?url=https%3a%2f%2fmail.korda.spb.ru%2fowa%2f&reason=0';
 
 const EMAIL_PROVIDER_DEFAULTS = {
     korda: {
@@ -107,6 +108,11 @@ function focusEmailOAuthConnect() {
     if (form) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
     document.getElementById('emailAccountAddress')?.focus();
 }
+
+function openKordaWebmailLogin() {
+    window.open(KORDA_WEBMAIL_LOGIN_URL, '_blank', 'noopener,noreferrer');
+}
+window.openKordaWebmailLogin = openKordaWebmailLogin;
 
 async function loadEmailOAuthProviders() {
     const data = await apiCall('/email/oauth/providers');
@@ -214,7 +220,7 @@ function syncEmailAccountQuickSetup(force = false) {
     const defaults = getEmailProviderDefaults(address);
 
     if (force || !(labelInput?.value || '').trim()) {
-        if (labelInput) labelInput.value = defaults.label;
+        if (labelInput) labelInput.value = defaults.label || 'Korda Mail';
     }
     if (force || !(loginInput?.value || '').trim()) {
         if (loginInput) loginInput.value = defaults.login;
@@ -375,7 +381,7 @@ function renderEmailAccounts() {
 function resetEmailAccountForm() {
     editingEmailAccountId = null;
     const defaults = {
-        emailAccountLabel: '',
+        emailAccountLabel: 'Korda Mail',
         emailAccountAddress: '',
         emailAccountLogin: '',
         emailAccountPassword: '',
@@ -440,6 +446,9 @@ async function saveEmailAccount() {
         is_default: document.getElementById('emailAccountDefault').checked ? 1 : 0,
         is_active: document.getElementById('emailAccountActive').checked ? 1 : 0
     };
+    if (!payload.label) payload.label = payload.address ? payload.address.split('@')[0] : 'Korda Mail';
+    if (!payload.login) payload.login = payload.address;
+    if (!payload.smtp_login) payload.smtp_login = payload.login;
     if (!payload.label || !payload.address || !payload.login || (!payload.password && !editingEmailAccountId)) {
         return customAlert('Заполни название ящика, адрес, логин и пароль.');
     }
@@ -452,8 +461,6 @@ async function saveEmailAccount() {
     if (!payload.smtp_port) payload.smtp_port = getEmailProviderDefaults(payload.address).smtp_port;
     if (!payload.inbox_folder) payload.inbox_folder = getEmailProviderDefaults(payload.address).inbox_folder;
     if (!payload.archive_folder) payload.archive_folder = getEmailProviderDefaults(payload.address).archive_folder;
-    if (!payload.login) payload.login = payload.address;
-    if (!payload.smtp_login) payload.smtp_login = payload.login;
 
     const endpoint = editingEmailAccountId ? `/email/accounts/${editingEmailAccountId}` : '/email/accounts';
     const method = editingEmailAccountId ? 'PUT' : 'POST';
