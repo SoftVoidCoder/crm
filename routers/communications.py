@@ -1599,15 +1599,16 @@ def get_emails(request: Request, account_id: int = 0, filter_name: str = "all", 
     c = conn.cursor()
     owner_clause, owner_params = _mail_account_owner_clause(actor)
     if filter_name == "recent_sent":
-        clauses = ["e.status='success'", "e.created_at>=?", owner_clause]
-        params = [int(time.time()) - 1800, *owner_params]
+        recent_since = int(time.time()) - 1800
+        sent_clauses = ["e.status='success'", "e.created_at>=?", owner_clause]
+        sent_params = [recent_since, *owner_params]
         if account_id:
-            clauses.append("e.account_id=?")
-            params.append(account_id)
+            sent_clauses.append("e.account_id=?")
+            sent_params.append(account_id)
         if query:
-            clauses.append("(e.subject LIKE ? OR e.recipient LIKE ?)")
+            sent_clauses.append("(e.subject LIKE ? OR e.recipient LIKE ?)")
             like = f"%{query}%"
-            params.extend([like, like])
+            sent_params.extend([like, like])
         c.execute(
             f"""
             SELECT
@@ -1623,11 +1624,11 @@ def get_emails(request: Request, account_id: int = 0, filter_name: str = "all", 
             FROM email_delivery_events e
             JOIN email_accounts a ON a.id = e.account_id
             JOIN email_account_owners eo ON eo.account_id = a.id
-            WHERE {' AND '.join(clauses)}
+            WHERE {' AND '.join(sent_clauses)}
             ORDER BY e.created_at DESC, e.id DESC
             LIMIT 80
             """,
-            params,
+            sent_params,
         )
         rows = []
         for row in c.fetchall():
@@ -1652,6 +1653,44 @@ def get_emails(request: Request, account_id: int = 0, filter_name: str = "all", 
                 "delivery_status": "sent",
                 "attachments": [],
             })
+        inbox_clauses = ["m.is_deleted=0", "m.created_at>=?", owner_clause]
+        inbox_params = [recent_since, *owner_params]
+        if account_id:
+            inbox_clauses.append("m.account_id=?")
+            inbox_params.append(account_id)
+        if query:
+            inbox_clauses.append("(m.subject LIKE ? OR m.sender LIKE ? OR m.body_text LIKE ?)")
+            like = f"%{query}%"
+            inbox_params.extend([like, like, like])
+        c.execute(
+            f"""
+            SELECT m.*, a.label AS account_label, a.address AS account_address, a.last_error AS account_error
+            FROM email_messages m
+            JOIN email_accounts a ON a.id = m.account_id
+            JOIN email_account_owners eo ON eo.account_id = a.id
+            WHERE {' AND '.join(inbox_clauses)}
+            ORDER BY m.created_at DESC, m.id DESC
+            LIMIT 80
+            """,
+            inbox_params,
+        )
+        inbox_rows = [dict(row) for row in c.fetchall()]
+        message_ids = [row["id"] for row in inbox_rows]
+        attachments_map = {}
+        if message_ids:
+            placeholders = ",".join("?" for _ in message_ids)
+            c.execute(
+                f"SELECT * FROM email_attachments WHERE message_id IN ({placeholders}) ORDER BY id ASC",
+                message_ids,
+            )
+            for attachment in c.fetchall():
+                item = dict(attachment)
+                attachments_map.setdefault(item["message_id"], []).append(item)
+        for row in inbox_rows:
+            row["attachments"] = attachments_map.get(row["id"], [])
+            rows.append(row)
+        rows.sort(key=lambda item: int(item.get("created_at") or 0), reverse=True)
+        rows = rows[:120]
         conn.close()
         return rows
 

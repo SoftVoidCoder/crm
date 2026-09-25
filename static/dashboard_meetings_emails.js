@@ -12,6 +12,7 @@ let emailOAuthListenerReady = false;
 let emailRecentSentRefreshTimer = null;
 let emailInboxAutoRefreshTimer = null;
 let emailInboxAutoRefreshInFlight = false;
+let emailVisibilityRefreshBound = false;
 let emailListSignature = '';
 const KORDA_WEBMAIL_LOGIN_URL = 'https://mail.korda.spb.ru/owa/auth/logon.aspx?url=https%3a%2f%2fmail.korda.spb.ru%2fowa%2f&reason=0';
 
@@ -319,13 +320,9 @@ function manageRecentSentAutoRefresh() {
         clearInterval(emailRecentSentRefreshTimer);
         emailRecentSentRefreshTimer = null;
     }
-    if (currentEmailFilter === 'recent_sent') {
-        emailRecentSentRefreshTimer = setInterval(() => renderEmails(false, { silent: true }), 60000);
-    }
 }
 
 function ensureEmailInboxAutoRefresh() {
-    if (emailInboxAutoRefreshTimer) return;
     const refreshIfVisible = async () => {
         const view = document.getElementById('emailsView');
         const isVisible = view && view.style.display !== 'none';
@@ -338,9 +335,17 @@ function ensureEmailInboxAutoRefresh() {
             emailInboxAutoRefreshInFlight = false;
         }
     };
+    if (!emailVisibilityRefreshBound) {
+        emailVisibilityRefreshBound = true;
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) refreshIfVisible();
+        });
+        window.addEventListener('focus', refreshIfVisible);
+    }
+    if (emailInboxAutoRefreshTimer) return;
     emailInboxAutoRefreshTimer = setInterval(() => {
         refreshIfVisible();
-    }, 10000);
+    }, 5000);
     setTimeout(refreshIfVisible, 1200);
 }
 
