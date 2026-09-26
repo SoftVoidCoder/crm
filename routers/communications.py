@@ -797,6 +797,39 @@ def _register_delivery_event(account_id: int, message_id: int, recipient: str, s
     conn.close()
 
 
+def _store_sent_email(account_id: int, message_id: int, recipient: str, subject: str, email_message: EmailMessage):
+    attachment_names = [
+        _safe_text(part.get_filename()) or "attachment.bin"
+        for part in email_message.iter_attachments()
+    ]
+    conn = None
+    try:
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute(
+            """
+            INSERT INTO email_sent_messages (
+                account_id, source_message_id, recipient, subject, body_text, attachments_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                account_id,
+                message_id,
+                recipient,
+                subject[:500],
+                _email_message_plain_body(email_message),
+                json.dumps(attachment_names, ensure_ascii=False),
+                int(time.time()),
+            ),
+        )
+        conn.commit()
+    except Exception as exc:
+        logger.warning("Sent email history could not be stored: %s", exc)
+    finally:
+        if conn is not None:
+            conn.close()
+
+
 def _update_account_delivery_status(account_id: int, status: str, error_text: str = ""):
     conn = get_connection()
     c = conn.cursor()
@@ -863,6 +896,7 @@ def _send_with_retry(account: dict, email_message: EmailMessage, recipient: str,
             server.quit()
             server = None
             _register_delivery_event(account.get("id", 0), message_id, recipient, subject, "success", attempts=attempt)
+            _store_sent_email(account.get("id", 0), message_id, recipient, subject, email_message)
             _update_account_delivery_status(account.get("id", 0), "success")
             return True, ""
         except Exception as exc:
@@ -978,6 +1012,7 @@ def _send_exchange_ews(account: dict, email_message: EmailMessage, recipient: st
         text = response.text or ""
         if response.status_code < 300 and 'ResponseClass="Success"' in text and "<m:ResponseCode>NoError</m:ResponseCode>" in text:
             _register_delivery_event(account.get("id", 0), message_id, recipient, subject, "success", attempts=1)
+            _store_sent_email(account.get("id", 0), message_id, recipient, subject, email_message)
             _update_account_delivery_status(account.get("id", 0), "success")
             return True, ""
         error = f"ews_failed:{response.status_code}"
@@ -1812,32 +1847,34 @@ def get_emails(request: Request, account_id: int = 0, filter_name: str = "all", 
     owner_clause, owner_params = _mail_account_owner_clause(actor)
     if filter_name == "recent_sent":
         recent_since = int(time.time()) - 1800
-        sent_clauses = ["e.status='success'", "e.created_at>=?", owner_clause]
+        sent_clauses = ["s.created_at>=?", owner_clause]
         sent_params = [recent_since, *owner_params]
         if account_id:
-            sent_clauses.append("e.account_id=?")
+            sent_clauses.append("s.account_id=?")
             sent_params.append(account_id)
         if query:
-            sent_clauses.append("(e.subject LIKE ? OR e.recipient LIKE ?)")
+            sent_clauses.append("(s.subject LIKE ? OR s.recipient LIKE ? OR s.body_text LIKE ?)")
             like = f"%{query}%"
-            sent_params.extend([like, like])
+            sent_params.extend([like, like, like])
         c.execute(
             f"""
             SELECT
-                e.id,
-                e.account_id,
-                e.message_id,
-                e.recipient,
-                e.subject,
-                e.status,
-                e.created_at,
+                s.id,
+                s.account_id,
+                s.source_message_id AS message_id,
+                s.recipient,
+                s.subject,
+                'success' AS status,
+                s.body_text,
+                s.attachments_json,
+                s.created_at,
                 a.label AS account_label,
                 a.address AS account_address
-            FROM email_delivery_events e
-            JOIN email_accounts a ON a.id = e.account_id
+            FROM email_sent_messages s
+            JOIN email_accounts a ON a.id = s.account_id
             JOIN email_account_owners eo ON eo.account_id = a.id
             WHERE {' AND '.join(sent_clauses)}
-            ORDER BY e.created_at DESC, e.id DESC
+            ORDER BY s.created_at DESC, s.id DESC
             LIMIT 80
             """,
             sent_params,
@@ -1856,14 +1893,18 @@ def get_emails(request: Request, account_id: int = 0, filter_name: str = "all", 
                 "sender": item.get("account_address") or "",
                 "sender_email": item.get("account_address") or "",
                 "recipient": item.get("recipient") or "",
-                "body_preview": "Письмо отправлено из CRM.",
-                "body_text": f"Кому: {item.get('recipient') or ''}",
+                "body_preview": item.get("body_text") or "Письмо отправлено из CRM.",
+                "body_text": item.get("body_text") or f"Кому: {item.get('recipient') or ''}",
                 "received_at": datetime.datetime.fromtimestamp(sent_at).strftime("%d.%m.%Y %H:%M") if sent_at else "",
                 "created_at": sent_at,
                 "is_read": 1,
                 "is_archived": 0,
                 "delivery_status": "sent",
-                "attachments": [],
+                "attachments": [
+                    {"filename": filename, "stored_path": ""}
+                    for filename in _json_load(item.get("attachments_json"), [])
+                    if _safe_text(filename)
+                ],
             })
         inbox_clauses = ["m.is_deleted=0", "m.created_at>=?", owner_clause]
         inbox_params = [recent_since, *owner_params]
@@ -1958,9 +1999,60 @@ def get_emails(request: Request, account_id: int = 0, filter_name: str = "all", 
         for attachment in c.fetchall():
             item = dict(attachment)
             attachments_map.setdefault(item["message_id"], []).append(item)
-    conn.close()
     for row in rows:
         row["attachments"] = attachments_map.get(row["id"], [])
+    if sender_email:
+        sent_clauses = [owner_clause, "LOWER(COALESCE(s.recipient, ''))=LOWER(?)"]
+        sent_params = [*owner_params, sender_email.strip()]
+        if account_id:
+            sent_clauses.append("s.account_id=?")
+            sent_params.append(account_id)
+        if query:
+            sent_clauses.append("(s.subject LIKE ? OR s.body_text LIKE ?)")
+            like = f"%{query}%"
+            sent_params.extend([like, like])
+        c.execute(
+            f"""
+            SELECT s.*, s.source_message_id AS message_id, a.label AS account_label, a.address AS account_address
+            FROM email_sent_messages s
+            JOIN email_accounts a ON a.id = s.account_id
+            JOIN email_account_owners eo ON eo.account_id = a.id
+            WHERE {' AND '.join(sent_clauses)}
+            ORDER BY s.created_at DESC, s.id DESC
+            LIMIT 120
+            """,
+            sent_params,
+        )
+        for event_row in c.fetchall():
+            item = dict(event_row)
+            sent_at = int(item.get("created_at") or 0)
+            attachment_names = _json_load(item.get("attachments_json"), [])
+            rows.append({
+                "id": f"sent_{item.get('id')}",
+                "is_sent_event": 1,
+                "account_id": item.get("account_id"),
+                "account_label": item.get("account_label") or item.get("account_address") or "Korda Mail",
+                "account_address": item.get("account_address") or "",
+                "subject": item.get("subject") or "Без темы",
+                "sender": item.get("account_address") or "",
+                "sender_email": item.get("account_address") or "",
+                "recipient": item.get("recipient") or "",
+                "body_preview": item.get("body_text") or "Текст старого отправления не сохранён.",
+                "body_text": item.get("body_text") or "Текст старого отправления не сохранён.",
+                "received_at": datetime.datetime.fromtimestamp(sent_at).strftime("%d.%m.%Y %H:%M") if sent_at else "",
+                "created_at": sent_at,
+                "is_read": 1,
+                "is_archived": 0,
+                "delivery_status": "sent",
+                "attachments": [
+                    {"filename": filename, "stored_path": ""}
+                    for filename in attachment_names
+                    if _safe_text(filename)
+                ],
+            })
+        rows.sort(key=lambda item: int(item.get("created_at") or 0), reverse=True)
+        rows = rows[:160]
+    conn.close()
     return rows
 
 

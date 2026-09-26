@@ -741,6 +741,9 @@ async function renderEmails(forceRefresh = false, options = {}) {
 
     container.innerHTML = emailsDB.map(e => {
         if (e.is_sent_event) {
+            const sentAttachments = (e.attachments || []).map(attachment => `
+                <span class="file-item">${escapeHtml(attachment.filename || 'Вложение')}</span>
+            `).join('');
             return `
                 <div data-email-id="${e.id}" class="email-card email-card--sent">
                     <div class="email-card-top">
@@ -754,6 +757,7 @@ async function renderEmails(forceRefresh = false, options = {}) {
                             <div class="ops-note">${e.account_address ? `Отправлено с ящика: ${e.account_address}` : 'Ящик отправителя не указан'}</div>
                         </div>
                     </div>
+                    ${sentAttachments ? `<div class="email-attachments">${sentAttachments}</div>` : ''}
                     <div class="email-body">${e.body_text || 'Письмо отправлено из CRM.'}</div>
                 </div>
             `;
