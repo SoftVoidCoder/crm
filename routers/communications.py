@@ -2,6 +2,8 @@ import json, time, email, datetime, asyncio, os, secrets, imaplib, html, mimetyp
 from email.utils import parseaddr
 import smtplib
 import httpx
+import requests
+from requests_ntlm import HttpNtlmAuth
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.message import EmailMessage
@@ -966,13 +968,13 @@ def _send_exchange_ews(account: dict, email_message: EmailMessage, recipient: st
 </soap:Envelope>"""
 
     try:
-        with httpx.Client(verify=False, timeout=MAIL_SMTP_TIMEOUT) as client:
-            response = client.post(
-                ews_url,
-                content=soap.encode("utf-8"),
-                headers={"Content-Type": "text/xml; charset=utf-8"},
-                auth=(smtp_login, smtp_pass),
-            )
+        response = requests.post(
+            ews_url,
+            data=soap.encode("utf-8"),
+            headers={"Content-Type": "text/xml; charset=utf-8"},
+            auth=HttpNtlmAuth(smtp_login, smtp_pass),
+            timeout=MAIL_SMTP_TIMEOUT,
+        )
         text = response.text or ""
         if response.status_code < 300 and 'ResponseClass="Success"' in text and "<m:ResponseCode>NoError</m:ResponseCode>" in text:
             _register_delivery_event(account.get("id", 0), message_id, recipient, subject, "success", attempts=1)
