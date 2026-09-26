@@ -5,6 +5,7 @@
 let currentEmailFilter = 'all';
 let currentEmailAccountId = 0;
 let currentEmailQuery = '';
+let currentEmailPinnedSender = '';
 let editingEmailAccountId = null;
 let expandedReplyEmailId = null;
 let emailOAuthProvidersDB = [];
@@ -303,10 +304,12 @@ function applyEmailProviderPreset(provider) {
 
 function setEmailFilter(filter) {
     currentEmailFilter = filter;
+    currentEmailPinnedSender = '';
     const filterButtons = {
         all: 'emailFilterAll',
         new: 'emailFilterNew',
         read: 'emailFilterRead',
+        replied: 'emailFilterReplied',
         archived: 'emailFilterArchived',
         recent_sent: 'emailFilterRecentSent',
     };
@@ -314,8 +317,96 @@ function setEmailFilter(filter) {
         const btn = document.getElementById(id);
         if (btn) btn.classList.toggle('active', key === filter);
     });
+    renderEmailPinnedSenders();
     manageRecentSentAutoRefresh();
     renderEmails();
+}
+
+function emailPinnedSendersStorageKey() {
+    const owner = String((typeof currentUser !== 'undefined' && currentUser?.email) || 'anonymous').trim().toLocaleLowerCase('ru');
+    return `korda_email_pinned_senders:${owner}`;
+}
+
+function getEmailPinnedSenders() {
+    try {
+        const value = JSON.parse(localStorage.getItem(emailPinnedSendersStorageKey()) || '[]');
+        return Array.isArray(value) ? value.filter(item => item && item.email) : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function saveEmailPinnedSenders(items) {
+    localStorage.setItem(emailPinnedSendersStorageKey(), JSON.stringify(items.slice(0, 20)));
+}
+
+function isEmailSenderPinned(email) {
+    const normalized = String(email || '').trim().toLocaleLowerCase('ru');
+    return getEmailPinnedSenders().some(item => String(item.email || '').toLocaleLowerCase('ru') === normalized);
+}
+
+function toggleEmailSenderPin(encodedEmail, encodedName = '') {
+    const email = decodeURIComponent(encodedEmail || '').trim();
+    const name = decodeURIComponent(encodedName || '').trim();
+    if (!email) return;
+    const normalized = email.toLocaleLowerCase('ru');
+    const items = getEmailPinnedSenders();
+    const existingIndex = items.findIndex(item => String(item.email || '').toLocaleLowerCase('ru') === normalized);
+    if (existingIndex >= 0) {
+        items.splice(existingIndex, 1);
+        if (currentEmailPinnedSender.toLocaleLowerCase('ru') === normalized) currentEmailPinnedSender = '';
+        showToast('Почта', 'Контакт откреплён');
+    } else {
+        items.unshift({ email, name: name || email });
+        showToast('Почта', 'Контакт закреплён');
+    }
+    saveEmailPinnedSenders(items);
+    renderEmailPinnedSenders();
+    renderEmails(false, { localOnly: true });
+}
+
+function selectPinnedEmailSender(encodedEmail) {
+    currentEmailPinnedSender = decodeURIComponent(encodedEmail || '').trim();
+    currentEmailFilter = 'all';
+    document.querySelectorAll('#emailsView .tabs .tab').forEach(button => button.classList.remove('active'));
+    renderEmailPinnedSenders();
+    renderEmails();
+}
+
+function clearPinnedEmailSenderFilter() {
+    currentEmailPinnedSender = '';
+    currentEmailFilter = 'all';
+    document.querySelectorAll('#emailsView .tabs .tab').forEach(button => button.classList.remove('active'));
+    const allButton = document.getElementById('emailFilterAll');
+    if (allButton) allButton.classList.add('active');
+    renderEmailPinnedSenders();
+    renderEmails();
+}
+
+function renderEmailPinnedSenders() {
+    const container = document.getElementById('emailPinnedSenders');
+    if (!container) return;
+    const items = getEmailPinnedSenders();
+    if (!items.length) {
+        container.innerHTML = '';
+        container.classList.remove('is-visible');
+        return;
+    }
+    container.classList.add('is-visible');
+    container.innerHTML = `
+        <span class="email-pinned-senders__label">Закреплённые:</span>
+        ${items.map(item => {
+            const encodedEmail = encodeURIComponent(item.email || '');
+            const active = String(item.email || '').toLocaleLowerCase('ru') === currentEmailPinnedSender.toLocaleLowerCase('ru');
+            return `
+                <span class="email-pinned-chip ${active ? 'active' : ''}">
+                    <button type="button" onclick="selectPinnedEmailSender('${encodedEmail}')">${escapeHtml(item.name || item.email)}</button>
+                    <button type="button" class="email-pinned-chip__remove" onclick="toggleEmailSenderPin('${encodedEmail}')" aria-label="Открепить">×</button>
+                </span>
+            `;
+        }).join('')}
+        ${currentEmailPinnedSender ? '<button type="button" class="btn-ghost email-pinned-reset" onclick="clearPinnedEmailSenderFilter()">Показать все</button>' : ''}
+    `;
 }
 
 function manageRecentSentAutoRefresh() {
@@ -592,6 +683,7 @@ async function renderEmails(forceRefresh = false, options = {}) {
     const renderGeneration = ++emailRenderGeneration;
     const container = document.getElementById('emailsListContainer'); 
     if (!container) return;
+    renderEmailPinnedSenders();
     if (expandedReplyEmailId && !allowDuringReply) return;
     ensureEmailInboxAutoRefresh();
 
@@ -617,6 +709,7 @@ async function renderEmails(forceRefresh = false, options = {}) {
         if (currentEmailAccountId) params.set('account_id', currentEmailAccountId);
         params.set('filter_name', currentEmailFilter);
         if (currentEmailQuery) params.set('query', currentEmailQuery);
+        if (currentEmailPinnedSender) params.set('sender_email', currentEmailPinnedSender);
         if (forceRefresh) params.set('force_refresh', '1');
         const data = await apiCall(`/emails?${params.toString()}`);
         if (renderGeneration !== emailRenderGeneration || (expandedReplyEmailId && !allowDuringReply)) return;
@@ -665,7 +758,10 @@ async function renderEmails(forceRefresh = false, options = {}) {
                 </div>
             `;
         }
-        const canCreateProject = !!(e.sender_email || '').trim() && !/система/i.test(e.sender || '') && !/login command error|syntax error/i.test(`${e.subject || ''} ${e.body_text || ''}`);
+        const senderEmail = String(e.sender_email || '').trim();
+        const encodedSenderEmail = encodeURIComponent(senderEmail);
+        const encodedSenderName = encodeURIComponent(e.sender || senderEmail);
+        const senderPinned = senderEmail && isEmailSenderPinned(senderEmail);
         return `
         <div data-email-id="${e.id}" class="email-card ${e.is_read ? '' : 'unread'} ${typeof isWorkflowFocused === 'function' && isWorkflowFocused('email', e.id) ? 'workflow-row-highlight' : ''}">
             <div class="email-card-top">
@@ -684,8 +780,8 @@ async function renderEmails(forceRefresh = false, options = {}) {
             <div class="email-actions">
                 <button class="btn-secondary" onclick="toggleEmailRead(${e.id}, ${e.is_read ? 0 : 1})">${e.is_read ? 'Как новое' : 'Прочитать'}</button>
                 <button class="btn-secondary" onclick="openEmailReply(${e.id})">Ответить</button>
+                    ${senderEmail ? `<button class="btn-secondary" onclick="toggleEmailSenderPin('${encodedSenderEmail}', '${encodedSenderName}')">${senderPinned ? 'Открепить' : 'Закрепить чат'}</button>` : ''}
                     ${!e.is_archived ? `<button class="btn-secondary" onclick="archiveEmailMessage(${e.id})">В архив</button>` : `<button class="btn-secondary" onclick="restoreEmailMessage(${e.id})">Вернуть</button>`}
-                    ${canCreateProject ? `<button class="btn-primary" onclick="createProjectFromEmail(${e.id})">Сделать проектом</button>` : ''}
                     <button class="btn-danger" onclick="deleteEmailMessage(${e.id})">Удалить</button>
                 </div>
             </div>
@@ -708,19 +804,6 @@ async function renderEmails(forceRefresh = false, options = {}) {
         container.scrollTop = restoreContainerTop;
         window.scrollTo({ top: restoreScrollY, behavior: 'auto' });
     }
-}
-
-function createProjectFromEmail(id) { 
-    const email = emailsDB.find(e => e.id === id); 
-    if (!email) return; 
-    
-    createNewProject(); 
-    setTimeout(() => { 
-        document.getElementById('newProjName').value = "Почта: " + email.subject.substring(0, 40);
-        document.getElementById('newProjContract').value = 'ПОЧТА';
-        const clientInput = document.getElementById('newProjClient');
-        if (clientInput) clientInput.value = email.sender || '';
-    }, 100); 
 }
 
 async function toggleEmailRead(messageId, read) {
@@ -1597,8 +1680,10 @@ Object.assign(window, {
     resetEmailAccountForm,
     saveEmailAccount,
     archiveEmailMessage,
-    createProjectFromEmail,
     deleteEmailMessage,
+    toggleEmailSenderPin,
+    selectPinnedEmailSender,
+    clearPinnedEmailSenderFilter,
     restoreEmailMessage,
     sendEmailReply,
     openEmailReply,

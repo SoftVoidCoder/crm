@@ -2997,6 +2997,15 @@ button.btn-danger {
 .email-account-card-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 14px 14px 64px; }
 .email-account-card-actions button { min-height: 34px; justify-content: center; padding-inline: 10px; }
 .email-filters-row { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.email-pinned-senders { display: none; align-items: center; gap: 8px; flex-wrap: wrap; margin: -4px 0 16px; padding: 10px 12px; border: 1px solid rgba(148, 163, 184, 0.24); border-radius: 6px; background: #f8fafc; }
+.email-pinned-senders.is-visible { display: flex; }
+.email-pinned-senders__label { color: var(--secondary); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.email-pinned-chip { display: inline-flex; align-items: stretch; overflow: hidden; border: 1px solid rgba(23, 59, 115, 0.16); border-radius: 6px; background: #fff; }
+.email-pinned-chip.active { border-color: #149c72; box-shadow: 0 0 0 1px rgba(20, 156, 114, 0.14); }
+.email-pinned-chip button { min-height: 30px; border: 0; background: transparent; color: var(--text); cursor: pointer; font-size: 12px; font-weight: 700; }
+.email-pinned-chip button:first-child { padding: 0 10px; }
+.email-pinned-chip__remove { width: 28px; border-left: 1px solid rgba(148, 163, 184, 0.22) !important; color: var(--secondary) !important; font-size: 16px !important; }
+.email-pinned-reset { min-height: 30px; margin-left: auto; }
 .email-search-box { min-width: min(100%, 360px); flex: 1; }
 .email-card { background: #fff; padding: 16px; border-radius: 8px; border: 1px solid rgba(148, 163, 184, 0.28); box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05); margin-bottom: 10px; transition: border-color 0.15s, box-shadow 0.15s; }
 .email-card:hover { transform: none; box-shadow: 0 14px 36px rgba(15, 23, 42, 0.08); border-color: #b6c3d1; }

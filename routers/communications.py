@@ -1795,7 +1795,7 @@ def retry_failed_email_ops(request: Request, account_id: int = 0):
 
 
 @router.get("/api/emails")
-def get_emails(request: Request, account_id: int = 0, filter_name: str = "all", query: str = "", force_refresh: int = 0):
+def get_emails(request: Request, account_id: int = 0, filter_name: str = "all", query: str = "", sender_email: str = "", force_refresh: int = 0):
     actor = get_request_user(request)
     if not actor or actor.get("status") != "approved" or not has_permission(actor, "emails", "read"):
         return {"error": "forbidden"}
@@ -1874,6 +1874,9 @@ def get_emails(request: Request, account_id: int = 0, filter_name: str = "all", 
             inbox_clauses.append("(m.subject LIKE ? OR m.sender LIKE ? OR m.body_text LIKE ?)")
             like = f"%{query}%"
             inbox_params.extend([like, like, like])
+        if sender_email:
+            inbox_clauses.append("LOWER(COALESCE(m.sender_email, ''))=LOWER(?)")
+            inbox_params.append(sender_email.strip())
         c.execute(
             f"""
             SELECT m.*, a.label AS account_label, a.address AS account_address, a.last_error AS account_error
@@ -1919,6 +1922,9 @@ def get_emails(request: Request, account_id: int = 0, filter_name: str = "all", 
     elif filter_name == "read":
         clauses.append("m.is_archived=0")
         clauses.append("m.is_read=1")
+    elif filter_name == "replied":
+        clauses.append("m.is_archived=0")
+        clauses.append("m.delivery_status='replied'")
     elif filter_name == "archived":
         clauses.append("m.is_archived=1")
     else:
@@ -1927,6 +1933,9 @@ def get_emails(request: Request, account_id: int = 0, filter_name: str = "all", 
         clauses.append("(m.subject LIKE ? OR m.sender LIKE ? OR m.body_text LIKE ?)")
         like = f"%{query}%"
         params.extend([like, like, like])
+    if sender_email:
+        clauses.append("LOWER(COALESCE(m.sender_email, ''))=LOWER(?)")
+        params.append(sender_email.strip())
     sql = f"""
         SELECT m.*, a.label AS account_label, a.address AS account_address, a.last_error AS account_error
         FROM email_messages m

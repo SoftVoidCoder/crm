@@ -93,6 +93,7 @@
                         <button class="tab active" id="emailFilterAll" onclick="setEmailFilter('all')">Входящие</button>
                         <button class="tab" id="emailFilterNew" onclick="setEmailFilter('new')">Новые</button>
                         <button class="tab" id="emailFilterRead" onclick="setEmailFilter('read')">Старые</button>
+                        <button class="tab" id="emailFilterReplied" onclick="setEmailFilter('replied')">С ответом</button>
                         <button class="tab" id="emailFilterArchived" onclick="setEmailFilter('archived')">Архив</button>
                         <button class="tab" id="emailFilterRecentSent" onclick="setEmailFilter('recent_sent')">Последние письма</button>
                     </div>
@@ -100,6 +101,7 @@
                         <input id="emailSearchInput" class="auth-input" placeholder="Поиск по теме, отправителю, тексту..." oninput="applyEmailSearch(this.value)">
                     </div>
                 </div>
+                <div id="emailPinnedSenders" class="email-pinned-senders"></div>
                 <div id="emailsListContainer" class="email-view-list"></div>
             </div>
         </section>
