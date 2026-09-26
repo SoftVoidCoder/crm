@@ -15,6 +15,8 @@ let emailInboxAutoRefreshInFlight = false;
 let emailMailboxAutoSyncInFlight = false;
 let emailVisibilityRefreshBound = false;
 let emailListSignature = '';
+let emailRenderGeneration = 0;
+let emailInboxScrollY = 0;
 const KORDA_WEBMAIL_LOGIN_URL = 'https://mail.korda.spb.ru/owa/auth/logon.aspx?url=https%3a%2f%2fmail.korda.spb.ru%2fowa%2f&reason=0';
 
 const EMAIL_PROVIDER_DEFAULTS = {
@@ -586,12 +588,16 @@ async function syncMailbox(accountId) {
 async function renderEmails(forceRefresh = false, options = {}) {
     const silent = !!options.silent;
     const localOnly = !!options.localOnly;
+    const allowDuringReply = !!options.allowDuringReply;
+    const renderGeneration = ++emailRenderGeneration;
     const container = document.getElementById('emailsListContainer'); 
     if (!container) return;
+    if (expandedReplyEmailId && !allowDuringReply) return;
     ensureEmailInboxAutoRefresh();
 
     if (!localOnly && !silent && typeof loadEmailAccounts === 'function') {
         await loadEmailAccounts();
+        if (renderGeneration !== emailRenderGeneration || (expandedReplyEmailId && !allowDuringReply)) return;
     }
     if (!localOnly && !silent) renderEmailAccounts();
 
@@ -613,6 +619,7 @@ async function renderEmails(forceRefresh = false, options = {}) {
         if (currentEmailQuery) params.set('query', currentEmailQuery);
         if (forceRefresh) params.set('force_refresh', '1');
         const data = await apiCall(`/emails?${params.toString()}`);
+        if (renderGeneration !== emailRenderGeneration || (expandedReplyEmailId && !allowDuringReply)) return;
         if (silent && !Array.isArray(data)) return;
         const nextEmails = Array.isArray(data) ? data : [];
         if (silent && nextEmails.length === 0 && emailsDB.length > 0) return;
@@ -676,7 +683,7 @@ async function renderEmails(forceRefresh = false, options = {}) {
             </div>
             <div class="email-actions">
                 <button class="btn-secondary" onclick="toggleEmailRead(${e.id}, ${e.is_read ? 0 : 1})">${e.is_read ? 'Как новое' : 'Прочитать'}</button>
-                <button class="btn-secondary" data-email-reply-toggle="${e.id}" onclick="toggleEmailReply(${e.id})">${expandedReplyEmailId === e.id ? 'Скрыть ответ' : 'Ответить'}</button>
+                <button class="btn-secondary" onclick="openEmailReply(${e.id})">Ответить</button>
                     ${!e.is_archived ? `<button class="btn-secondary" onclick="archiveEmailMessage(${e.id})">В архив</button>` : `<button class="btn-secondary" onclick="restoreEmailMessage(${e.id})">Вернуть</button>`}
                     ${canCreateProject ? `<button class="btn-primary" onclick="createProjectFromEmail(${e.id})">Сделать проектом</button>` : ''}
                     <button class="btn-danger" onclick="deleteEmailMessage(${e.id})">Удалить</button>
@@ -694,7 +701,6 @@ async function renderEmails(forceRefresh = false, options = {}) {
             ` : ''}
             <div class="email-body">${e.body_text || e.body_preview || ''}</div>
             ${e.last_action_error ? `<div class="email-account-error">Последняя ошибка: ${humanizeMailboxError(e.last_action_error)}</div>` : ''}
-            ${expandedReplyEmailId === e.id ? emailReplyBoxHtml(e) : ''}
         </div>
     `;
     }).join('');
@@ -723,59 +729,93 @@ async function toggleEmailRead(messageId, read) {
     await renderEmails();
 }
 
-function emailReplyBoxHtml(email) {
+function emailReplyScreenHtml(email) {
     const messageId = Number(email?.id || 0);
     const recipient = escapeHtml(email?.sender_email || email?.sender || '');
+    const sourceAttachments = (email?.attachments || []).map(attachment => `
+        <a class="file-item" href="${escapeHtml(attachment.stored_path || '')}" target="_blank" rel="noopener">
+            ${escapeHtml(attachment.filename || 'Вложение')}
+        </a>
+    `).join('');
     return `
-        <div class="email-reply-box" data-email-reply-box="${messageId}">
-            <div class="email-reply-box__heading">
+        <div class="email-reply-page" data-email-id="${messageId}" data-email-reply-box="${messageId}">
+            <div class="email-reply-page__topbar">
+                <button class="btn-secondary" type="button" onclick="closeEmailReply()">← Назад к письмам</button>
                 <div>
-                    <strong>Ответ на письмо</strong>
-                    <small>С ящика ${escapeHtml(email?.account_address || 'привязанной почты')} для ${recipient}</small>
+                    <span class="view-eyebrow">Ответ на письмо</span>
+                    <h1>${escapeHtml(email?.subject || 'Без темы')}</h1>
                 </div>
             </div>
-            <textarea id="replyBody_${messageId}" class="auth-input" rows="5" style="margin:0;" placeholder="Напишите ответ..."></textarea>
-            <div class="email-reply-documents-slot">
-                ${emailReplyDocumentOptions(messageId)}
-            </div>
-            <label class="email-reply-files">
-                <span>Добавить файлы с компьютера</span>
-                <input id="replyFiles_${messageId}" type="file" class="auth-input" style="margin:0;" multiple>
-            </label>
-            <div class="email-reply-actions">
-                <button class="btn-secondary" onclick="toggleEmailReply(${messageId})">Отмена</button>
-                <button class="btn-primary" onclick="sendEmailReply(${messageId})">Отправить ответ</button>
+            <div class="email-reply-page__layout">
+                <article class="email-reply-source surface-card surface-card--padded">
+                    <div class="email-reply-source__label">Исходное письмо</div>
+                    <h2>${escapeHtml(email?.subject || 'Без темы')}</h2>
+                    <div class="email-reply-source__meta">
+                        <span>От: <strong>${escapeHtml(email?.sender || recipient)}</strong></span>
+                        <span>${escapeHtml(email?.received_at || 'Дата не указана')}</span>
+                    </div>
+                    ${sourceAttachments ? `<div class="email-attachments">${sourceAttachments}</div>` : ''}
+                    <div class="email-body">${escapeHtml(email?.body_text || email?.body_preview || 'Без текста')}</div>
+                </article>
+                <section class="email-reply-composer surface-card surface-card--padded">
+                    <div class="email-reply-composer__route">
+                        <span>От</span><strong>${escapeHtml(email?.account_address || 'Привязанная почта')}</strong>
+                        <span>Кому</span><strong>${recipient}</strong>
+                    </div>
+                    <label class="email-reply-field">
+                        <span>Текст ответа</span>
+                        <textarea id="replyBody_${messageId}" class="auth-input" rows="9" placeholder="Напишите ответ..."></textarea>
+                    </label>
+                    <div class="email-reply-documents-slot">
+                        ${emailReplyDocumentOptions(messageId)}
+                    </div>
+                    <label class="email-reply-files">
+                        <span>Добавить файлы с компьютера</span>
+                        <input id="replyFiles_${messageId}" type="file" class="auth-input" style="margin:0;" multiple>
+                    </label>
+                    <div class="email-reply-actions">
+                        <button class="btn-secondary" type="button" onclick="closeEmailReply()">Отмена</button>
+                        <button class="btn-primary" type="button" onclick="sendEmailReply(${messageId})">Отправить ответ</button>
+                    </div>
+                </section>
             </div>
         </div>
     `;
 }
 
-function setEmailReplyButtonText(messageId, text) {
-    const button = document.querySelector(`[data-email-reply-toggle="${Number(messageId)}"]`);
-    if (button) button.textContent = text;
-}
-
-async function toggleEmailReply(messageId) {
+async function openEmailReply(messageId) {
     const id = Number(messageId);
-    const previousId = Number(expandedReplyEmailId || 0);
-    if (previousId) {
-        document.querySelector(`[data-email-reply-box="${previousId}"]`)?.remove();
-        setEmailReplyButtonText(previousId, 'Ответить');
-    }
-    if (previousId === id) {
-        expandedReplyEmailId = null;
-        return;
-    }
-
+    emailRenderGeneration += 1;
     const email = (emailsDB || []).find(item => Number(item.id) === id);
-    const card = document.querySelector(`[data-email-id="${id}"]`);
-    if (!email || !card) return;
+    const screen = document.getElementById('emailReplyScreen');
+    const view = document.getElementById('emailsView');
+    if (!email || !screen || !view) return;
 
+    emailInboxScrollY = window.scrollY;
     expandedReplyEmailId = id;
-    setEmailReplyButtonText(id, 'Скрыть ответ');
-    card.insertAdjacentHTML('beforeend', emailReplyBoxHtml(email));
+    screen.innerHTML = emailReplyScreenHtml(email);
+    screen.hidden = false;
+    view.classList.add('email-reply-mode');
+    window.scrollTo({ top: 0, behavior: 'auto' });
     document.getElementById(`replyBody_${id}`)?.focus({ preventScroll: true });
     await ensureEmailReplyDocumentsLoaded(id);
+}
+
+function closeEmailReply() {
+    emailRenderGeneration += 1;
+    expandedReplyEmailId = null;
+    const screen = document.getElementById('emailReplyScreen');
+    const view = document.getElementById('emailsView');
+    if (screen) {
+        screen.hidden = true;
+        screen.innerHTML = '';
+    }
+    view?.classList.remove('email-reply-mode');
+    window.scrollTo({ top: emailInboxScrollY, behavior: 'auto' });
+}
+
+function toggleEmailReply(messageId) {
+    openEmailReply(messageId);
 }
 
 async function ensureEmailReplyDocumentsLoaded(messageId) {
@@ -863,7 +903,7 @@ async function sendEmailReply(messageId) {
     const res = await apiCall(`/emails/${messageId}/reply`, 'POST', formData);
     if (!res || res.error) return customAlert(res?.message || res?.error || 'Не удалось отправить ответ.');
     showToast('Почта', 'Ответ отправлен');
-    expandedReplyEmailId = null;
+    closeEmailReply();
     setEmailFilter('recent_sent');
 }
 
@@ -1561,6 +1601,8 @@ Object.assign(window, {
     deleteEmailMessage,
     restoreEmailMessage,
     sendEmailReply,
+    openEmailReply,
+    closeEmailReply,
     setEmailAccount,
     setEmailFilter,
     syncMailbox,
