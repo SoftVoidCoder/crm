@@ -1,6 +1,7 @@
-import json, time, email, datetime, asyncio, os, secrets, imaplib, html, mimetypes
+import json, time, email, datetime, asyncio, os, secrets, imaplib, html, mimetypes, base64
 from email.utils import parseaddr
 import smtplib
+import httpx
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.message import EmailMessage
@@ -841,6 +842,16 @@ def _send_with_retry(account: dict, email_message: EmailMessage, recipient: str,
         return False, "smtp_not_configured"
     last_error = ""
     log_fn = logger.info if quiet else logger.warning
+
+    ews_ok, ews_error = _send_exchange_ews(account, email_message, recipient, subject, message_id=message_id)
+    if ews_ok:
+        return True, ""
+    if ews_error and ews_error != "ews_not_supported":
+        if account.get("id"):
+            _register_delivery_event(account.get("id", 0), message_id, recipient, subject, "failed", error_text=f"EWS: {ews_error}", attempts=1)
+            _update_account_delivery_status(account.get("id", 0), "failed", f"EWS: {ews_error}")
+        return False, f"EWS: {ews_error}"
+
     for attempt in range(1, attempts + 1):
         server = None
         try:
@@ -879,6 +890,100 @@ def _send_with_retry(account: dict, email_message: EmailMessage, recipient: str,
         _register_delivery_event(account.get("id", 0), message_id, recipient, subject, "failed", error_text=last_error, attempts=min(attempts, attempt))
         _update_account_delivery_status(account.get("id", 0), "failed", last_error)
     return False, last_error or "smtp_send_failed"
+
+
+def _email_message_plain_body(email_message: EmailMessage) -> str:
+    try:
+        body_part = email_message.get_body(preferencelist=("plain",))
+        if body_part:
+            return body_part.get_content() or ""
+    except Exception:
+        pass
+    try:
+        return email_message.get_content() or ""
+    except Exception:
+        return ""
+
+
+def _send_exchange_ews(account: dict, email_message: EmailMessage, recipient: str, subject: str, message_id: int = 0):
+    smtp_host, _smtp_port, smtp_login, smtp_pass, sender_address = _smtp_credentials(account)
+    host_hint = _safe_text(smtp_host).lower()
+    address_hint = _safe_text(sender_address or account.get("address")).lower()
+    if "korda.spb.ru" not in host_hint and not address_hint.endswith("@korda.spb.ru"):
+        return False, "ews_not_supported"
+    if not recipient or not smtp_login or not smtp_pass:
+        return False, "smtp_not_configured"
+
+    ews_url = "https://mail.korda.spb.ru/EWS/Exchange.asmx"
+    attachments_xml = []
+    for attachment in email_message.iter_attachments():
+        payload = attachment.get_payload(decode=True) or b""
+        if not payload:
+            continue
+        filename = _safe_text(attachment.get_filename()) or "attachment.bin"
+        attachments_xml.append(
+            """
+            <t:FileAttachment>
+              <t:Name>{filename}</t:Name>
+              <t:Content>{content}</t:Content>
+            </t:FileAttachment>
+            """.format(
+                filename=html.escape(filename),
+                content=base64.b64encode(payload).decode("ascii"),
+            )
+        )
+
+    attachments_block = ""
+    if attachments_xml:
+        attachments_block = "<t:Attachments>" + "".join(attachments_xml) + "</t:Attachments>"
+
+    body = _email_message_plain_body(email_message)
+    soap = f"""<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Header>
+    <t:RequestServerVersion Version="Exchange2013" />
+  </soap:Header>
+  <soap:Body>
+    <m:CreateItem MessageDisposition="SendAndSaveCopy">
+      <m:SavedItemFolderId>
+        <t:DistinguishedFolderId Id="sentitems"/>
+      </m:SavedItemFolderId>
+      <m:Items>
+        <t:Message>
+          <t:Subject>{html.escape(subject or "Без темы")}</t:Subject>
+          <t:Body BodyType="Text">{html.escape(body or " ")}</t:Body>
+          <t:ToRecipients>
+            <t:Mailbox><t:EmailAddress>{html.escape(recipient)}</t:EmailAddress></t:Mailbox>
+          </t:ToRecipients>
+          {attachments_block}
+        </t:Message>
+      </m:Items>
+    </m:CreateItem>
+  </soap:Body>
+</soap:Envelope>"""
+
+    try:
+        with httpx.Client(verify=False, timeout=MAIL_SMTP_TIMEOUT) as client:
+            response = client.post(
+                ews_url,
+                content=soap.encode("utf-8"),
+                headers={"Content-Type": "text/xml; charset=utf-8"},
+                auth=(smtp_login, smtp_pass),
+            )
+        text = response.text or ""
+        if response.status_code < 300 and 'ResponseClass="Success"' in text and "<m:ResponseCode>NoError</m:ResponseCode>" in text:
+            _register_delivery_event(account.get("id", 0), message_id, recipient, subject, "success", attempts=1)
+            _update_account_delivery_status(account.get("id", 0), "success")
+            return True, ""
+        error = f"ews_failed:{response.status_code}"
+        if "<m:ResponseCode>" in text:
+            error = text.split("<m:ResponseCode>", 1)[1].split("</m:ResponseCode>", 1)[0]
+        return False, error[:500]
+    except Exception as exc:
+        return False, str(exc)[:500] or "ews_send_failed"
 
 
 def _test_email_account_connection(account: dict):

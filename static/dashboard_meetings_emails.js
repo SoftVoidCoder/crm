@@ -328,7 +328,7 @@ function ensureEmailInboxAutoRefresh() {
         const view = document.getElementById('emailsView');
         const isVisible = view && view.style.display !== 'none';
         const bindDialogOpen = document.getElementById('emailAccountForm')?.classList.contains('open');
-        if (!isVisible || bindDialogOpen || emailInboxAutoRefreshInFlight || emailMailboxAutoSyncInFlight) return;
+        if (!isVisible || bindDialogOpen || expandedReplyEmailId || emailInboxAutoRefreshInFlight || emailMailboxAutoSyncInFlight) return;
         emailMailboxAutoSyncInFlight = true;
         try {
             await syncVisibleMailboxesSilently();
@@ -585,48 +585,52 @@ async function syncMailbox(accountId) {
 
 async function renderEmails(forceRefresh = false, options = {}) {
     const silent = !!options.silent;
+    const localOnly = !!options.localOnly;
     const container = document.getElementById('emailsListContainer'); 
     if (!container) return;
     ensureEmailInboxAutoRefresh();
 
-    if (!silent && typeof loadEmailAccounts === 'function') {
+    if (!localOnly && !silent && typeof loadEmailAccounts === 'function') {
         await loadEmailAccounts();
     }
-    if (!silent) renderEmailAccounts();
+    if (!localOnly && !silent) renderEmailAccounts();
 
-    if (!silent && emailAccountsDB.length === 0) {
+    if (!localOnly && !silent && emailAccountsDB.length === 0) {
         container.innerHTML = '<div class="email-empty">Сначала добавь хотя бы один корпоративный почтовый ящик.</div>';
         return;
     }
 
-    if (!silent) {
+    if (!localOnly && !silent) {
         container.innerHTML = '<div class="email-loading">Собираем письма, статусы и архив по выбранным ящикам...</div>';
-    }
-    const params = new URLSearchParams();
-    if (currentEmailAccountId) params.set('account_id', currentEmailAccountId);
-    params.set('filter_name', currentEmailFilter);
-    if (currentEmailQuery) params.set('query', currentEmailQuery);
-    if (forceRefresh) params.set('force_refresh', '1');
-    const data = await apiCall(`/emails?${params.toString()}`);
-    if (silent && !Array.isArray(data)) return;
-    const nextEmails = Array.isArray(data) ? data : [];
-    if (silent && nextEmails.length === 0 && emailsDB.length > 0) return;
-    const nextSignature = nextEmails.map(item => [
-        item.id,
-        item.is_read,
-        item.is_archived,
-        item.delivery_status,
-        item.last_action_at || '',
-        item.created_at || '',
-    ].join(':')).join('|');
-    if (silent && nextSignature === emailListSignature) {
-        emailsDB = nextEmails;
-        return;
     }
     const restoreScrollY = window.scrollY;
     const restoreContainerTop = container.scrollTop || 0;
-    emailsDB = nextEmails;
-    emailListSignature = nextSignature;
+
+    if (!localOnly) {
+        const params = new URLSearchParams();
+        if (currentEmailAccountId) params.set('account_id', currentEmailAccountId);
+        params.set('filter_name', currentEmailFilter);
+        if (currentEmailQuery) params.set('query', currentEmailQuery);
+        if (forceRefresh) params.set('force_refresh', '1');
+        const data = await apiCall(`/emails?${params.toString()}`);
+        if (silent && !Array.isArray(data)) return;
+        const nextEmails = Array.isArray(data) ? data : [];
+        if (silent && nextEmails.length === 0 && emailsDB.length > 0) return;
+        const nextSignature = nextEmails.map(item => [
+            item.id,
+            item.is_read,
+            item.is_archived,
+            item.delivery_status,
+            item.last_action_at || '',
+            item.created_at || '',
+        ].join(':')).join('|');
+        if (silent && nextSignature === emailListSignature) {
+            emailsDB = nextEmails;
+            return;
+        }
+        emailsDB = nextEmails;
+        emailListSignature = nextSignature;
+    }
 
     if (emailsDB.length === 0) {
         container.innerHTML = currentEmailFilter === 'recent_sent'
@@ -672,7 +676,7 @@ async function renderEmails(forceRefresh = false, options = {}) {
             </div>
             <div class="email-actions">
                 <button class="btn-secondary" onclick="toggleEmailRead(${e.id}, ${e.is_read ? 0 : 1})">${e.is_read ? 'Как новое' : 'Прочитать'}</button>
-                <button class="btn-secondary" onclick="toggleEmailReply(${e.id})">${expandedReplyEmailId === e.id ? 'Скрыть ответ' : 'Ответить'}</button>
+                <button class="btn-secondary" data-email-reply-toggle="${e.id}" onclick="toggleEmailReply(${e.id})">${expandedReplyEmailId === e.id ? 'Скрыть ответ' : 'Ответить'}</button>
                     ${!e.is_archived ? `<button class="btn-secondary" onclick="archiveEmailMessage(${e.id})">В архив</button>` : `<button class="btn-secondary" onclick="restoreEmailMessage(${e.id})">Вернуть</button>`}
                     ${canCreateProject ? `<button class="btn-primary" onclick="createProjectFromEmail(${e.id})">Сделать проектом</button>` : ''}
                     <button class="btn-danger" onclick="deleteEmailMessage(${e.id})">Удалить</button>
@@ -690,16 +694,7 @@ async function renderEmails(forceRefresh = false, options = {}) {
             ` : ''}
             <div class="email-body">${e.body_text || e.body_preview || ''}</div>
             ${e.last_action_error ? `<div class="email-account-error">Последняя ошибка: ${humanizeMailboxError(e.last_action_error)}</div>` : ''}
-            ${expandedReplyEmailId === e.id ? `
-                <div class="email-reply-box">
-                    <textarea id="replyBody_${e.id}" class="auth-input" rows="4" style="margin:0;" placeholder="Ответ для ${e.sender_email || e.sender}..."></textarea>
-                    ${emailReplyDocumentOptions(e.id)}
-                    <input id="replyFiles_${e.id}" type="file" class="auth-input" style="margin:0;" multiple>
-                    <div class="email-reply-actions">
-                        <button class="btn-primary" onclick="sendEmailReply(${e.id})">Отправить ответ</button>
-                    </div>
-                </div>
-            ` : ''}
+            ${expandedReplyEmailId === e.id ? emailReplyBoxHtml(e) : ''}
         </div>
     `;
     }).join('');
@@ -728,17 +723,74 @@ async function toggleEmailRead(messageId, read) {
     await renderEmails();
 }
 
-function toggleEmailReply(messageId) {
-    expandedReplyEmailId = expandedReplyEmailId === messageId ? null : messageId;
-    renderEmails();
-    if (expandedReplyEmailId) ensureEmailReplyDocumentsLoaded();
+function emailReplyBoxHtml(email) {
+    const messageId = Number(email?.id || 0);
+    const recipient = escapeHtml(email?.sender_email || email?.sender || '');
+    return `
+        <div class="email-reply-box" data-email-reply-box="${messageId}">
+            <div class="email-reply-box__heading">
+                <div>
+                    <strong>Ответ на письмо</strong>
+                    <small>С ящика ${escapeHtml(email?.account_address || 'привязанной почты')} для ${recipient}</small>
+                </div>
+            </div>
+            <textarea id="replyBody_${messageId}" class="auth-input" rows="5" style="margin:0;" placeholder="Напишите ответ..."></textarea>
+            <div class="email-reply-documents-slot">
+                ${emailReplyDocumentOptions(messageId)}
+            </div>
+            <label class="email-reply-files">
+                <span>Добавить файлы с компьютера</span>
+                <input id="replyFiles_${messageId}" type="file" class="auth-input" style="margin:0;" multiple>
+            </label>
+            <div class="email-reply-actions">
+                <button class="btn-secondary" onclick="toggleEmailReply(${messageId})">Отмена</button>
+                <button class="btn-primary" onclick="sendEmailReply(${messageId})">Отправить ответ</button>
+            </div>
+        </div>
+    `;
 }
 
-async function ensureEmailReplyDocumentsLoaded() {
-    if (Array.isArray(documentsDB) && documentsDB.length) return;
+function setEmailReplyButtonText(messageId, text) {
+    const button = document.querySelector(`[data-email-reply-toggle="${Number(messageId)}"]`);
+    if (button) button.textContent = text;
+}
+
+async function toggleEmailReply(messageId) {
+    const id = Number(messageId);
+    const previousId = Number(expandedReplyEmailId || 0);
+    if (previousId) {
+        document.querySelector(`[data-email-reply-box="${previousId}"]`)?.remove();
+        setEmailReplyButtonText(previousId, 'Ответить');
+    }
+    if (previousId === id) {
+        expandedReplyEmailId = null;
+        return;
+    }
+
+    const email = (emailsDB || []).find(item => Number(item.id) === id);
+    const card = document.querySelector(`[data-email-id="${id}"]`);
+    if (!email || !card) return;
+
+    expandedReplyEmailId = id;
+    setEmailReplyButtonText(id, 'Скрыть ответ');
+    card.insertAdjacentHTML('beforeend', emailReplyBoxHtml(email));
+    document.getElementById(`replyBody_${id}`)?.focus({ preventScroll: true });
+    await ensureEmailReplyDocumentsLoaded(id);
+}
+
+async function ensureEmailReplyDocumentsLoaded(messageId) {
+    const slot = document.querySelector(`[data-email-id="${Number(messageId)}"] .email-reply-documents-slot`);
+    if (!slot) return;
+    if (Array.isArray(documentsDB) && documentsDB.length) {
+        slot.innerHTML = emailReplyDocumentOptions(messageId);
+        return;
+    }
+    slot.innerHTML = '<div class="ops-note">Загружаю документы CRM...</div>';
     if (typeof loadDocuments === 'function') {
         await loadDocuments();
-        renderEmails(false, { silent: true });
+    }
+    if (document.querySelector(`[data-email-id="${Number(messageId)}"] .email-reply-documents-slot`)) {
+        slot.innerHTML = emailReplyDocumentOptions(messageId);
     }
 }
 
@@ -751,13 +803,16 @@ function emailReplyDocumentOptions(messageId) {
     }
     return `
         <div class="email-reply-documents">
-            <div class="email-reply-documents__title">Документы CRM для отправки</div>
+            <div class="email-reply-documents__header">
+                <div class="email-reply-documents__title">Документы CRM для отправки</div>
+                <input class="auth-input email-reply-documents__search" type="search" placeholder="Поиск по названию, номеру или контрагенту" oninput="filterEmailReplyDocuments(${messageId}, this.value)">
+            </div>
             <div class="email-reply-documents__list">
                 ${docs.map(doc => {
                     const title = escapeHtml(doc.subject || doc.number || `Документ #${doc.id}`);
                     const meta = [doc.number, doc.d_date, doc.correspondent].filter(Boolean).join(' · ');
                     return `
-                        <label class="email-reply-document">
+                        <label class="email-reply-document" data-email-reply-document>
                             <input type="checkbox" class="emailReplyDocument_${messageId}" value="${Number(doc.id)}">
                             <span>
                                 <strong>${title}</strong>
@@ -766,9 +821,23 @@ function emailReplyDocumentOptions(messageId) {
                         </label>
                     `;
                 }).join('')}
+                <div class="email-reply-documents__empty krd-is-hidden" data-email-reply-documents-empty>Документы по запросу не найдены.</div>
             </div>
         </div>
     `;
+}
+
+function filterEmailReplyDocuments(messageId, query) {
+    const card = document.querySelector(`[data-email-id="${Number(messageId)}"]`);
+    if (!card) return;
+    const normalized = String(query || '').trim().toLocaleLowerCase('ru');
+    let visibleCount = 0;
+    card.querySelectorAll('[data-email-reply-document]').forEach(item => {
+        const visible = !normalized || item.textContent.toLocaleLowerCase('ru').includes(normalized);
+        item.classList.toggle('krd-is-hidden', !visible);
+        if (visible) visibleCount += 1;
+    });
+    card.querySelector('[data-email-reply-documents-empty]')?.classList.toggle('krd-is-hidden', visibleCount > 0);
 }
 
 function selectedEmailReplyDocumentIds(messageId) {
@@ -1487,9 +1556,16 @@ Object.assign(window, {
     retryFailedMailOps,
     resetEmailAccountForm,
     saveEmailAccount,
+    archiveEmailMessage,
+    createProjectFromEmail,
+    deleteEmailMessage,
+    restoreEmailMessage,
+    sendEmailReply,
     setEmailAccount,
     setEmailFilter,
     syncMailbox,
     testMailbox,
+    toggleEmailRead,
+    toggleEmailReply,
     updateEmailSetupHintFromAddress,
 });
