@@ -21,6 +21,7 @@ class MailboxFlowE2ETests(unittest.TestCase):
         c = conn.cursor()
         c.execute("DELETE FROM email_attachments WHERE message_id IN (SELECT id FROM email_messages WHERE sender_email LIKE 'qa-mailbox-%')")
         c.execute("DELETE FROM email_messages WHERE sender_email LIKE 'qa-mailbox-%'")
+        c.execute("DELETE FROM email_account_owners WHERE account_id IN (SELECT id FROM email_accounts WHERE address LIKE 'qa-mailbox-%')")
         c.execute("DELETE FROM email_accounts WHERE address LIKE 'qa-mailbox-%'")
         conn.commit()
         conn.close()

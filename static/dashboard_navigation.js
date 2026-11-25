@@ -188,7 +188,7 @@ function updateBackButtonState() {
 
 window.navigateBack = function() {
     const history = Array.isArray(window.__navHistory) ? window.__navHistory : [];
-    const fallback = typeof getRoleLandingView === 'function' ? getRoleLandingView() : 'dashboard';
+    const fallback = getSafeRoleLandingView();
     const previous = history.pop() || fallback;
     if (!previous) return;
     window.__navSkipHistoryPush = true;
