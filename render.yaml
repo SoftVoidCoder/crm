@@ -3,6 +3,7 @@ previews:
 
 databases:
   - name: korda-postgres
+    plan: free
     databaseName: korda
     user: korda
 
