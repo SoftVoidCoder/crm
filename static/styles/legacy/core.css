@@ -2993,7 +2993,8 @@ button.btn-danger {
 .email-status-pill--ok { color: #0c7b60; background: rgba(20, 156, 114, 0.12); }
 .email-status-pill--error { color: #b4232f; background: rgba(225, 72, 82, 0.12); }
 .email-status-pill--muted { color: var(--secondary); background: rgba(18, 35, 63, 0.06); }
-.email-account-error { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(225, 72, 82, 0.08); color: var(--danger); font-size: 12px; text-align: left; white-space: normal; }
+.email-account-error { margin: 0 14px 12px 64px; padding: 10px 12px; border-radius: 8px; background: rgba(225, 72, 82, 0.08); color: var(--danger); font-size: 12px; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.email-account-detail { margin: 0 14px 12px 64px; }
 .email-account-card-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 14px 14px 64px; }
 .email-account-card-actions button { min-height: 34px; justify-content: center; padding-inline: 10px; }
 .email-filters-row { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }

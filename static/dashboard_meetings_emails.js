@@ -424,6 +424,10 @@ function ensureEmailInboxAutoRefresh() {
         if (!isVisible || bindDialogOpen || expandedReplyEmailId || emailInboxAutoRefreshInFlight || emailMailboxAutoSyncInFlight) return;
         emailMailboxAutoSyncInFlight = true;
         try {
+            const previousStatus = JSON.stringify((emailAccountsDB || []).map(account => [account.id, account.last_sync_status, account.last_error, account.last_sync_at, account.unread_count]));
+            await loadEmailAccounts();
+            const currentStatus = JSON.stringify((emailAccountsDB || []).map(account => [account.id, account.last_sync_status, account.last_error, account.last_sync_at, account.unread_count]));
+            if (previousStatus !== currentStatus) renderEmailAccounts();
             await syncVisibleMailboxesSilently();
             await renderEmails(false, { silent: true });
         } finally {
@@ -451,6 +455,9 @@ async function syncVisibleMailboxesSilently() {
     const accounts = (emailAccountsDB || [])
         .filter(account => account && account.id && (currentEmailAccountId ? Number(account.id) === Number(currentEmailAccountId) : true));
     for (const account of accounts) {
+        const now = Date.now();
+        if ((account.last_sync_status === 'pending' && now - Number(account.last_sync_at || 0) * 1000 < 180000) || now < Number(account.next_retry_at || 0) * 1000) continue;
+        if (String(account.address || '').toLowerCase().endsWith('@korda.spb.ru') && now - Number(account.last_sync_at || 0) * 1000 < 60000) continue;
         const res = await apiCall(`/email/accounts/${account.id}/sync`, 'POST');
         if (res && res.error === 'forbidden') return;
     }
@@ -527,16 +534,16 @@ function renderEmailAccounts() {
                         <span><strong>${account.unread_count || 0}</strong> новых</span>
                         <span><strong>${account.archived_count || 0}</strong> архив</span>
                     </div>
-                    <div class="email-account-status-line">
-                        <span class="email-status-pill ${account.last_sync_status === 'error' ? 'email-status-pill--error' : 'email-status-pill--ok'}">
-                            ${account.last_sync_status === 'error' ? 'Ошибка' : 'Активен'}
-                        </span>
-                ${account.sync_fail_count ? `<span class="email-status-pill email-status-pill--muted">${account.sync_fail_count} повтор</span>` : ''}
-                    </div>
-                    ${account.next_retry_at ? `<div class="email-account-meta">Следующая авто-попытка: ${new Date(account.next_retry_at * 1000).toLocaleString('ru-RU')}</div>` : ''}
-                    ${account.last_error ? `<div class="email-account-error">${humanizeMailboxError(account.last_error)}</div>` : ''}
-                ${account.last_delivery_error ? `<div class="email-account-error">Исходящая почта: ${humanizeMailboxError(account.last_delivery_error)}</div>` : ''}
                 </button>
+                <div class="email-account-status-line">
+                    <span class="email-status-pill ${account.last_sync_status === 'error' ? 'email-status-pill--error' : 'email-status-pill--ok'}">
+                        ${account.last_sync_status === 'error' ? 'Ошибка' : account.last_sync_status === 'pending' ? 'Проверяется' : account.last_sync_status === 'ok' ? 'Активен' : 'Ожидает проверки'}
+                    </span>
+                    ${account.sync_fail_count && account.last_sync_status === 'error' ? `<span class="email-status-pill email-status-pill--muted">${account.sync_fail_count} повтор</span>` : ''}
+                </div>
+                ${account.next_retry_at && account.last_sync_status === 'error' ? `<div class="email-account-meta email-account-detail">Следующая авто-попытка: ${new Date(account.next_retry_at * 1000).toLocaleString('ru-RU')}</div>` : ''}
+                ${account.last_error ? `<div class="email-account-error">${humanizeMailboxError(account.last_error)}</div>` : ''}
+                ${account.last_delivery_error ? `<div class="email-account-error">Исходящая почта: ${humanizeMailboxError(account.last_delivery_error)}</div>` : ''}
                 ${canManageAccounts ? `
                     <div class="email-account-card-actions">
                         <button class="btn-secondary" onclick="testMailbox(${account.id})">Проверить</button>
@@ -552,6 +559,8 @@ function renderEmailAccounts() {
 
 function resetEmailAccountForm() {
     editingEmailAccountId = null;
+    const saveStatus = document.getElementById('emailAccountSaveStatus');
+    if (saveStatus) saveStatus.textContent = '';
     const defaults = {
         emailAccountLabel: 'Korda Mail',
         emailAccountAddress: '',
@@ -636,8 +645,25 @@ async function saveEmailAccount() {
 
     const endpoint = editingEmailAccountId ? `/email/accounts/${editingEmailAccountId}` : '/email/accounts';
     const method = editingEmailAccountId ? 'PUT' : 'POST';
-    const res = await apiCall(endpoint, method, payload);
+    const submitButton = document.getElementById('emailAccountSubmit');
+    const saveStatus = document.getElementById('emailAccountSaveStatus');
+    if (submitButton?.disabled) return;
+    if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Сохраняем ящик...';
+    }
+    if (saveStatus) saveStatus.textContent = 'Сохраняем ящик и запускаем проверку почты...';
+    let res;
+    try {
+        res = await apiCall(endpoint, method, payload);
+    } finally {
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = 'Войти и привязать';
+        }
+    }
     if (!res || res.error) {
+        if (saveStatus) saveStatus.textContent = res?.message || 'Не удалось сохранить ящик.';
         return customAlert(res?.error || 'Не удалось сохранить почтовый ящик.');
     }
 
@@ -645,8 +671,8 @@ async function saveEmailAccount() {
     renderEmailAccounts();
     resetEmailAccountForm();
     closeKordaMailBindDialog();
-    await renderEmails(true);
-    showToast('Почта', 'Почтовый ящик сохранён');
+    await renderEmails();
+    showToast('Почта', 'Ящик сохранён. Проверяем подключение к серверу.');
 }
 
 async function deleteMailbox(accountId) {
@@ -671,6 +697,10 @@ async function syncMailbox(accountId) {
     }
     if (res.status === 'error') {
         showToast('Почта', 'Синхронизация завершилась с ошибкой. Детали записаны в карточке ящика.', 'error');
+        return;
+    }
+    if (res.status === 'pending') {
+        showToast('Почта', 'Проверка почты запущена. Письма появятся автоматически.');
         return;
     }
     showToast('Почта', 'Синхронизация завершена');

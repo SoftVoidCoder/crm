@@ -77,9 +77,10 @@
                         <label><input id="emailAccountActive" type="checkbox" checked> Синхронизировать почту</label>
                     </div>
                     <div class="email-account-actions">
-                        <button class="btn-primary" type="submit">Войти и привязать</button>
+                        <button id="emailAccountSubmit" class="btn-primary" type="submit">Войти и привязать</button>
                         <button class="btn-secondary" type="button" onclick="resetEmailAccountForm()">Очистить</button>
                     </div>
+                    <div id="emailAccountSaveStatus" role="status" aria-live="polite"></div>
                 </form>
       <div id="emailSetupHint" class="email-setup-hint">Нажми “Войти”, введи данные почты Korda в открывшемся окне, и CRM привяжет ящик к текущему аккаунту.</div>
             </div>

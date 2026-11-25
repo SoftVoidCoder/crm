@@ -8,7 +8,7 @@ from requests_ntlm import HttpNtlmAuth
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.message import EmailMessage
-from fastapi import APIRouter, Request, UploadFile, File, Form
+from fastapi import APIRouter, BackgroundTasks, Request, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from database import get_connection, audit_log, create_notification, create_targeted_notifications, get_notifications_for_user, mark_notification_read, mark_all_notifications_read, get_dismissed_notification_keys, dismiss_notifications_for_user, record_error_log
 from auth_security import get_request_user
@@ -795,7 +795,7 @@ def _is_korda_exchange_account(account: dict) -> bool:
     return address.endswith("@korda.spb.ru") or host == "mail.korda.spb.ru"
 
 
-def _exchange_ews_request(account: dict, body_xml: str) -> ET.Element:
+def _exchange_ews_request(account: dict, body_xml: str, session=None) -> ET.Element:
     _smtp_host, _smtp_port, login, password, _sender = _smtp_credentials(account)
     if not login or not password:
         raise RuntimeError("Не указан логин или пароль Korda Mail")
@@ -806,12 +806,12 @@ def _exchange_ews_request(account: dict, body_xml: str) -> ET.Element:
   <soap:Header><t:RequestServerVersion Version="Exchange2013" /></soap:Header>
   <soap:Body>{body_xml}</soap:Body>
 </soap:Envelope>'''
-    response = requests.post(
+    response = (session or requests).post(
         EXCHANGE_EWS_URL,
         data=envelope.encode("utf-8"),
         headers={"Content-Type": "text/xml; charset=utf-8"},
         auth=HttpNtlmAuth(login, password),
-        timeout=MAIL_IMAP_TIMEOUT,
+        timeout=(10, max(60, MAIL_IMAP_TIMEOUT)),
     )
     if response.status_code >= 300:
         raise RuntimeError(f"Korda Mail вернул HTTP {response.status_code}")
@@ -822,14 +822,14 @@ def _exchange_ews_request(account: dict, body_xml: str) -> ET.Element:
     return root
 
 
-def _exchange_ews_item_ids(account: dict, limit: int = MAIL_SYNC_BATCH) -> list[tuple[str, str]]:
+def _exchange_ews_item_ids(account: dict, limit: int = MAIL_SYNC_BATCH, session=None) -> list[tuple[str, str]]:
     root = _exchange_ews_request(account, f'''
 <m:FindItem Traversal="Shallow">
   <m:ItemShape><t:BaseShape>IdOnly</t:BaseShape></m:ItemShape>
   <m:IndexedPageItemView MaxEntriesReturned="{max(1, int(limit or 1))}" Offset="0" BasePoint="Beginning" />
   <m:SortOrder><t:FieldOrder Order="Descending"><t:FieldURI FieldURI="item:DateTimeReceived" /></t:FieldOrder></m:SortOrder>
   <m:ParentFolderIds><t:DistinguishedFolderId Id="inbox" /></m:ParentFolderIds>
-</m:FindItem>''')
+</m:FindItem>''', session=session)
     return [
         (node.get("Id", ""), node.get("ChangeKey", ""))
         for node in root.findall(".//t:ItemId", EXCHANGE_XML_NS)
@@ -871,22 +871,26 @@ def _parse_exchange_ews_messages(root: ET.Element, account_id: int) -> list[dict
 
 
 def _sync_exchange_ews_account(account: dict) -> int:
-    item_ids = _exchange_ews_item_ids(account)
-    if not item_ids:
-        return 0
-    ids_xml = "".join(
-        f'<t:ItemId Id="{html.escape(item_id, quote=True)}" ChangeKey="{html.escape(change_key, quote=True)}" />'
-        for item_id, change_key in item_ids
-    )
-    root = _exchange_ews_request(account, f'''
+    saved = 0
+    with requests.Session() as session:
+        item_ids = _exchange_ews_item_ids(account, session=session)
+        if not item_ids:
+            return 0
+        for offset in range(0, len(item_ids), 10):
+            ids_xml = "".join(
+                f'<t:ItemId Id="{html.escape(item_id, quote=True)}" ChangeKey="{html.escape(change_key, quote=True)}" />'
+                for item_id, change_key in item_ids[offset:offset + 10]
+            )
+            root = _exchange_ews_request(account, f'''
 <m:GetItem>
   <m:ItemShape><t:BaseShape>AllProperties</t:BaseShape><t:BodyType>Text</t:BodyType></m:ItemShape>
   <m:ItemIds>{ids_xml}</m:ItemIds>
-</m:GetItem>''')
-    rows = _parse_exchange_ews_messages(root, int(account.get("id") or 0))
-    for row in rows:
-        _save_oauth_message(row)
-    return len(rows)
+</m:GetItem>''', session=session)
+            rows = _parse_exchange_ews_messages(root, int(account.get("id") or 0))
+            for row in rows:
+                _save_oauth_message(row)
+            saved += len(rows)
+    return saved
 
 
 def _register_delivery_event(account_id: int, message_id: int, recipient: str, subject: str, status: str, error_text: str = "", attempts: int = 0):
@@ -1858,8 +1862,23 @@ def finish_email_oauth(provider: str, request: Request, code: str = "", state: s
     return _email_oauth_return_html("Почта подключена", f"Ящик {payload.get('address')} добавлен в CRM и первая синхронизация запущена.")
 
 
+def _sync_saved_email_account(account: dict, background_tasks: BackgroundTasks, force: bool = True):
+    if not _is_korda_exchange_account(account):
+        return sync_email_account(account, force=force)
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE email_accounts SET last_sync_status='pending', last_error='', next_retry_at=0, last_sync_at=? WHERE id=?",
+            (int(time.time()), account["id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    background_tasks.add_task(sync_email_account, account, force=force)
+
+
 @router.post("/api/email/accounts")
-def create_email_account(data: EmailAccountData, request: Request):
+def create_email_account(data: EmailAccountData, request: Request, background_tasks: BackgroundTasks):
     actor = _mail_admin(request)
     if not actor:
         return _api_error(403, "forbidden")
@@ -1889,7 +1908,7 @@ def create_email_account(data: EmailAccountData, request: Request):
             encrypt_secret_fn=encrypt_secret,
             audit_log_fn=audit_log,
             load_account_fn=_load_email_account,
-            sync_account_fn=sync_email_account,
+            sync_account_fn=lambda account, force: _sync_saved_email_account(account, background_tasks, force),
         )
         result["id"] = account_id
         return result
@@ -1901,7 +1920,7 @@ def create_email_account(data: EmailAccountData, request: Request):
         encrypt_secret_fn=encrypt_secret,
         audit_log_fn=audit_log,
         load_account_fn=_load_email_account,
-        sync_account_fn=sync_email_account,
+        sync_account_fn=lambda account, force: _sync_saved_email_account(account, background_tasks, force),
         is_locked_error_fn=_is_locked_error,
     )
     if result.get("error"):
@@ -1910,7 +1929,7 @@ def create_email_account(data: EmailAccountData, request: Request):
 
 
 @router.put("/api/email/accounts/{account_id}")
-def update_email_account(account_id: int, data: EmailAccountData, request: Request):
+def update_email_account(account_id: int, data: EmailAccountData, request: Request, background_tasks: BackgroundTasks):
     actor = _mail_admin(request)
     if not actor:
         return _api_error(403, "forbidden")
@@ -1925,7 +1944,7 @@ def update_email_account(account_id: int, data: EmailAccountData, request: Reque
         encrypt_secret_fn=encrypt_secret,
         audit_log_fn=audit_log,
         load_account_fn=_load_email_account,
-        sync_account_fn=sync_email_account,
+        sync_account_fn=lambda account, force: _sync_saved_email_account(account, background_tasks, force),
     )
 
 
@@ -1945,13 +1964,18 @@ def delete_email_account(account_id: int, request: Request):
 
 
 @router.post("/api/email/accounts/{account_id}/sync")
-def sync_email_account_route(account_id: int, request: Request):
+def sync_email_account_route(account_id: int, request: Request, background_tasks: BackgroundTasks):
     actor = get_request_user(request)
     if not actor or actor.get("status") != "approved" or not has_permission(actor, "emails", "read"):
         return {"error": "forbidden"}
     account = _load_email_account(account_id, actor)
     if not account:
         return {"error": "not_found"}
+    if _is_korda_exchange_account(account):
+        if account.get("last_sync_status") == "pending" and int(time.time()) - int(account.get("last_sync_at") or 0) < 180:
+            return {"status": "pending"}
+        _sync_saved_email_account(account, background_tasks)
+        return {"status": "pending"}
     return sync_email_account(account, force=True)
 
 

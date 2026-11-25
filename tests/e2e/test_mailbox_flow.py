@@ -1,12 +1,13 @@
 import unittest
 import xml.etree.ElementTree as ET
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from main import app
 from database import get_connection
 from tests.test_helpers import create_test_user, delete_test_user
-from routers.communications import _parse_exchange_ews_messages
+from routers.communications import _parse_exchange_ews_messages, _sync_exchange_ews_account
 
 
 class MailboxFlowE2ETests(unittest.TestCase):
@@ -92,6 +93,54 @@ class MailboxFlowE2ETests(unittest.TestCase):
         filtered = self.client.get(f"/api/emails?account_id={account_id}&filter_name=new&query=Smoke")
         self.assertEqual(filtered.status_code, 200)
         self.assertTrue(any(item["subject"] == "Smoke email" for item in filtered.json()))
+
+    def test_korda_binding_schedules_sync_and_keeps_account_owner(self):
+        address = "qa-mailbox-korda@korda.spb.ru"
+        payload = {
+            "label": "Korda Mail",
+            "address": address,
+            "login": address,
+            "password": "test-password",
+            "imap_host": "mail.korda.spb.ru",
+            "imap_port": 993,
+            "smtp_host": "mail.korda.spb.ru",
+            "smtp_port": 465,
+            "smtp_login": address,
+            "smtp_password": "test-password",
+            "inbox_folder": "INBOX",
+            "archive_folder": "Archive",
+            "is_default": 1,
+            "is_active": 1,
+        }
+        with patch("routers.communications.sync_email_account") as sync:
+            created = self.client.post("/api/email/accounts", json=payload)
+            self.assertEqual(created.status_code, 200)
+            self.assertEqual(created.json()["status"], "success")
+            sync.assert_called_once()
+
+        conn = get_connection()
+        row = conn.execute(
+            "SELECT a.last_sync_status, eo.owner_email FROM email_accounts a "
+            "JOIN email_account_owners eo ON eo.account_id=a.id WHERE a.id=?",
+            (created.json()["id"],),
+        ).fetchone()
+        conn.close()
+        self.assertEqual(row[0], "pending")
+        self.assertEqual(row[1], self.user["email"].lower())
+
+    def test_exchange_sync_fetches_messages_in_small_batches(self):
+        item_ids = [(f"message-{index}", "key") for index in range(21)]
+        with patch("routers.communications.requests.Session"), \
+             patch("routers.communications._exchange_ews_item_ids", return_value=item_ids), \
+             patch("routers.communications._exchange_ews_request", return_value=ET.Element("root")) as request, \
+             patch("routers.communications._parse_exchange_ews_messages", return_value=[{"uid": "one"}]), \
+             patch("routers.communications._save_oauth_message") as save:
+            self.assertEqual(_sync_exchange_ews_account({"id": 42}), 3)
+        self.assertEqual(request.call_count, 3)
+        self.assertIn('Id="message-0"', request.call_args_list[0].args[1])
+        self.assertNotIn('Id="message-10"', request.call_args_list[0].args[1])
+        self.assertIn('Id="message-20"', request.call_args_list[2].args[1])
+        self.assertEqual(save.call_count, 3)
 
     def test_mailbox_test_endpoint_and_failed_retry_flow(self):
         account_res = self.client.post(
