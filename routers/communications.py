@@ -6,6 +6,7 @@ import httpx
 import requests
 from requests.adapters import HTTPAdapter
 from requests_ntlm import HttpNtlmAuth
+from requests.auth import HTTPBasicAuth
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.message import EmailMessage
@@ -834,6 +835,18 @@ def _exchange_ews_session() -> requests.Session:
     raise RuntimeError(f"Korda Mail недоступен: ни один адрес {EXCHANGE_EWS_HOST} не отвечает")
 
 
+def _exchange_ews_post(session, data: bytes, login: str, password: str, timeout):
+    kwargs = {
+        "data": data,
+        "headers": {"Content-Type": "text/xml; charset=utf-8"},
+        "timeout": timeout,
+    }
+    response = session.post(session.ews_url, auth=HTTPBasicAuth(login, password), **kwargs)
+    if response.status_code == 401:
+        response = session.post(session.ews_url, auth=HttpNtlmAuth(login, password), **kwargs)
+    return response
+
+
 def _exchange_ews_request(account: dict, body_xml: str, session=None) -> ET.Element:
     _smtp_host, _smtp_port, login, password, _sender = _smtp_credentials(account)
     if not login or not password:
@@ -847,12 +860,8 @@ def _exchange_ews_request(account: dict, body_xml: str, session=None) -> ET.Elem
 </soap:Envelope>'''
     session = session or _exchange_ews_session()
     try:
-        response = session.post(
-            session.ews_url,
-            data=envelope.encode("utf-8"),
-            headers={"Content-Type": "text/xml; charset=utf-8"},
-            auth=HttpNtlmAuth(login, password),
-            timeout=(10, max(60, MAIL_IMAP_TIMEOUT)),
+        response = _exchange_ews_post(
+            session, envelope.encode("utf-8"), login, password, (10, max(60, MAIL_IMAP_TIMEOUT)),
         )
     except (requests.ConnectionError, requests.Timeout):
         EXCHANGE_EWS_LIVE_IP["ip"] = ""
@@ -1158,13 +1167,7 @@ def _send_exchange_ews(account: dict, email_message: EmailMessage, recipient: st
 
     try:
         with _exchange_ews_session() as session:
-            response = session.post(
-                session.ews_url,
-                data=soap.encode("utf-8"),
-                headers={"Content-Type": "text/xml; charset=utf-8"},
-                auth=HttpNtlmAuth(smtp_login, smtp_pass),
-                timeout=MAIL_SMTP_TIMEOUT,
-            )
+            response = _exchange_ews_post(session, soap.encode("utf-8"), smtp_login, smtp_pass, MAIL_SMTP_TIMEOUT)
         text = response.text or ""
         if response.status_code < 300 and 'ResponseClass="Success"' in text and "<m:ResponseCode>NoError</m:ResponseCode>" in text:
             _register_delivery_event(account.get("id", 0), message_id, recipient, subject, "success", attempts=1)
