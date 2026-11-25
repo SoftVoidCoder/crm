@@ -1,4 +1,5 @@
 import json, time, email, datetime, asyncio, os, secrets, imaplib, html, mimetypes, base64
+import xml.etree.ElementTree as ET
 from email.utils import parseaddr
 import smtplib
 import httpx
@@ -100,6 +101,11 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 EMAIL_ATTACHMENTS_DIR = os.path.join(UPLOADS_DIR, "email_attachments")
 EMAIL_OAUTH_STATES: dict[str, dict] = {}
+EXCHANGE_EWS_URL = "https://mail.korda.spb.ru/EWS/Exchange.asmx"
+EXCHANGE_XML_NS = {
+    "m": "http://schemas.microsoft.com/exchange/services/2006/messages",
+    "t": "http://schemas.microsoft.com/exchange/services/2006/types",
+}
 
 
 def _safe_text(value: str, fallback: str = "") -> str:
@@ -783,6 +789,106 @@ def _smtp_credentials(account: dict):
     )
 
 
+def _is_korda_exchange_account(account: dict) -> bool:
+    address = _safe_text(account.get("address")).lower()
+    host = _safe_text(account.get("imap_host")).lower()
+    return address.endswith("@korda.spb.ru") or host == "mail.korda.spb.ru"
+
+
+def _exchange_ews_request(account: dict, body_xml: str) -> ET.Element:
+    _smtp_host, _smtp_port, login, password, _sender = _smtp_credentials(account)
+    if not login or not password:
+        raise RuntimeError("Не указан логин или пароль Korda Mail")
+    envelope = f'''<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">
+  <soap:Header><t:RequestServerVersion Version="Exchange2013" /></soap:Header>
+  <soap:Body>{body_xml}</soap:Body>
+</soap:Envelope>'''
+    response = requests.post(
+        EXCHANGE_EWS_URL,
+        data=envelope.encode("utf-8"),
+        headers={"Content-Type": "text/xml; charset=utf-8"},
+        auth=HttpNtlmAuth(login, password),
+        timeout=MAIL_IMAP_TIMEOUT,
+    )
+    if response.status_code >= 300:
+        raise RuntimeError(f"Korda Mail вернул HTTP {response.status_code}")
+    root = ET.fromstring(response.content)
+    response_code = root.findtext(".//m:ResponseCode", namespaces=EXCHANGE_XML_NS)
+    if response_code and response_code != "NoError":
+        raise RuntimeError(response_code)
+    return root
+
+
+def _exchange_ews_item_ids(account: dict, limit: int = MAIL_SYNC_BATCH) -> list[tuple[str, str]]:
+    root = _exchange_ews_request(account, f'''
+<m:FindItem Traversal="Shallow">
+  <m:ItemShape><t:BaseShape>IdOnly</t:BaseShape></m:ItemShape>
+  <m:IndexedPageItemView MaxEntriesReturned="{max(1, int(limit or 1))}" Offset="0" BasePoint="Beginning" />
+  <m:SortOrder><t:FieldOrder Order="Descending"><t:FieldURI FieldURI="item:DateTimeReceived" /></t:FieldOrder></m:SortOrder>
+  <m:ParentFolderIds><t:DistinguishedFolderId Id="inbox" /></m:ParentFolderIds>
+</m:FindItem>''')
+    return [
+        (node.get("Id", ""), node.get("ChangeKey", ""))
+        for node in root.findall(".//t:ItemId", EXCHANGE_XML_NS)
+        if node.get("Id")
+    ]
+
+
+def _parse_exchange_ews_messages(root: ET.Element, account_id: int) -> list[dict]:
+    rows = []
+    for message in root.findall(".//t:Message", EXCHANGE_XML_NS):
+        item_id = message.find("./t:ItemId", EXCHANGE_XML_NS)
+        uid = item_id.get("Id", "") if item_id is not None else ""
+        if not uid:
+            continue
+        received_at = message.findtext("./t:DateTimeReceived", default="", namespaces=EXCHANGE_XML_NS)
+        try:
+            parsed_date = datetime.datetime.fromisoformat(received_at.replace("Z", "+00:00"))
+            received_at = parsed_date.astimezone().strftime("%d.%m.%Y %H:%M")
+        except (TypeError, ValueError):
+            pass
+        sender_name = message.findtext("./t:From/t:Mailbox/t:Name", default="", namespaces=EXCHANGE_XML_NS)
+        sender_email = message.findtext("./t:From/t:Mailbox/t:EmailAddress", default="", namespaces=EXCHANGE_XML_NS)
+        reply_to = message.findtext("./t:ReplyTo/t:Mailbox/t:EmailAddress", default="", namespaces=EXCHANGE_XML_NS)
+        rows.append({
+            "account_id": account_id,
+            "uid": uid,
+            "folder": "INBOX",
+            "subject": message.findtext("./t:Subject", default="Без темы", namespaces=EXCHANGE_XML_NS),
+            "sender": sender_name or sender_email or "Неизвестный отправитель",
+            "sender_email": sender_email,
+            "body_text": message.findtext("./t:Body", default="", namespaces=EXCHANGE_XML_NS),
+            "received_at": received_at,
+            "is_read": int(message.findtext("./t:IsRead", default="false", namespaces=EXCHANGE_XML_NS).lower() == "true"),
+            "is_archived": 0,
+            "message_id_header": message.findtext("./t:InternetMessageId", default="", namespaces=EXCHANGE_XML_NS),
+            "reply_to_email": reply_to or sender_email,
+        })
+    return rows
+
+
+def _sync_exchange_ews_account(account: dict) -> int:
+    item_ids = _exchange_ews_item_ids(account)
+    if not item_ids:
+        return 0
+    ids_xml = "".join(
+        f'<t:ItemId Id="{html.escape(item_id, quote=True)}" ChangeKey="{html.escape(change_key, quote=True)}" />'
+        for item_id, change_key in item_ids
+    )
+    root = _exchange_ews_request(account, f'''
+<m:GetItem>
+  <m:ItemShape><t:BaseShape>AllProperties</t:BaseShape><t:BodyType>Text</t:BodyType></m:ItemShape>
+  <m:ItemIds>{ids_xml}</m:ItemIds>
+</m:GetItem>''')
+    rows = _parse_exchange_ews_messages(root, int(account.get("id") or 0))
+    for row in rows:
+        _save_oauth_message(row)
+    return len(rows)
+
+
 def _register_delivery_event(account_id: int, message_id: int, recipient: str, subject: str, status: str, error_text: str = "", attempts: int = 0):
     conn = get_connection()
     c = conn.cursor()
@@ -1024,6 +1130,17 @@ def _send_exchange_ews(account: dict, email_message: EmailMessage, recipient: st
 
 
 def _test_email_account_connection(account: dict):
+    if _is_korda_exchange_account(account):
+        result = {"status": "success", "imap": {"ok": False, "error": ""}, "smtp": {"ok": False, "error": ""}}
+        try:
+            _exchange_ews_item_ids(account, limit=1)
+            result["imap"]["ok"] = True
+            result["smtp"]["ok"] = True
+        except Exception as exc:
+            result["status"] = "error"
+            result["imap"]["error"] = str(exc)
+            result["smtp"]["error"] = str(exc)
+        return result
     return test_email_account_connection_service(
         account,
         connect_imap_account_fn=_connect_imap_account,
@@ -1122,6 +1239,18 @@ def sync_email_account(account: dict, force: bool = False):
     conn = get_connection()
     c = conn.cursor()
     try:
+        if _is_korda_exchange_account(account):
+            _sync_exchange_ews_account(account)
+            c.execute(
+                """
+                UPDATE email_accounts
+                SET last_sync_at=?, last_error='', sync_fail_count=0, next_retry_at=0, last_sync_status='ok'
+                WHERE id=?
+                """,
+                (now, account["id"]),
+            )
+            conn.commit()
+            return {"status": "success"}
         if account.get("auth_type") == "oauth" and account.get("oauth_provider") in {"google", "microsoft"}:
             provider = account.get("oauth_provider")
             access_token = refresh_mail_oauth_access_token(
@@ -1734,6 +1863,36 @@ def create_email_account(data: EmailAccountData, request: Request):
     actor = _mail_admin(request)
     if not actor:
         return _api_error(403, "forbidden")
+    conn = get_connection(row_factory=True)
+    try:
+        existing = conn.execute(
+            """
+            SELECT a.id
+            FROM email_accounts a
+            JOIN email_account_owners eo ON eo.account_id=a.id
+            WHERE LOWER(a.address)=LOWER(?) AND LOWER(COALESCE(eo.owner_email, ''))=?
+            ORDER BY a.id ASC
+            LIMIT 1
+            """,
+            (_safe_text(data.address), _mail_owner_email(actor)),
+        ).fetchone()
+    finally:
+        conn.close()
+    if existing:
+        account_id = int(existing["id"])
+        result = update_email_account_record_service(
+            account_id,
+            data,
+            actor=actor,
+            get_connection=get_connection,
+            normalize_payload_fn=_normalize_email_account_payload,
+            encrypt_secret_fn=encrypt_secret,
+            audit_log_fn=audit_log,
+            load_account_fn=_load_email_account,
+            sync_account_fn=sync_email_account,
+        )
+        result["id"] = account_id
+        return result
     result = create_email_account_record_service(
         data,
         actor=actor,

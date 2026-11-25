@@ -1,10 +1,12 @@
 import unittest
+import xml.etree.ElementTree as ET
 
 from fastapi.testclient import TestClient
 
 from main import app
 from database import get_connection
 from tests.test_helpers import create_test_user, delete_test_user
+from routers.communications import _parse_exchange_ews_messages
 
 
 class MailboxFlowE2ETests(unittest.TestCase):
@@ -176,6 +178,33 @@ class MailboxFlowE2ETests(unittest.TestCase):
         self.assertEqual(row[8], "INBOX")
         self.assertEqual(row[9], "Archive")
 
+        duplicate_res = self.client.post(
+            "/api/email/accounts",
+            json={
+                "label": "Updated mailbox",
+                "address": "qa-mailbox-quick@example.com",
+                "login": "qa-mailbox-quick@example.com",
+                "password": "mail-pass-2",
+                "imap_host": "imap.invalid",
+                "imap_port": 993,
+                "smtp_host": "smtp.invalid",
+                "smtp_port": 465,
+                "smtp_login": "qa-mailbox-quick@example.com",
+                "smtp_password": "mail-pass-2",
+                "inbox_folder": "INBOX",
+                "archive_folder": "Archive",
+                "is_default": 0,
+                "is_active": 0,
+            },
+        )
+        self.assertEqual(duplicate_res.status_code, 200)
+        self.assertEqual(duplicate_res.json()["id"], account_id)
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM email_accounts WHERE address=?", ("qa-mailbox-quick@example.com",))
+        self.assertEqual(c.fetchone()[0], 1)
+        conn.close()
+
         update_res = self.client.put(
             f"/api/email/accounts/{account_id}",
             json={
@@ -203,6 +232,28 @@ class MailboxFlowE2ETests(unittest.TestCase):
         c.execute("DELETE FROM email_accounts WHERE id=?", (account_id,))
         conn.commit()
         conn.close()
+
+    def test_exchange_message_parser(self):
+        root = ET.fromstring('''
+        <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
+                    xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+                    xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">
+          <s:Body><m:GetItemResponse><m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success">
+            <m:ResponseCode>NoError</m:ResponseCode><m:Items><t:Message>
+              <t:ItemId Id="ews-1" ChangeKey="v1"/><t:Subject>Тест EWS</t:Subject>
+              <t:Body BodyType="Text">Текст письма</t:Body><t:DateTimeReceived>2026-11-25T12:30:00Z</t:DateTimeReceived>
+              <t:IsRead>true</t:IsRead><t:InternetMessageId>&lt;message@example.com&gt;</t:InternetMessageId>
+              <t:From><t:Mailbox><t:Name>Отправитель</t:Name><t:EmailAddress>sender@example.com</t:EmailAddress></t:Mailbox></t:From>
+            </t:Message></m:Items>
+          </m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse></s:Body>
+        </s:Envelope>''')
+        rows = _parse_exchange_ews_messages(root, 42)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["account_id"], 42)
+        self.assertEqual(rows[0]["uid"], "ews-1")
+        self.assertEqual(rows[0]["sender_email"], "sender@example.com")
+        self.assertEqual(rows[0]["body_text"], "Текст письма")
+        self.assertEqual(rows[0]["is_read"], 1)
 
 
 if __name__ == "__main__":

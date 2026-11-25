@@ -18,6 +18,11 @@ window.__navHistory = window.__navHistory || [];
 window.__navCurrentView = window.__navCurrentView || '';
 const MOBILE_WORKSPACE_MAX_WIDTH = 768;
 const DISABLED_LEGACY_VIEWS = new Set([
+    'dashboard',
+    'approvals',
+    'clients',
+    'bitrixImport',
+    'claims',
     'tasks',
     'knowledge',
     'messenger',

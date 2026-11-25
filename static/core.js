@@ -39,7 +39,7 @@ let canvas, ctx, isDrawing = false;
 window.__formPolicyCache = window.__formPolicyCache || {};
 
 const availableRoles = ['Сотрудник', 'Директор'];
-const PROJECT_NAV_IDS = ['navDashboard', 'navApprovals', 'navClients', 'navBitrixImport', 'navContract360', 'navClaims', 'navDocuments', 'navEmails'];
+const PROJECT_NAV_IDS = ['navContract360', 'navDocuments', 'navEmails'];
 const DIRECTOR_NAV_IDS = [...PROJECT_NAV_IDS, 'adminBtn'];
 const AUTOFILL_SEARCH_GHOSTS = new Set(['admin', 'админ']);
 
@@ -770,9 +770,7 @@ window.isNavAllowedByPermissions = isNavAllowedByPermissions;
 window.isNavAvailableForCurrentRole = isNavAvailableForCurrentRole;
 
 window.getRoleLandingView = function() {
-    const role = String(currentUser?.role || '').trim();
-    if (role === 'Директор') return 'dashboard';
-    return 'dashboard';
+    return 'documents';
 };
 
 window.renderTableLoadingRow = function(colspan = 1, message = 'Загрузка данных...') {
