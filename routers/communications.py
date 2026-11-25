@@ -1,9 +1,10 @@
-import json, time, email, datetime, asyncio, os, secrets, imaplib, html, mimetypes, base64
+import json, time, email, datetime, asyncio, os, secrets, imaplib, html, mimetypes, base64, socket
 import xml.etree.ElementTree as ET
 from email.utils import parseaddr
 import smtplib
 import httpx
 import requests
+from requests.adapters import HTTPAdapter
 from requests_ntlm import HttpNtlmAuth
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -101,7 +102,8 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 EMAIL_ATTACHMENTS_DIR = os.path.join(UPLOADS_DIR, "email_attachments")
 EMAIL_OAUTH_STATES: dict[str, dict] = {}
-EXCHANGE_EWS_URL = "https://mail.korda.spb.ru/EWS/Exchange.asmx"
+EXCHANGE_EWS_HOST = "mail.korda.spb.ru"
+EXCHANGE_EWS_LIVE_IP = {"ip": "", "at": 0.0}
 EXCHANGE_XML_NS = {
     "m": "http://schemas.microsoft.com/exchange/services/2006/messages",
     "t": "http://schemas.microsoft.com/exchange/services/2006/types",
@@ -795,6 +797,42 @@ def _is_korda_exchange_account(account: dict) -> bool:
     return address.endswith("@korda.spb.ru") or host == "mail.korda.spb.ru"
 
 
+class _ExchangeHostAdapter(HTTPAdapter):
+    # Connect by IP but keep TLS SNI and certificate check on the real host name.
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs["server_hostname"] = EXCHANGE_EWS_HOST
+        kwargs["assert_hostname"] = EXCHANGE_EWS_HOST
+        super().init_poolmanager(*args, **kwargs)
+
+
+def _exchange_ews_session_for(ip: str) -> requests.Session:
+    session = requests.Session()
+    session.mount(f"https://{ip}/", _ExchangeHostAdapter())
+    session.headers["Host"] = EXCHANGE_EWS_HOST
+    session.ews_url = f"https://{ip}/EWS/Exchange.asmx"
+    return session
+
+
+def _exchange_ews_session() -> requests.Session:
+    # mail.korda.spb.ru has a dead A record (94.159.95.60): a request that lands on it hangs until timeout.
+    if EXCHANGE_EWS_LIVE_IP["ip"] and time.time() - EXCHANGE_EWS_LIVE_IP["at"] < 600:
+        return _exchange_ews_session_for(EXCHANGE_EWS_LIVE_IP["ip"])
+    try:
+        ips = list(dict.fromkeys(info[4][0] for info in socket.getaddrinfo(EXCHANGE_EWS_HOST, 443, type=socket.SOCK_STREAM)))
+    except OSError as exc:
+        raise RuntimeError(f"Не удаётся найти сервер {EXCHANGE_EWS_HOST}: {exc}") from exc
+    for ip in ips:
+        session = _exchange_ews_session_for(ip)
+        try:
+            session.get(session.ews_url, timeout=(5, 10))
+        except requests.RequestException:
+            session.close()
+            continue
+        EXCHANGE_EWS_LIVE_IP.update(ip=ip, at=time.time())
+        return session
+    raise RuntimeError(f"Korda Mail недоступен: ни один адрес {EXCHANGE_EWS_HOST} не отвечает")
+
+
 def _exchange_ews_request(account: dict, body_xml: str, session=None) -> ET.Element:
     _smtp_host, _smtp_port, login, password, _sender = _smtp_credentials(account)
     if not login or not password:
@@ -806,13 +844,20 @@ def _exchange_ews_request(account: dict, body_xml: str, session=None) -> ET.Elem
   <soap:Header><t:RequestServerVersion Version="Exchange2013" /></soap:Header>
   <soap:Body>{body_xml}</soap:Body>
 </soap:Envelope>'''
-    response = (session or requests).post(
-        EXCHANGE_EWS_URL,
-        data=envelope.encode("utf-8"),
-        headers={"Content-Type": "text/xml; charset=utf-8"},
-        auth=HttpNtlmAuth(login, password),
-        timeout=(10, max(60, MAIL_IMAP_TIMEOUT)),
-    )
+    session = session or _exchange_ews_session()
+    try:
+        response = session.post(
+            session.ews_url,
+            data=envelope.encode("utf-8"),
+            headers={"Content-Type": "text/xml; charset=utf-8"},
+            auth=HttpNtlmAuth(login, password),
+            timeout=(10, max(60, MAIL_IMAP_TIMEOUT)),
+        )
+    except (requests.ConnectionError, requests.Timeout):
+        EXCHANGE_EWS_LIVE_IP["ip"] = ""
+        raise
+    if response.status_code == 401:
+        raise RuntimeError("Korda Mail: неверный логин или пароль (authentication failed)")
     if response.status_code >= 300:
         raise RuntimeError(f"Korda Mail вернул HTTP {response.status_code}")
     root = ET.fromstring(response.content)
@@ -872,7 +917,7 @@ def _parse_exchange_ews_messages(root: ET.Element, account_id: int) -> list[dict
 
 def _sync_exchange_ews_account(account: dict) -> int:
     saved = 0
-    with requests.Session() as session:
+    with _exchange_ews_session() as session:
         item_ids = _exchange_ews_item_ids(account, session=session)
         if not item_ids:
             return 0
@@ -1060,7 +1105,6 @@ def _send_exchange_ews(account: dict, email_message: EmailMessage, recipient: st
     if not recipient or not smtp_login or not smtp_pass:
         return False, "smtp_not_configured"
 
-    ews_url = "https://mail.korda.spb.ru/EWS/Exchange.asmx"
     attachments_xml = []
     for attachment in email_message.iter_attachments():
         payload = attachment.get_payload(decode=True) or b""
@@ -1112,13 +1156,14 @@ def _send_exchange_ews(account: dict, email_message: EmailMessage, recipient: st
 </soap:Envelope>"""
 
     try:
-        response = requests.post(
-            ews_url,
-            data=soap.encode("utf-8"),
-            headers={"Content-Type": "text/xml; charset=utf-8"},
-            auth=HttpNtlmAuth(smtp_login, smtp_pass),
-            timeout=MAIL_SMTP_TIMEOUT,
-        )
+        with _exchange_ews_session() as session:
+            response = session.post(
+                session.ews_url,
+                data=soap.encode("utf-8"),
+                headers={"Content-Type": "text/xml; charset=utf-8"},
+                auth=HttpNtlmAuth(smtp_login, smtp_pass),
+                timeout=MAIL_SMTP_TIMEOUT,
+            )
         text = response.text or ""
         if response.status_code < 300 and 'ResponseClass="Success"' in text and "<m:ResponseCode>NoError</m:ResponseCode>" in text:
             _register_delivery_event(account.get("id", 0), message_id, recipient, subject, "success", attempts=1)

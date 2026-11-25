@@ -1,6 +1,6 @@
 import unittest
 import xml.etree.ElementTree as ET
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -130,7 +130,7 @@ class MailboxFlowE2ETests(unittest.TestCase):
 
     def test_exchange_sync_fetches_messages_in_small_batches(self):
         item_ids = [(f"message-{index}", "key") for index in range(21)]
-        with patch("routers.communications.requests.Session"), \
+        with patch("routers.communications._exchange_ews_session"), \
              patch("routers.communications._exchange_ews_item_ids", return_value=item_ids), \
              patch("routers.communications._exchange_ews_request", return_value=ET.Element("root")) as request, \
              patch("routers.communications._parse_exchange_ews_messages", return_value=[{"uid": "one"}]), \
@@ -141,6 +141,20 @@ class MailboxFlowE2ETests(unittest.TestCase):
         self.assertNotIn('Id="message-10"', request.call_args_list[0].args[1])
         self.assertIn('Id="message-20"', request.call_args_list[2].args[1])
         self.assertEqual(save.call_count, 3)
+
+    def test_exchange_session_skips_dead_address(self):
+        import requests
+        import routers.communications as comm
+
+        dead, live = MagicMock(), MagicMock()
+        dead.get.side_effect = requests.ConnectTimeout()
+        addresses = [(2, 1, 6, "", ("94.159.95.60", 443)), (2, 1, 6, "", ("194.186.48.76", 443))]
+        with patch.dict(comm.EXCHANGE_EWS_LIVE_IP, {"ip": "", "at": 0.0}), \
+             patch("routers.communications.socket.getaddrinfo", return_value=addresses), \
+             patch("routers.communications._exchange_ews_session_for", side_effect=lambda ip: dead if ip == "94.159.95.60" else live):
+            self.assertIs(comm._exchange_ews_session(), live)
+            self.assertEqual(comm.EXCHANGE_EWS_LIVE_IP["ip"], "194.186.48.76")
+        dead.close.assert_called_once()
 
     def test_mailbox_test_endpoint_and_failed_retry_flow(self):
         account_res = self.client.post(
