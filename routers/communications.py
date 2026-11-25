@@ -1920,6 +1920,7 @@ def _sync_saved_email_account(account: dict, background_tasks: BackgroundTasks, 
     finally:
         conn.close()
     background_tasks.add_task(sync_email_account, account, force=force)
+    return {"status": "pending"}
 
 
 @router.post("/api/email/accounts")
@@ -2045,14 +2046,14 @@ def test_email_account_route(account_id: int, request: Request):
 
 
 @router.post("/api/email/retry_failed")
-def retry_failed_email_ops(request: Request, account_id: int = 0):
+def retry_failed_email_ops(request: Request, background_tasks: BackgroundTasks, account_id: int = 0):
     actor = get_request_user(request)
     if not actor or actor.get("status") != "approved" or not has_permission(actor, "emails", "read"):
         return {"error": "forbidden"}
     return retry_failed_email_accounts_service(
         account_id,
         get_connection=get_connection,
-        sync_account_fn=sync_email_account,
+        sync_account_fn=lambda account, force: _sync_saved_email_account(account, background_tasks, force),
         owner_email=_mail_owner_email(actor),
     )
 

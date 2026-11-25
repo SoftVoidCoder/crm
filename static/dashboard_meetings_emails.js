@@ -486,9 +486,17 @@ async function testMailbox(accountId) {
     showToast('Почта', `${imapText} · ${smtpText}`, res.status === 'success' ? 'success' : 'error');
 }
 
-async function retryFailedMailOps(accountId = 0) {
+async function retryFailedMailOps(accountId = 0, button = null) {
     const suffix = accountId ? `?account_id=${Number(accountId) || 0}` : '';
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Запускаем…';
+    }
     const res = await apiCall(`/email/retry_failed${suffix}`, 'POST');
+    if (button) {
+        button.disabled = false;
+        button.textContent = 'Повторить';
+    }
     if (!res || res.error) {
         return customAlert(res?.error || 'Не удалось повторить сбойные операции.');
     }
@@ -497,6 +505,10 @@ async function retryFailedMailOps(accountId = 0) {
     await renderEmails();
     const failedCount = Array.isArray(res.failed_accounts) ? res.failed_accounts.length : 0;
     const retriedCount = Number(res.count || 0);
+    if (!failedCount && (res.retried_accounts || []).some(item => item.status === 'pending')) {
+        showToast('Почта', 'Проверка почты запущена. Статус обновится автоматически.');
+        return;
+    }
     showToast('Почта', `Повторено: ${retriedCount}, ещё с ошибкой: ${failedCount}`, failedCount ? 'error' : 'success');
 }
 
@@ -548,7 +560,7 @@ function renderEmailAccounts() {
                     <div class="email-account-card-actions">
                         <button class="btn-secondary" onclick="testMailbox(${account.id})">Проверить</button>
                         <button class="btn-secondary" onclick="syncMailbox(${account.id})">Обновить</button>
-                        <button class="btn-secondary" onclick="retryFailedMailOps(${account.id})">Повторить</button>
+                        <button class="btn-secondary" onclick="retryFailedMailOps(${account.id}, this)">Повторить</button>
                         <button class="btn-danger" onclick="deleteMailbox(${account.id})">Удалить</button>
                     </div>
                 ` : ''}
