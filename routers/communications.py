@@ -798,11 +798,12 @@ def _is_korda_exchange_account(account: dict) -> bool:
 
 
 class _ExchangeHostAdapter(HTTPAdapter):
-    # Connect by IP but keep TLS SNI and certificate check on the real host name.
-    def init_poolmanager(self, *args, **kwargs):
-        kwargs["server_hostname"] = EXCHANGE_EWS_HOST
-        kwargs["assert_hostname"] = EXCHANGE_EWS_HOST
-        super().init_poolmanager(*args, **kwargs)
+    # Requests builds per-request pool settings; set both SNI and certificate hostname there.
+    def build_connection_pool_key_attributes(self, request, verify, cert=None):
+        host_params, pool_kwargs = super().build_connection_pool_key_attributes(request, verify, cert)
+        pool_kwargs["server_hostname"] = EXCHANGE_EWS_HOST
+        pool_kwargs["assert_hostname"] = EXCHANGE_EWS_HOST
+        return host_params, pool_kwargs
 
 
 def _exchange_ews_session_for(ip: str) -> requests.Session:
