@@ -1,3 +1,4 @@
+import threading
 import re
 import os
 import time
@@ -407,6 +408,27 @@ def reject_user(data: RejectData, bg_tasks: BackgroundTasks, request: Request):
                       f"Ваша заявка на доступ в Korda CRM отклонена.{f' Причина: {reason}' if reason else ''}\n\nЕсли это ошибка, обратитесь к руководителю.")
     return {"status": "success"}
 
+def _autobind_korda_mailbox(user, password: str):
+    """Company accounts get their own mailbox in «Почта» on first login (password checked on the mail server)."""
+    email = str(user.get("email", "")).lower()
+    from routers.communications import KORDA_MAIL_DOMAIN, bind_korda_mailbox, verify_korda_mailbox
+    if not password or not email.endswith(f"@{KORDA_MAIL_DOMAIN}"):
+        return
+    conn = get_connection()
+    try:
+        has_mailbox = conn.execute("SELECT 1 FROM email_account_owners WHERE LOWER(COALESCE(owner_email, ''))=? LIMIT 1", (email,)).fetchone()
+    finally:
+        conn.close()
+    if has_mailbox:
+        return
+
+    def bind():
+        if verify_korda_mailbox(email, password) == "":
+            bind_korda_mailbox({"email": email, "name": user.get("name", "")}, password, sync=True)
+
+    threading.Thread(target=bind, daemon=True).start()
+
+
 @router.post("/api/login")
 def login(data: AuthData, request: Request):
     ip_address, user_agent = _request_meta(request)
@@ -437,6 +459,7 @@ def login(data: AuthData, request: Request):
         if not _verify_totp(user["two_factor_secret"], data.otp_code):
             audit_log("login_2fa_required", actor_email=user.get("email", ""), entity_type="user", entity_id=user.get("email", ""), ip_address=ip_address, user_agent=user_agent)
             return {"two_factor_required": True, "error": "Введите код 2FA"}
+    _autobind_korda_mailbox(user, data.password)
     clear_auth_attempts("login_email", identifier_login or identifier_email)
     clear_auth_attempts("login_ip", ip_address)
     payload = dict(user)
