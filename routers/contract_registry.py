@@ -5,12 +5,15 @@ import random
 import re
 import secrets
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Body, File, Request, UploadFile
 
 from database import get_connection, audit_log, create_notification
 from permissions import DIRECTOR_ROLE, require_approved_user, has_permission
 from routers.projects import _lookup_company_by_inn
+from settings import PUBLIC_BASE_URL
+from utils import send_email_task
 from services.document_content_index_service import _extract_docx_text, _extract_pdf_text, _read_text_file
 
 router = APIRouter()
@@ -193,12 +196,19 @@ def _user(c, email: str) -> dict | None:
     return dict(row) if row else None
 
 
+# Mail goes out in the background so a slow SMTP server never holds up the contract action.
+_MAILER = ThreadPoolExecutor(max_workers=2, thread_name_prefix="cr-mail")
+
+
 def _notify(emails, title: str, message: str, contract_id: int, skip: str = ""):
+    link = f"{PUBLIC_BASE_URL}/app#cr={contract_id}" if PUBLIC_BASE_URL else ""
+    body = f"{message}\n\n" + (f"Открыть договор: {link}\n\n" if link else "") + "—\nKorda CRM, автоматическое уведомление. Отвечать на это письмо не нужно."
     for email in {_text(e).lower() for e in emails} - {"", _text(skip).lower()}:
         try:
             create_notification(title, message, user_email=email, category="contract", entity_type="cr_contract", entity_id=str(contract_id))
         except Exception:
             pass  # a failed bell notification must not break the contract action
+        _MAILER.submit(send_email_task, email, f"{title} — Korda CRM", body)
 
 
 def _contract_payload(contract: dict) -> dict:

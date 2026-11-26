@@ -159,7 +159,7 @@ async function renderContractRegistry() {
     const match = /^#cr=(\d+)$/.exec(location.hash || '');
     if (match) {
         history.replaceState(null, '', location.pathname + location.search);
-        crOpenCard(Number(match[1]));
+        crOpenView(Number(match[1]));
     }
 }
 

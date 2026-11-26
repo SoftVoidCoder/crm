@@ -7,6 +7,7 @@ import os
 import secrets
 import smtplib
 from email.message import EmailMessage
+from email.utils import formataddr
 from fastapi import WebSocket
 from typing import List
 import json
@@ -169,8 +170,10 @@ def send_email_task(to_email: str, subject: str, body: str):
         logger.warning("SMTP is not configured, email was skipped for %s", to_email)
         return False
     try:
-        msg = EmailMessage(); msg.set_content(body); msg['Subject'] = subject; msg['From'] = SMTP_USER; msg['To'] = to_email
-        server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT); server.login(SMTP_USER, SMTP_PASS); server.send_message(msg); server.quit()
+        msg = EmailMessage(); msg.set_content(body); msg['Subject'] = subject; msg['From'] = formataddr(("Korda CRM", SMTP_USER)); msg['To'] = to_email
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.login(SMTP_USER, SMTP_PASS)
+            server.send_message(msg)
         return True
     except Exception as e:
         logger.exception("SMTP email send failed: %s", e)

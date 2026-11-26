@@ -992,7 +992,7 @@ window.onload = async () => {
 
     if (currentUser && currentUser.status === 'approved') {
         if (path.includes('login.html') || path.includes('register.html') || path === '/' || path === '') {
-            window.location.href = '/app'; return;
+            window.location.href = '/app' + (/^#cr=\d+$/.test(location.hash) ? location.hash : ''); return;
         }
         await loadPermissions();
         await Promise.all([

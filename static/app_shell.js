@@ -101,7 +101,7 @@ async function login() {
     if (otpHint) otpHint.style.display = 'none';
     if (errorBox) errorBox.innerText = '';
     currentUser = res;
-    window.location.href = currentUser && currentUser.status === 'approved' ? '/app' : '/static/login.html';
+    window.location.href = currentUser && currentUser.status === 'approved' ? '/app' + (/^#cr=\d+$/.test(location.hash) ? location.hash : '') : '/static/login.html' + (/^#cr=\d+$/.test(location.hash) ? location.hash : '');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
