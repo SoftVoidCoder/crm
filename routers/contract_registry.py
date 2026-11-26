@@ -1,4 +1,5 @@
 import datetime
+import html
 import json
 import os
 import random
@@ -200,15 +201,105 @@ def _user(c, email: str) -> dict | None:
 _MAILER = ThreadPoolExecutor(max_workers=2, thread_name_prefix="cr-mail")
 
 
-def _notify(emails, title: str, message: str, contract_id: int, skip: str = ""):
+APPROVAL_LABELS = {"pending": ("ждёт решения", "#64748b", "#f1f5f9"), "approved": ("согласовано", "#15803d", "#dcfce7"),
+                   "approved_with_notes": ("с замечаниями", "#b45309", "#fef3c7"), "rejected": ("отклонено", "#b91c1c", "#fee2e2")}
+TONES = {"action": "#0f766e", "ok": "#15803d", "warn": "#b45309", "bad": "#b91c1c", "info": "#334155"}
+
+
+def _money(value) -> str:
+    return f"{_real(value):,.2f}".replace(",", " ").replace(".", ",")
+
+
+def _ru_date(value) -> str:
+    raw = _date(value)
+    return datetime.date.fromisoformat(raw).strftime("%d.%m.%Y") if raw else ""
+
+
+def contract_email_html(c: dict, parties: list[dict], approvals: list[dict], headline: str, lead: str, note: str = "", tone: str = "info", link: str = "") -> str:
+    """Email-client-safe HTML (tables + inline styles, renders in Outlook/Exchange)."""
+    e = lambda v: html.escape(str(v or ""))
+    color = TONES.get(tone, TONES["info"])
+    currency = "₽" if (c.get("currency") or "RUB") == "RUB" else e(c.get("currency"))
+    amount = f"{_money(c.get('amount'))} {currency}" if _real(c.get("amount")) else ""
+    if amount and _int(c.get("vat_enabled")):
+        amount += f" (в т.ч. НДС {_money(c.get('vat_amount'))})"
+    term = "бессрочный" if _int(c.get("indefinite")) else " — ".join(filter(None, [_ru_date(c.get("concluded_date")), _ru_date(c.get("end_date"))]))
+    due = sorted(filter(None, (_date(a.get("due_date")) for a in approvals if a.get("status") == "pending")))
+    party_labels = []
+    for p in parties:
+        role = p.get("role")
+        party_labels.append(f"{p.get('short_name') or p.get('name')}{f' ({role})' if role else ''}")
+    rows = [
+        ("Договор", f"№ {c.get('number', '')}"), ("Тип", c.get("doc_type_name")),
+        ("Контрагенты", "; ".join(party_labels)),
+        ("Сумма", amount), ("Срок действия", term), ("Предмет", (c.get("subject") or "")[:400]),
+        ("Ответственный", c.get("responsible")), ("Согласовать до", _ru_date(due[0]) if due else ""),
+    ]
+    details = "".join(
+        f'<tr><td style="padding:6px 12px 6px 0;color:#64748b;font-size:13px;vertical-align:top;white-space:nowrap">{e(k)}</td>'
+        f'<td style="padding:6px 0;color:#0f172a;font-size:14px;font-weight:600">{e(v)}</td></tr>'
+        for k, v in rows if v
+    )
+    sheet = ""
+    if approvals:
+        lines = []
+        for a in approvals:
+            label, fg, bg = APPROVAL_LABELS.get(a.get("status"), APPROVAL_LABELS["pending"])
+            who = e(a.get("approver")) + (f'<br><span style="color:#64748b;font-size:12px;font-weight:400">{e(a.get("position"))}</span>' if a.get("position") else "")
+            comment = f'<div style="color:#475569;font-size:12px;margin-top:2px">«{e(a.get("comment"))}»</div>' if a.get("comment") else ""
+            lines.append(
+                f'<tr><td style="padding:8px 0;border-top:1px solid #e2e8f0;font-size:14px;font-weight:600;color:#0f172a">{who}{comment}</td>'
+                f'<td style="padding:8px 0;border-top:1px solid #e2e8f0;text-align:right;vertical-align:top">'
+                f'<span style="display:inline-block;padding:3px 10px;border-radius:12px;background:{bg};color:{fg};font-size:12px;font-weight:700">{label}</span></td></tr>'
+            )
+        done = sum(1 for a in approvals if a.get("status") in ("approved", "approved_with_notes"))
+        sheet = (f'<p style="margin:22px 0 6px;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b">'
+                 f'Лист согласования · {done} из {len(approvals)}</p><table width="100%" cellpadding="0" cellspacing="0" role="presentation">{"".join(lines)}</table>')
+    note_html = (f'<div style="margin:16px 0 0;padding:12px 14px;border-left:3px solid {color};background:#f8fafc;color:#334155;font-size:14px">{e(note)}</div>') if note else ""
+    button = (f'<table cellpadding="0" cellspacing="0" role="presentation" style="margin:24px 0 4px"><tr><td style="border-radius:8px;background:{color}">'
+              f'<a href="{e(link)}" style="display:inline-block;padding:12px 22px;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none">Открыть договор</a></td></tr></table>') if link else ""
+    return f"""<!doctype html><html lang="ru"><body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f1f5f9;padding:24px 12px"><tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;font-family:Segoe UI,Arial,sans-serif">
+<tr><td style="background:#0f172a;padding:14px 24px;color:#ffffff;font-size:15px;font-weight:700;letter-spacing:.02em">KORDA CRM <span style="color:#94a3b8;font-weight:400">· договоры</span></td></tr>
+<tr><td style="height:4px;background:{color}"></td></tr>
+<tr><td style="padding:24px 24px 8px">
+<h1 style="margin:0 0 8px;font-size:22px;line-height:1.3;color:#0f172a">{e(headline)}</h1>
+<p style="margin:0;color:#334155;font-size:15px;line-height:1.5">{e(lead)}</p>{note_html}
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-top:20px">{details}</table>
+{sheet}{button}
+</td></tr>
+<tr><td style="padding:16px 24px 22px;color:#94a3b8;font-size:12px;border-top:1px solid #e2e8f0">Автоматическое уведомление Korda CRM. Отвечать на это письмо не нужно.</td></tr>
+</table></td></tr></table></body></html>"""
+
+
+def _send_contract_mail(emails: list[str], subject: str, headline: str, lead: str, note: str, tone: str, contract_id: int):
     link = f"{PUBLIC_BASE_URL}/app#cr={contract_id}" if PUBLIC_BASE_URL else ""
-    body = f"{message}\n\n" + (f"Открыть договор: {link}\n\n" if link else "") + "—\nKorda CRM, автоматическое уведомление. Отвечать на это письмо не нужно."
-    for email in {_text(e).lower() for e in emails} - {"", _text(skip).lower()}:
+    conn = get_connection(row_factory=True)
+    try:
+        c = conn.cursor()
+        contract = _load_contract(c, contract_id) or {"number": ""}
+        c.execute("SELECT p.name, p.short_name, pp.role FROM cr_contract_parties pp JOIN cr_counterparties p ON p.id=pp.counterparty_id WHERE pp.contract_id=? ORDER BY pp.id", (contract_id,))
+        parties = _rows(c)
+        c.execute("SELECT approver, position, status, comment, due_date FROM cr_approvals WHERE contract_id=? ORDER BY id", (contract_id,))
+        approvals = _rows(c)
+    finally:
+        conn.close()
+    page = contract_email_html(contract, parties, approvals, headline, lead, note, tone, link)
+    text = f"{headline}\n\n{lead}\n" + (f"\n{note}\n" if note else "") + (f"\nОткрыть договор: {link}\n" if link else "") + "\n—\nKorda CRM, автоматическое уведомление."
+    for email in emails:
+        send_email_task(email, subject, text, page)
+
+
+def _notify(emails, title: str, message: str, contract_id: int, skip: str = "", *, headline: str = "", note: str = "", tone: str = "info", subject: str = ""):
+    recipients = sorted({_text(e).lower() for e in emails} - {"", _text(skip).lower()})
+    for email in recipients:
         try:
             create_notification(title, message, user_email=email, category="contract", entity_type="cr_contract", entity_id=str(contract_id))
         except Exception:
             pass  # a failed bell notification must not break the contract action
-        _MAILER.submit(send_email_task, email, f"{title} — Korda CRM", body)
+    if recipients:
+        _MAILER.submit(_send_contract_mail, recipients, subject or f"{title} — Korda CRM", headline or title, message, note, tone, contract_id)
 
 
 def _contract_payload(contract: dict) -> dict:
@@ -816,7 +907,10 @@ def add_item(contract_id: int, request: Request, payload: dict = Body(...)):
     finally:
         conn.close()
     if section == "tasks" and data.get("assignee"):
-        _notify([data["assignee"]], "Задача по договору", f"Вам поставлена задача: {_text(data.get('title'), 200) or 'без названия'}.", contract_id, skip=actor.get("email", ""))
+        task = _text(data.get("title"), 200) or "без названия"
+        due = _ru_date(data.get("due"))
+        _notify([data["assignee"]], "Задача по договору", f"{actor.get('name', 'Коллега')} поставил(а) вам задачу: «{task}»{f', срок — {due}' if due else ''}.", contract_id,
+                skip=actor.get("email", ""), headline="Вам поставлена задача", tone="action", subject=f"Задача по договору: {task}")
     return {"status": "success", "id": item_id}
 
 
@@ -939,7 +1033,9 @@ def add_approval(contract_id: int, request: Request, payload: dict = Body(...)):
         conn.close()
     due = _date(payload.get("due_date"))
     due_text = datetime.date.fromisoformat(due).strftime("%d.%m.%Y") if due else ""
-    _notify([person["email"]], "Договор на согласование", f"Вас добавили согласующим договора № {number}{f' (срок {due_text})' if due_text else ''}.", contract_id, skip=actor.get("email", ""))
+    _notify([person["email"]], "Договор на согласование", f"{actor.get('name', 'Коллега')} добавил(а) вас согласующим договора № {number}{f'. Срок — до {due_text}' if due_text else ''}.",
+            contract_id, skip=actor.get("email", ""), headline="Требуется ваше согласование", tone="action",
+            subject=f"На согласование: договор № {number}")
     return {"status": "success", "id": approval_id}
 
 
@@ -967,6 +1063,9 @@ def decide_approval(approval_id: int, request: Request, payload: dict = Body(...
         )
         contract = _load_contract(c, approval["contract_id"])
         pending = c.execute("SELECT COUNT(*) AS n FROM cr_approvals WHERE contract_id=? AND status IN ('pending', 'rejected')", (approval["contract_id"],)).fetchone()["n"]
+        sheet = _rows(c.execute("SELECT approver_email, status FROM cr_approvals WHERE contract_id=? AND COALESCE(approver_email, '') <> ''", (approval["contract_id"],)))
+        approver_emails = [row["approver_email"] for row in sheet]
+        others_pending = [row["approver_email"] for row in sheet if row["status"] == "pending"]
         conn.commit()
     finally:
         conn.close()
@@ -976,10 +1075,19 @@ def decide_approval(approval_id: int, request: Request, payload: dict = Body(...
             who = f"{actor.get('name', 'Директор')} (за {approval.get('approver')})"
         label = {"approved": "согласовано", "approved_with_notes": "согласовано с замечаниями", "rejected": "отклонено"}[status]
         comment = _text(payload.get("comment"), 300)
-        recipients = [contract.get("created_by"), contract.get("responsible_email"), contract.get("initiator_email")]
-        _notify(recipients, "Решение по договору", f"Договор № {contract['number']}: {who} — {label}{f' («{comment}»)' if comment else ''}.", contract["id"], skip=actor.get("email", ""))
+        number = contract["number"]
+        owners = [contract.get("created_by"), contract.get("responsible_email"), contract.get("initiator_email")]
+        tone = {"approved": "ok", "approved_with_notes": "warn", "rejected": "bad"}[status]
+        _notify(owners, "Решение по договору", f"Договор № {number}: {who} — {label}.", contract["id"], skip=actor.get("email", ""),
+                headline=f"{who}: {label}", note=f"Комментарий: {comment}" if comment else "", tone=tone,
+                subject=f"Договор № {number}: {label} ({approval.get('approver')})")
+        if status == "rejected" and others_pending:
+            _notify(others_pending, "Согласование остановлено", f"Договор № {number} отклонён ({who}) и возвращён на доработку. Пока его можно не согласовывать.",
+                    contract["id"], skip=actor.get("email", ""), headline="Согласование остановлено", tone="bad",
+                    note=f"Причина: {comment}" if comment else "", subject=f"Договор № {number} отклонён — согласование остановлено")
         if status != "rejected" and not pending:
-            _notify(recipients, "Договор согласован", f"Договор № {contract['number']} согласован всеми участниками.", contract["id"])
+            _notify(owners + approver_emails, "Договор согласован", f"Договор № {number} согласован всеми участниками.", contract["id"],
+                    headline="Договор согласован всеми участниками", tone="ok", subject=f"Договор № {number} согласован")
     audit_log("cr_approval_decided", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="cr_approval", entity_id=str(approval_id), details={"status": status})
     return {"status": "success"}
 
@@ -1066,7 +1174,8 @@ def apply_approval_template(contract_id: int, request: Request, payload: dict = 
         conn.commit()
     finally:
         conn.close()
-    _notify([p["email"] for p in added], "Договор на согласование", f"Вас добавили согласующим договора № {number}.", contract_id, skip=actor.get("email", ""))
+    _notify([p["email"] for p in added], "Договор на согласование", f"{actor.get('name', 'Коллега')} добавил(а) вас согласующим договора № {number}.", contract_id,
+            skip=actor.get("email", ""), headline="Требуется ваше согласование", tone="action", subject=f"На согласование: договор № {number}")
     return {"status": "success", "count": len(added)}
 
 

@@ -1,7 +1,7 @@
 import datetime
 import unittest
 
-from routers.contract_registry import _clean_data, _vat, access_level, contract_flags, format_contract_number
+from routers.contract_registry import _clean_data, _vat, access_level, contract_email_html, contract_flags, format_contract_number
 
 
 class ContractNumberTests(unittest.TestCase):
@@ -65,6 +65,19 @@ class AccessLevelTests(unittest.TestCase):
         self.assertEqual(data["note"], "{'nested': 1}")
         self.assertEqual(data["flag"], "True")
         self.assertNotIn("", data)
+
+
+class ContractEmailTests(unittest.TestCase):
+    def test_email_shows_contract_sheet_and_escapes_input(self):
+        page = contract_email_html(
+            {"number": "ДПТ-0001/2026", "amount": 1200000, "vat_enabled": 1, "vat_amount": 200000, "subject": "<script>x</script>", "end_date": "2026-12-31"},
+            [{"name": "ПАО СБЕРБАНК", "role": "Покупатель"}],
+            [{"approver": "Пузанова Ольга", "position": "Юрист", "status": "approved"}, {"approver": "Колемасова Елена", "status": "pending", "due_date": "2026-12-01"}],
+            "Требуется ваше согласование", "Вас добавили согласующим.", tone="action", link="https://crm/app#cr=1",
+        )
+        for text in ["ДПТ-0001/2026", "1 200 000,00 ₽", "ПАО СБЕРБАНК (Покупатель)", "Лист согласования · 1 из 2", "согласовано", "ждёт решения", "01.12.2026", "https://crm/app#cr=1"]:
+            self.assertIn(text, page)
+        self.assertNotIn("<script>", page)
 
 
 if __name__ == "__main__":

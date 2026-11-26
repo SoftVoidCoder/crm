@@ -165,12 +165,14 @@ def decrypt_secret(value: str) -> str:
     except Exception:
         return ""
 
-def send_email_task(to_email: str, subject: str, body: str):
+def send_email_task(to_email: str, subject: str, body: str, html: str = ""):
     if not SMTP_USER or not SMTP_PASS:
         logger.warning("SMTP is not configured, email was skipped for %s", to_email)
         return False
     try:
         msg = EmailMessage(); msg.set_content(body); msg['Subject'] = subject; msg['From'] = formataddr(("Korda CRM", SMTP_USER)); msg['To'] = to_email
+        if html:
+            msg.add_alternative(html, subtype="html")
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20) as server:
             server.login(SMTP_USER, SMTP_PASS)
             server.send_message(msg)
