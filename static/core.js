@@ -39,7 +39,7 @@ let canvas, ctx, isDrawing = false;
 window.__formPolicyCache = window.__formPolicyCache || {};
 
 const availableRoles = ['Сотрудник', 'Директор'];
-const PROJECT_NAV_IDS = ['navContract360', 'navCounterparties', 'navDocuments', 'navEmails'];
+const PROJECT_NAV_IDS = ['navContract360', 'navDocuments', 'navEmails'];
 const DIRECTOR_NAV_IDS = [...PROJECT_NAV_IDS, 'adminBtn'];
 const AUTOFILL_SEARCH_GHOSTS = new Set(['admin', 'админ']);
 
@@ -640,7 +640,6 @@ const NAV_PERMISSION_REQUIREMENTS = Object.freeze({
     navDeals: [['sales', 'read']],
     navClient360: [['clients', 'read']],
     navContract360: [['documents', 'read']],
-    navCounterparties: [['documents', 'read']],
     navSales: [['sales', 'read']],
     navClaims: [['requests', 'read']],
     navDocuments: [['documents', 'read']],
@@ -731,7 +730,7 @@ window.applyRoleShell = function() {
         'navEmails', 'navMeetings', 'navFinance', 'navAccounting', 'navIntegrations', 'navSupply', 'navSales', 'navProspecting', 'navBitrixImport', 'navLeads', 'navDeals',
         'navProduction', 'navExpenses', 'navRequests', 'navResources', 'navService', 'navExecutive',
         'navOperations', 'navClients', 'navClient360', 'navClaims', 'navNomenclature', 'navContacts',
-        'navContract360', 'navCounterparties', 'navKpi', 'navProfile', 'adminBtn'
+        'navContract360', 'navKpi', 'navProfile', 'adminBtn'
     ];
     allNavIds.forEach(id => {
         setNavVisibility(id, config.visibleNav.includes(id));

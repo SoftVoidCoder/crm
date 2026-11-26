@@ -1,16 +1,27 @@
 <div id="contract360View" class="view-page cr-page" style="display:none;">
     <header class="cr-header">
-        <div>
+        <div class="cr-header-main">
             <h1 class="cr-title">Договоры</h1>
-            <p class="cr-subtitle">Реестр договоров: папки, автонумерация, карточка, стороны, платежи, согласования и файлы.</p>
+            <nav class="cr-page-tabs" aria-label="Разделы договоров">
+                <button type="button" id="crTabContracts" class="active" onclick="crSwitchPageTab('contracts')">Реестр договоров</button>
+                <button type="button" id="crTabCounterparties" onclick="crSwitchPageTab('counterparties')">Контрагенты</button>
+            </nav>
         </div>
-        <div class="cr-header-actions">
+        <div class="cr-header-actions" id="crActionsContracts">
             <button class="btn-secondary" type="button" onclick="crOpenDocTypes()">Типы документов</button>
             <button class="btn-primary" type="button" onclick="crOpenCreate()">+ Добавить договор</button>
         </div>
+        <div class="cr-header-actions" id="crActionsCounterparties" hidden>
+            <span class="cr-inn-inline">
+                <input id="crInnQuery" type="text" inputmode="numeric" maxlength="12" placeholder="ИНН: 10 или 12 цифр" onkeydown="if(event.key==='Enter')crLookupInn()">
+                <button class="btn-secondary" type="button" onclick="crLookupInn()">Найти по ИНН</button>
+            </span>
+            <button class="btn-primary" type="button" onclick="crOpenCounterparty(0)">+ Новый контрагент</button>
+        </div>
     </header>
+    <p id="crInnStatus" class="cr-muted cr-inn-status"></p>
 
-    <div class="cr-layout">
+    <div class="cr-layout" id="crPanelContracts">
         <aside class="cr-folders surface-card">
             <div class="cr-folders-head">
                 <strong>Папки</strong>
@@ -82,4 +93,19 @@
             <p class="cr-hint">Двойной щелчок по строке — открыть карточку. Строка «фильтр» под заголовками ищет по каждой колонке отдельно.</p>
         </section>
     </div>
+
+    <section class="cr-registry surface-card" id="crPanelCounterparties" hidden>
+        <div class="cr-toolbar">
+            <input id="crCounterpartySearch" class="cr-search" type="search" placeholder="Поиск по названию, ИНН, ОГРН…" oninput="crRenderCounterparties()">
+        </div>
+        <div class="cr-table-wrap">
+            <table class="cr-table">
+                <thead>
+                    <tr><th>Наименование</th><th>ИНН</th><th>КПП</th><th>ОГРН</th><th>Юридический адрес</th><th>Руководитель</th><th>Статус</th><th class="cr-num">Договоров</th></tr>
+                </thead>
+                <tbody id="crCounterpartyBody"></tbody>
+            </table>
+        </div>
+        <p class="cr-hint">Щелчок по строке — карточка контрагента. Контрагентов из справочника добавляешь в договор на вкладке «Контрагенты» карточки договора.</p>
+    </section>
 </div>

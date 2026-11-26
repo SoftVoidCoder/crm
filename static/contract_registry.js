@@ -1460,6 +1460,19 @@ function crPrintApprovals() {
 
 // ---------- counterparties ----------
 
+function crSwitchPageTab(tab) {
+    crState.pageTab = tab;
+    const isContracts = tab === 'contracts';
+    document.getElementById('crTabContracts')?.classList.toggle('active', isContracts);
+    document.getElementById('crTabCounterparties')?.classList.toggle('active', !isContracts);
+    ['crPanelContracts', 'crActionsContracts'].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = !isContracts; });
+    ['crPanelCounterparties', 'crActionsCounterparties'].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = isContracts; });
+    const status = document.getElementById('crInnStatus');
+    if (status) status.textContent = '';
+    if (isContracts) renderContractRegistry();
+    else renderCounterparties();
+}
+
 async function renderCounterparties() {
     await crLoadCounterparties();
     crRenderCounterparties();
@@ -1567,6 +1580,10 @@ async function crOpenCounterparty(id, onSaved = null, prefill = null) {
 }
 
 // Ссылка «На новой вкладке» (#cr=ID): открываем реестр при старте приложения.
+try {
+    // "Контрагенты" used to be a separate page; it now lives inside "Договоры".
+    if (localStorage.getItem('korda_last_view') === 'counterparties') localStorage.setItem('korda_last_view', 'contract360');
+} catch (e) { /* storage blocked */ }
 if (/^#cr=\d+$/.test(location.hash || '')) {
     try { localStorage.setItem('korda_last_view', 'contract360'); } catch (e) { /* storage blocked: user lands on default view */ }
 }
@@ -1577,6 +1594,6 @@ Object.assign(window, {
     crRenameFolder, crDeleteFolder, crOpenDocTypes, crOpenCreate, crOpenCard, crSwitchSection, crSwitchMainTab, crAddParty,
     crUpdateParty, crDeleteParty, crExportParties, crPrintEnvelope, crAddApproval, crDecide, crDeleteApproval,
     crOpenApprovalTemplates, crExportApprovals, crUploadFiles, crDeleteFile, crPrintApprovals, crRenderCounterparties,
-    crLookupInn, crOpenCounterparty, crAfterCounterpartyCreated, crSetStatusFilter, crToggleMine, crToggleFileSearch,
+    crLookupInn, crOpenCounterparty, crSwitchPageTab, crAfterCounterpartyCreated, crSetStatusFilter, crToggleMine, crToggleFileSearch,
     crSetFilesQuery, crSetColumnFilter, crEditItem, crCancelItemEdit, crSaveItem, crDeleteItem, crExportItems, crDeleteParam,
 });
