@@ -1,4 +1,5 @@
 import datetime
+import json
 import os
 import random
 import re
@@ -8,8 +9,9 @@ import time
 from fastapi import APIRouter, Body, File, Request, UploadFile
 
 from database import get_connection, audit_log
-from permissions import require_approved_user, has_permission
+from permissions import DIRECTOR_ROLE, require_approved_user, has_permission
 from routers.projects import _lookup_company_by_inn
+from services.document_content_index_service import _extract_docx_text, _extract_pdf_text, _read_text_file
 
 router = APIRouter()
 
@@ -21,7 +23,7 @@ CONTRACT_TEXT_FIELDS = {
     "number", "extra_number", "incoming_number", "gov_reg_number", "created_date", "concluded_date", "end_date",
     "currency", "kind", "responsible", "initiator", "tender", "category", "subject", "note", "basis", "notify_date",
     "prolongation_terms", "sent_for_signing_date", "signed_date", "signing_method", "sent_to_counterparty_date",
-    "original_status",
+    "original_status", "status", "prepayment_terms", "closing_info", "object_info", "insurance_info", "owner_approval",
 }
 CONTRACT_INT_FIELDS = {
     "doc_type_id", "folder_id", "seq_no", "flagged", "vat_enabled", "vat_manual", "notify_enabled", "notify_days",
@@ -31,8 +33,15 @@ CONTRACT_INT_FIELDS = {
 CONTRACT_REAL_FIELDS = {"amount", "vat_rate", "vat_amount"}
 COUNTERPARTY_FIELDS = {"name", "short_name", "inn", "kpp", "ogrn", "legal_address", "director", "phone", "email", "status", "note"}
 APPROVAL_STATUSES = {"pending", "approved", "approved_with_notes", "rejected"}
+CONTRACT_STATUSES = {"draft", "approval", "active", "executed", "terminated", "archive"}
 KINDS = {"other", "expense", "income"}
 DATE_FIELDS = {"created_date", "concluded_date", "end_date", "notify_date", "sent_for_signing_date", "signed_date", "sent_to_counterparty_date"}
+# Card sections stored as rows in cr_items; their columns are defined in static/contract_registry.js.
+ITEM_SECTIONS = {
+    "payments", "specs", "stages", "court", "claims", "other", "supplements", "subcontracts",
+    "tasks", "costs", "letters", "access", "movements", "poa", "passes",
+}
+PARAM_TYPES = {"text", "number", "date", "list", "bool"}
 
 
 def _actor(request: Request, action: str = "read"):
@@ -76,6 +85,27 @@ def _rows(cursor) -> list[dict]:
     return [dict(row) for row in cursor.fetchall()]
 
 
+def _json(value, default):
+    try:
+        parsed = json.loads(value or "")
+        return parsed if isinstance(parsed, type(default)) else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _clean_data(data) -> dict:
+    # Section rows are free-form but bounded: flat string/number values only.
+    if not isinstance(data, dict):
+        return {}
+    clean = {}
+    for key, value in list(data.items())[:40]:
+        key = _text(key, 40)
+        if not key:
+            continue
+        clean[key] = value if isinstance(value, (int, float)) and not isinstance(value, bool) else _text(value)
+    return clean
+
+
 def format_contract_number(doc_type: dict, seq_no: int, year: int | None = None) -> str:
     digits = max(0, min(12, _int(doc_type.get("digits"))))
     core = str(seq_no).zfill(digits) if digits else str(seq_no)
@@ -94,7 +124,8 @@ def contract_flags(contract: dict, approvals: list[dict], today: datetime.date |
     today = today or datetime.date.today()
     flags = {"overdue": False, "expiring": False, "approvals_open": False, "approvals_overdue": False}
     end = _date(contract.get("end_date"))
-    if end and not _int(contract.get("indefinite")):
+    closed = contract.get("status") in {"executed", "terminated", "archive"}
+    if end and not _int(contract.get("indefinite")) and not closed:
         end_date = datetime.date.fromisoformat(end)
         horizon = max(_int(contract.get("notify_days")), 30)
         flags["overdue"] = end_date < today
@@ -108,10 +139,37 @@ def contract_flags(contract: dict, approvals: list[dict], today: datetime.date |
     return flags
 
 
+def access_level(actor: dict, contract: dict, access_rows: list[dict]) -> str:
+    """'edit', 'read' or '' — a contract with an access list is visible only to the people on it."""
+    if actor.get("role") == DIRECTOR_ROLE:
+        return "edit"
+    email = _text(actor.get("email")).lower()
+    if not access_rows or (email and _text(contract.get("created_by")).lower() == email):
+        return "edit"
+    for row in access_rows:
+        if _text(row.get("user")).lower() == email:
+            return "edit" if row.get("level") == "edit" else "read"
+    return ""
+
+
+def _access_rows(c, contract_ids: list[int]) -> dict[int, list[dict]]:
+    if not contract_ids:
+        return {}
+    c.execute(
+        f"SELECT contract_id, data_json FROM cr_items WHERE section='access' AND contract_id IN ({','.join('?' * len(contract_ids))})",
+        contract_ids,
+    )
+    result: dict[int, list[dict]] = {}
+    for row in _rows(c):
+        result.setdefault(row["contract_id"], []).append(_json(row["data_json"], {}))
+    return result
+
+
 def _contract_payload(contract: dict) -> dict:
     amount = _real(contract.get("amount"))
     vat_amount = _real(contract.get("vat_amount")) if _int(contract.get("vat_enabled")) else 0.0
     contract["amount_without_vat"] = round(amount - vat_amount, 2)
+    contract["custom"] = _json(contract.pop("custom_json", "{}"), {})
     return contract
 
 
@@ -130,25 +188,66 @@ def _load_contract(c, contract_id: int) -> dict | None:
     return _contract_payload(dict(row)) if row else None
 
 
+def _check_access(c, actor: dict, contract_id: int, need: str = "edit") -> str:
+    """Returns an error code or '' when the actor may read/edit the contract."""
+    contract = _load_contract(c, contract_id)
+    if not contract:
+        return "not_found"
+    level = access_level(actor, contract, _access_rows(c, [contract_id]).get(contract_id, []))
+    if not level or (need == "edit" and level != "edit"):
+        return "forbidden"
+    return ""
+
+
+def _contract_id_of(c, table: str, row_id: int) -> int:
+    row = c.execute(f"SELECT contract_id FROM {table} WHERE id=?", (row_id,)).fetchone()
+    return _int(row["contract_id"]) if row else 0
+
+
+def _edit_guard(request: Request, table: str = "", row_id: int = 0, contract_id: int = 0, action: str = "update"):
+    """Common guard for card edits: permission + per-contract access. Returns (actor, error_dict)."""
+    actor = _actor(request, action)
+    if not actor:
+        return None, {"error": "forbidden"}
+    conn = get_connection(row_factory=True)
+    try:
+        c = conn.cursor()
+        if table:
+            contract_id = _contract_id_of(c, table, row_id)
+        error = _check_access(c, actor, contract_id, "edit")
+    finally:
+        conn.close()
+    if error:
+        return None, {"error": error, "message": "Нет прав на изменение этого договора." if error == "forbidden" else "Договор не найден."}
+    return actor, None
+
+
 # ---------- folders ----------
 
 @router.get("/api/cr/meta")
 def registry_meta(request: Request):
-    if not _actor(request):
+    actor = _actor(request)
+    if not actor:
         return {"error": "forbidden"}
     conn = get_connection(row_factory=True)
     try:
         c = conn.cursor()
         c.execute("SELECT id, name, sort_order FROM cr_folders ORDER BY sort_order, name")
         folders = _rows(c)
-        c.execute("SELECT folder_id, COUNT(*) AS n FROM cr_contracts WHERE is_deleted=0 GROUP BY folder_id")
-        counts = {row["folder_id"]: row["n"] for row in _rows(c)}
-        c.execute("SELECT COUNT(*) AS n FROM cr_contracts WHERE is_deleted=0")
-        total = c.fetchone()["n"]
-        c.execute("SELECT COUNT(*) AS n FROM cr_contracts WHERE is_deleted=1")
-        deleted = c.fetchone()["n"]
+        c.execute("SELECT id, folder_id, is_deleted, created_by FROM cr_contracts")
+        contracts = _rows(c)
+        access = _access_rows(c, [row["id"] for row in contracts])
     finally:
         conn.close()
+    counts, total, deleted = {}, 0, 0
+    for row in contracts:
+        if not access_level(actor, row, access.get(row["id"], [])):
+            continue
+        if row["is_deleted"]:
+            deleted += 1
+            continue
+        total += 1
+        counts[row["folder_id"]] = counts.get(row["folder_id"], 0) + 1
     for folder in folders:
         folder["count"] = counts.get(folder["id"], 0)
     return {"folders": folders, "total": total, "deleted": deleted}
@@ -296,11 +395,73 @@ def delete_doc_type(type_id: int, request: Request):
     return {"status": "success"}
 
 
+# ---------- custom parameters ----------
+
+@router.get("/api/cr/params")
+def list_params(request: Request):
+    if not _actor(request):
+        return {"error": "forbidden"}
+    conn = get_connection(row_factory=True)
+    try:
+        items = _rows(conn.execute("SELECT * FROM cr_param_defs ORDER BY sort_order, id"))
+    finally:
+        conn.close()
+    return items
+
+
+@router.post("/api/cr/params")
+def create_param(request: Request, payload: dict = Body(...)):
+    if not _actor(request, "update"):
+        return {"error": "forbidden"}
+    name = _text(payload.get("name"), 120)
+    field_type = _text(payload.get("field_type"), 20)
+    if not name:
+        return {"error": "name_required", "message": "Укажи название параметра."}
+    if field_type not in PARAM_TYPES:
+        field_type = "text"
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO cr_param_defs (name, field_type, options, sort_order, created_at) VALUES (?, ?, ?, ?, ?)",
+            (name, field_type, _text(payload.get("options"), 2000), 100, int(time.time())),
+        )
+        param_id = c.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+    return {"status": "success", "id": param_id}
+
+
+@router.delete("/api/cr/params/{param_id}")
+def delete_param(param_id: int, request: Request):
+    if not _actor(request, "update"):
+        return {"error": "forbidden"}
+    conn = get_connection()
+    try:
+        conn.execute("DELETE FROM cr_param_defs WHERE id=?", (param_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"status": "success"}
+
+
 # ---------- contracts ----------
 
 @router.get("/api/cr/contracts")
-def list_contracts(request: Request, folder: str = "all", period: str = "all", date_from: str = "", date_to: str = "", q: str = ""):
-    if not _actor(request):
+def list_contracts(
+    request: Request,
+    folder: str = "all",
+    period: str = "all",
+    date_from: str = "",
+    date_to: str = "",
+    q: str = "",
+    files_q: str = "",
+    mine_approvals: int = 0,
+    status: str = "",
+):
+    actor = _actor(request)
+    if not actor:
         return {"error": "forbidden"}
     where, params = [], []
     if folder == "deleted":
@@ -310,6 +471,9 @@ def list_contracts(request: Request, folder: str = "all", period: str = "all", d
         if folder not in ("", "all"):
             where.append("k.folder_id=?")
             params.append(_int(folder))
+    if status in CONTRACT_STATUSES:
+        where.append("k.status=?")
+        params.append(status)
     if period == "year":
         where.append("k.created_date >= ?")
         params.append((datetime.date.today() - datetime.timedelta(days=365)).isoformat())
@@ -320,6 +484,10 @@ def list_contracts(request: Request, folder: str = "all", period: str = "all", d
         if _date(date_to):
             where.append("k.created_date <= ?")
             params.append(_date(date_to))
+    files_needle = _text(files_q, 200).lower()
+    if files_needle:
+        where.append("k.id IN (SELECT contract_id FROM cr_contract_files WHERE LOWER(filename) LIKE ? OR LOWER(content_text) LIKE ?)")
+        params.extend([f"%{files_needle}%"] * 2)
     conn = get_connection(row_factory=True)
     try:
         c = conn.cursor()
@@ -335,6 +503,8 @@ def list_contracts(request: Request, folder: str = "all", period: str = "all", d
             params,
         )
         contracts = [_contract_payload(row) for row in _rows(c)]
+        access = _access_rows(c, [row["id"] for row in contracts])
+        contracts = [row for row in contracts if access_level(actor, row, access.get(row["id"], []))]
         ids = [row["id"] for row in contracts] or [0]
         marks = ",".join("?" * len(ids))
         c.execute(
@@ -348,17 +518,21 @@ def list_contracts(request: Request, folder: str = "all", period: str = "all", d
         parties = {}
         for row in _rows(c):
             parties.setdefault(row["contract_id"], []).append(row)
-        c.execute(f"SELECT contract_id, status, due_date FROM cr_approvals WHERE contract_id IN ({marks})", ids)
+        c.execute(f"SELECT contract_id, status, due_date, approver FROM cr_approvals WHERE contract_id IN ({marks})", ids)
         approvals = {}
         for row in _rows(c):
             approvals.setdefault(row["contract_id"], []).append(row)
     finally:
         conn.close()
     needle = _text(q, 200).lower()
+    me = {_text(actor.get("name")).lower(), _text(actor.get("email")).lower()} - {""}
     result = []
     for contract in contracts:
+        contract_approvals = approvals.get(contract["id"], [])
         contract["parties"] = parties.get(contract["id"], [])
-        contract["flags"] = contract_flags(contract, approvals.get(contract["id"], []))
+        contract["flags"] = contract_flags(contract, contract_approvals)
+        if mine_approvals and not any(a["status"] == "pending" and _text(a["approver"]).lower() in me for a in contract_approvals):
+            continue
         if needle:
             haystack = " ".join(
                 [str(contract.get(key) or "") for key in ("number", "extra_number", "incoming_number", "gov_reg_number", "subject", "responsible", "doc_type_name", "category")]
@@ -391,7 +565,7 @@ def create_contract(request: Request, payload: dict = Body(...)):
             doc_type = dict(row)
         if payload.get("random"):
             number = f"{(doc_type or {}).get('prefix') or ''}{random.randint(100000, 999999)}"
-        elif doc_type and (not number or number == format_contract_number(doc_type, _int(doc_type["counter"]) + 1)):
+        elif doc_type and not _int(payload.get("no_autonumber")) and (not number or number == format_contract_number(doc_type, _int(doc_type["counter"]) + 1)):
             seq_no = _int(doc_type["counter"]) + 1
             number = format_contract_number(doc_type, seq_no)
             c.execute("UPDATE cr_doc_types SET counter=?, updated_at=? WHERE id=?", (seq_no, now, type_id))
@@ -399,8 +573,8 @@ def create_contract(request: Request, payload: dict = Body(...)):
             return {"error": "number_required", "message": "Выбери тип документа или укажи номер."}
         c.execute(
             """
-            INSERT INTO cr_contracts (doc_type_id, folder_id, number, seq_no, created_date, currency, kind, vat_rate, responsible, created_by, updated_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 'RUB', 'other', 20, ?, ?, ?, ?, ?)
+            INSERT INTO cr_contracts (doc_type_id, folder_id, number, seq_no, created_date, currency, kind, vat_rate, status, responsible, created_by, updated_by, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'RUB', 'other', 20, 'draft', ?, ?, ?, ?, ?)
             """,
             (type_id, _int(payload.get("folder_id")), number, seq_no, datetime.date.today().isoformat(), _text(actor.get("name"), 200), actor.get("email", ""), actor.get("email", ""), now, now),
         )
@@ -419,7 +593,8 @@ def create_contract(request: Request, payload: dict = Body(...)):
 
 @router.get("/api/cr/contracts/{contract_id}")
 def get_contract(contract_id: int, request: Request):
-    if not _actor(request):
+    actor = _actor(request)
+    if not actor:
         return {"error": "forbidden"}
     conn = get_connection(row_factory=True)
     try:
@@ -427,9 +602,12 @@ def get_contract(contract_id: int, request: Request):
         contract = _load_contract(c, contract_id)
         if not contract:
             return {"error": "not_found"}
+        level = access_level(actor, contract, _access_rows(c, [contract_id]).get(contract_id, []))
+        if not level:
+            return {"error": "forbidden", "message": "У тебя нет доступа к этому договору."}
         c.execute(
             """
-            SELECT pp.*, p.name, p.short_name, p.inn, p.kpp
+            SELECT pp.*, p.name, p.short_name, p.inn, p.kpp, p.legal_address
             FROM cr_contract_parties pp JOIN cr_counterparties p ON p.id = pp.counterparty_id
             WHERE pp.contract_id=? ORDER BY pp.id
             """,
@@ -438,19 +616,25 @@ def get_contract(contract_id: int, request: Request):
         contract["parties"] = _rows(c)
         c.execute("SELECT * FROM cr_approvals WHERE contract_id=? ORDER BY id", (contract_id,))
         contract["approvals"] = _rows(c)
-        c.execute("SELECT * FROM cr_contract_files WHERE contract_id=? ORDER BY id DESC", (contract_id,))
+        c.execute("SELECT id, contract_id, filename, file_url, size_bytes, uploaded_by, created_at FROM cr_contract_files WHERE contract_id=? ORDER BY id DESC", (contract_id,))
         contract["files"] = _rows(c)
+        c.execute("SELECT id, section, data_json, created_by, created_at FROM cr_items WHERE contract_id=? ORDER BY id", (contract_id,))
+        items: dict[str, list] = {section: [] for section in ITEM_SECTIONS}
+        for row in _rows(c):
+            items.setdefault(row["section"], []).append({"id": row["id"], "created_by": row["created_by"], "created_at": row["created_at"], **_json(row["data_json"], {})})
+        contract["items"] = items
     finally:
         conn.close()
     contract["flags"] = contract_flags(contract, contract["approvals"])
+    contract["access_level"] = level
     return contract
 
 
 @router.put("/api/cr/contracts/{contract_id}")
 def update_contract(contract_id: int, request: Request, payload: dict = Body(...)):
-    actor = _actor(request, "update")
-    if not actor:
-        return {"error": "forbidden"}
+    actor, error = _edit_guard(request, contract_id=contract_id)
+    if error:
+        return error
     values = {}
     for key, raw in payload.items():
         if key in DATE_FIELDS:
@@ -461,16 +645,18 @@ def update_contract(contract_id: int, request: Request, payload: dict = Body(...
             values[key] = _int(raw)
         elif key in CONTRACT_REAL_FIELDS:
             values[key] = _real(raw)
+    if "custom" in payload:
+        values["custom_json"] = json.dumps(_clean_data(payload.get("custom")), ensure_ascii=False)
     if "kind" in values and values["kind"] not in KINDS:
         values["kind"] = "other"
+    if "status" in values and values["status"] not in CONTRACT_STATUSES:
+        values["status"] = "draft"
     if "number" in values and not values["number"]:
         return {"error": "number_required", "message": "Номер договора не может быть пустым."}
     conn = get_connection(row_factory=True)
     try:
         c = conn.cursor()
         current = _load_contract(c, contract_id)
-        if not current:
-            return {"error": "not_found"}
         merged = {**current, **values}
         if _int(merged.get("vat_enabled")) and not _int(merged.get("vat_manual")):
             values["vat_amount"] = _vat(_real(merged.get("amount")), _real(merged.get("vat_rate")))
@@ -487,9 +673,9 @@ def update_contract(contract_id: int, request: Request, payload: dict = Body(...
 
 @router.delete("/api/cr/contracts/{contract_id}")
 def delete_contract(contract_id: int, request: Request):
-    actor = _actor(request, "update")
-    if not actor:
-        return {"error": "forbidden"}
+    actor, error = _edit_guard(request, contract_id=contract_id)
+    if error:
+        return error
     conn = get_connection()
     try:
         conn.execute("UPDATE cr_contracts SET is_deleted=1, updated_at=?, updated_by=? WHERE id=?", (int(time.time()), actor.get("email", ""), contract_id))
@@ -502,9 +688,9 @@ def delete_contract(contract_id: int, request: Request):
 
 @router.post("/api/cr/contracts/{contract_id}/restore")
 def restore_contract(contract_id: int, request: Request):
-    actor = _actor(request, "update")
-    if not actor:
-        return {"error": "forbidden"}
+    actor, error = _edit_guard(request, contract_id=contract_id)
+    if error:
+        return error
     conn = get_connection()
     try:
         conn.execute("UPDATE cr_contracts SET is_deleted=0, updated_at=?, updated_by=? WHERE id=?", (int(time.time()), actor.get("email", ""), contract_id))
@@ -523,12 +709,16 @@ def copy_contract(contract_id: int, request: Request):
     conn = get_connection(row_factory=True)
     try:
         c = conn.cursor()
+        error = _check_access(c, actor, contract_id, "read")
+        if error:
+            return {"error": error}
         source = _load_contract(c, contract_id)
-        if not source:
-            return {"error": "not_found"}
-        skip = {"id", "doc_type_name", "folder_name", "amount_without_vat", "is_deleted", "created_at", "updated_at", "created_by", "updated_by", "seq_no", "signed", "signed_date"}
+        skip = {"id", "doc_type_name", "folder_name", "amount_without_vat", "is_deleted", "created_at", "updated_at", "created_by", "updated_by", "seq_no", "signed", "signed_date", "custom"}
         data = {k: v for k, v in source.items() if k not in skip}
-        data.update(number=f"{source['number']} (копия)", created_date=datetime.date.today().isoformat(), created_by=actor.get("email", ""), updated_by=actor.get("email", ""), created_at=now, updated_at=now)
+        data.update(
+            number=f"{source['number']} (копия)", status="draft", custom_json=json.dumps(source.get("custom") or {}, ensure_ascii=False),
+            created_date=datetime.date.today().isoformat(), created_by=actor.get("email", ""), updated_by=actor.get("email", ""), created_at=now, updated_at=now,
+        )
         c.execute(f"INSERT INTO cr_contracts ({', '.join(data)}) VALUES ({', '.join('?' * len(data))})", tuple(data.values()))
         new_id = c.lastrowid
         c.execute(
@@ -541,12 +731,75 @@ def copy_contract(contract_id: int, request: Request):
     return {"status": "success", "id": new_id}
 
 
+# ---------- card section rows ----------
+
+@router.post("/api/cr/contracts/{contract_id}/items")
+def add_item(contract_id: int, request: Request, payload: dict = Body(...)):
+    actor, error = _edit_guard(request, contract_id=contract_id)
+    if error:
+        return error
+    section = _text(payload.get("section"), 40)
+    if section not in ITEM_SECTIONS:
+        return {"error": "invalid_section"}
+    data = _clean_data(payload.get("data"))
+    if section == "access":
+        data = {"user": _text(data.get("user"), 200).lower(), "level": "edit" if data.get("level") == "edit" else "read"}
+        if not data["user"]:
+            return {"error": "user_required", "message": "Выбери пользователя."}
+    now = int(time.time())
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO cr_items (contract_id, section, data_json, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (contract_id, section, json.dumps(data, ensure_ascii=False), actor.get("name") or actor.get("email", ""), now, now),
+        )
+        item_id = c.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+    return {"status": "success", "id": item_id}
+
+
+@router.put("/api/cr/items/{item_id}")
+def update_item(item_id: int, request: Request, payload: dict = Body(...)):
+    _actor_, error = _edit_guard(request, "cr_items", item_id)
+    if error:
+        return error
+    conn = get_connection(row_factory=True)
+    try:
+        row = conn.execute("SELECT section FROM cr_items WHERE id=?", (item_id,)).fetchone()
+        data = _clean_data(payload.get("data"))
+        if row and row["section"] == "access":
+            data = {"user": _text(data.get("user"), 200).lower(), "level": "edit" if data.get("level") == "edit" else "read"}
+        conn.execute("UPDATE cr_items SET data_json=?, updated_at=? WHERE id=?", (json.dumps(data, ensure_ascii=False), int(time.time()), item_id))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"status": "success"}
+
+
+@router.delete("/api/cr/items/{item_id}")
+def delete_item(item_id: int, request: Request):
+    _actor_, error = _edit_guard(request, "cr_items", item_id)
+    if error:
+        return error
+    conn = get_connection()
+    try:
+        conn.execute("DELETE FROM cr_items WHERE id=?", (item_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"status": "success"}
+
+
 # ---------- parties ----------
 
 @router.post("/api/cr/contracts/{contract_id}/parties")
 def add_party(contract_id: int, request: Request, payload: dict = Body(...)):
-    if not _actor(request, "update"):
-        return {"error": "forbidden"}
+    _actor_, error = _edit_guard(request, contract_id=contract_id)
+    if error:
+        return error
     counterparty_id = _int(payload.get("counterparty_id"))
     if not counterparty_id:
         return {"error": "counterparty_required", "message": "Выбери контрагента."}
@@ -566,8 +819,9 @@ def add_party(contract_id: int, request: Request, payload: dict = Body(...)):
 
 @router.put("/api/cr/parties/{party_id}")
 def update_party(party_id: int, request: Request, payload: dict = Body(...)):
-    if not _actor(request, "update"):
-        return {"error": "forbidden"}
+    _actor_, error = _edit_guard(request, "cr_contract_parties", party_id)
+    if error:
+        return error
     conn = get_connection()
     try:
         conn.execute(
@@ -582,8 +836,9 @@ def update_party(party_id: int, request: Request, payload: dict = Body(...)):
 
 @router.delete("/api/cr/parties/{party_id}")
 def delete_party(party_id: int, request: Request):
-    if not _actor(request, "update"):
-        return {"error": "forbidden"}
+    _actor_, error = _edit_guard(request, "cr_contract_parties", party_id)
+    if error:
+        return error
     conn = get_connection()
     try:
         conn.execute("DELETE FROM cr_contract_parties WHERE id=?", (party_id,))
@@ -595,21 +850,24 @@ def delete_party(party_id: int, request: Request):
 
 # ---------- approvals ----------
 
+def _insert_approval(c, contract_id: int, row: dict, actor: dict):
+    c.execute(
+        "INSERT INTO cr_approvals (contract_id, approver, department, position, status, due_date, comment, created_by, created_at) VALUES (?, ?, ?, ?, 'pending', ?, '', ?, ?)",
+        (contract_id, _text(row.get("approver"), 200), _text(row.get("department"), 200), _text(row.get("position"), 200), _date(row.get("due_date")), actor.get("email", ""), int(time.time())),
+    )
+
+
 @router.post("/api/cr/contracts/{contract_id}/approvals")
 def add_approval(contract_id: int, request: Request, payload: dict = Body(...)):
-    actor = _actor(request, "update")
-    if not actor:
-        return {"error": "forbidden"}
-    approver = _text(payload.get("approver"), 200)
-    if not approver:
+    actor, error = _edit_guard(request, contract_id=contract_id)
+    if error:
+        return error
+    if not _text(payload.get("approver")):
         return {"error": "approver_required", "message": "Укажи согласующего."}
     conn = get_connection()
     try:
         c = conn.cursor()
-        c.execute(
-            "INSERT INTO cr_approvals (contract_id, approver, department, position, status, due_date, comment, created_by, created_at) VALUES (?, ?, ?, ?, 'pending', ?, '', ?, ?)",
-            (contract_id, approver, _text(payload.get("department"), 200), _text(payload.get("position"), 200), _date(payload.get("due_date")), actor.get("email", ""), int(time.time())),
-        )
+        _insert_approval(c, contract_id, payload, actor)
         approval_id = c.lastrowid
         conn.commit()
     finally:
@@ -619,9 +877,9 @@ def add_approval(contract_id: int, request: Request, payload: dict = Body(...)):
 
 @router.put("/api/cr/approvals/{approval_id}")
 def decide_approval(approval_id: int, request: Request, payload: dict = Body(...)):
-    actor = _actor(request, "update")
-    if not actor:
-        return {"error": "forbidden"}
+    actor, error = _edit_guard(request, "cr_approvals", approval_id)
+    if error:
+        return error
     status = _text(payload.get("status"), 40)
     if status not in APPROVAL_STATUSES:
         return {"error": "invalid_status"}
@@ -640,8 +898,9 @@ def decide_approval(approval_id: int, request: Request, payload: dict = Body(...
 
 @router.delete("/api/cr/approvals/{approval_id}")
 def delete_approval(approval_id: int, request: Request):
-    if not _actor(request, "update"):
-        return {"error": "forbidden"}
+    _actor_, error = _edit_guard(request, "cr_approvals", approval_id)
+    if error:
+        return error
     conn = get_connection()
     try:
         conn.execute("DELETE FROM cr_approvals WHERE id=?", (approval_id,))
@@ -651,13 +910,99 @@ def delete_approval(approval_id: int, request: Request):
     return {"status": "success"}
 
 
-# ---------- files ----------
+@router.get("/api/cr/approval_templates")
+def list_approval_templates(request: Request):
+    if not _actor(request):
+        return {"error": "forbidden"}
+    conn = get_connection(row_factory=True)
+    try:
+        items = _rows(conn.execute("SELECT * FROM cr_approval_templates ORDER BY name"))
+    finally:
+        conn.close()
+    for item in items:
+        item["rows"] = _json(item.pop("rows_json"), [])
+    return items
 
-@router.post("/api/cr/contracts/{contract_id}/files")
-async def upload_contract_file(contract_id: int, request: Request, file: UploadFile = File(...)):
+
+@router.post("/api/cr/approval_templates")
+def create_approval_template(request: Request, payload: dict = Body(...)):
     actor = _actor(request, "update")
     if not actor:
         return {"error": "forbidden"}
+    name = _text(payload.get("name"), 200)
+    if not name:
+        return {"error": "name_required", "message": "Укажи название шаблона."}
+    conn = get_connection(row_factory=True)
+    try:
+        c = conn.cursor()
+        source = _rows(c.execute("SELECT approver, department, position FROM cr_approvals WHERE contract_id=? ORDER BY id", (_int(payload.get("contract_id")),)))
+        if not source:
+            return {"error": "empty", "message": "Лист согласования пуст — сохранять нечего."}
+        c.execute(
+            "INSERT INTO cr_approval_templates (name, rows_json, created_by, created_at) VALUES (?, ?, ?, ?)",
+            (name, json.dumps(source, ensure_ascii=False), actor.get("email", ""), int(time.time())),
+        )
+        template_id = c.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+    return {"status": "success", "id": template_id}
+
+
+@router.delete("/api/cr/approval_templates/{template_id}")
+def delete_approval_template(template_id: int, request: Request):
+    if not _actor(request, "update"):
+        return {"error": "forbidden"}
+    conn = get_connection()
+    try:
+        conn.execute("DELETE FROM cr_approval_templates WHERE id=?", (template_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"status": "success"}
+
+
+@router.post("/api/cr/contracts/{contract_id}/approvals/apply_template")
+def apply_approval_template(contract_id: int, request: Request, payload: dict = Body(...)):
+    actor, error = _edit_guard(request, contract_id=contract_id)
+    if error:
+        return error
+    conn = get_connection(row_factory=True)
+    try:
+        c = conn.cursor()
+        row = c.execute("SELECT rows_json FROM cr_approval_templates WHERE id=?", (_int(payload.get("template_id")),)).fetchone()
+        if not row:
+            return {"error": "not_found", "message": "Шаблон не найден."}
+        rows = _json(row["rows_json"], [])
+        for item in rows:
+            _insert_approval(c, contract_id, {**item, "due_date": payload.get("due_date")}, actor)
+        conn.commit()
+    finally:
+        conn.close()
+    return {"status": "success", "count": len(rows)}
+
+
+# ---------- files ----------
+
+def _extract_file_text(path: str, filename: str) -> str:
+    ext = os.path.splitext(filename)[1].lower()
+    try:
+        if ext in {".txt", ".csv", ".md"}:
+            return _read_text_file(path)[:200000]
+        if ext == ".docx":
+            return _extract_docx_text(path)[:200000]
+        if ext == ".pdf":
+            return (_extract_pdf_text(path)[0] or "")[:200000]
+    except Exception:
+        return ""
+    return ""
+
+
+@router.post("/api/cr/contracts/{contract_id}/files")
+async def upload_contract_file(contract_id: int, request: Request, file: UploadFile = File(...)):
+    actor, error = _edit_guard(request, contract_id=contract_id)
+    if error:
+        return error
     data = await file.read()
     if not data:
         return {"error": "empty_file", "message": "Файл пустой."}
@@ -668,26 +1013,29 @@ async def upload_contract_file(contract_id: int, request: Request, file: UploadF
     folder = os.path.join(FILES_DIR, str(contract_id))
     os.makedirs(folder, exist_ok=True)
     stored = f"{secrets.token_hex(6)}_{safe}"
-    with open(os.path.join(folder, stored), "wb") as handle:
+    path = os.path.join(folder, stored)
+    with open(path, "wb") as handle:
         handle.write(data)
+    content_text = _extract_file_text(path, original)
     conn = get_connection()
     try:
         c = conn.cursor()
         c.execute(
-            "INSERT INTO cr_contract_files (contract_id, filename, file_url, size_bytes, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (contract_id, original, f"/uploads/contract_registry/{contract_id}/{stored}", len(data), actor.get("name") or actor.get("email", ""), int(time.time())),
+            "INSERT INTO cr_contract_files (contract_id, filename, file_url, size_bytes, uploaded_by, created_at, content_text) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (contract_id, original, f"/uploads/contract_registry/{contract_id}/{stored}", len(data), actor.get("name") or actor.get("email", ""), int(time.time()), content_text),
         )
         file_id = c.lastrowid
         conn.commit()
     finally:
         conn.close()
-    return {"status": "success", "id": file_id}
+    return {"status": "success", "id": file_id, "indexed": bool(content_text)}
 
 
 @router.delete("/api/cr/files/{file_id}")
 def delete_contract_file(file_id: int, request: Request):
-    if not _actor(request, "update"):
-        return {"error": "forbidden"}
+    _actor_, error = _edit_guard(request, "cr_contract_files", file_id)
+    if error:
+        return error
     conn = get_connection(row_factory=True)
     try:
         row = conn.execute("SELECT file_url FROM cr_contract_files WHERE id=?", (file_id,)).fetchone()
@@ -733,13 +1081,11 @@ def list_counterparties(request: Request, q: str = ""):
     return items
 
 
-@router.get("/api/cr/counterparties/lookup")
-def lookup_counterparty(request: Request, inn: str = ""):
-    if not _actor(request):
-        return {"error": "forbidden"}
+def lookup_by_inn(inn: str) -> dict:
+    """INN lookup provider. Today: DaData (KORDA_DADATA_TOKEN). Without a token it is a stub that asks for manual entry."""
     result = _lookup_company_by_inn(inn)
     if result.get("status") == "integration_not_configured":
-        return {"error": "integration_not_configured", "message": "Поиск по ИНН ещё не подключён. Заполни карточку вручную — сервис подключим позже."}
+        return {"error": "integration_not_configured", "message": "Поиск по ИНН пока не подключён (нужен API-ключ сервиса). Заполни карточку вручную."}
     messages = {"inn_required": "Введи ИНН.", "inn_invalid": "ИНН должен содержать 10 или 12 цифр.", "not_found": "Организация с таким ИНН не найдена."}
     if result.get("error"):
         return {"error": result["error"], "message": messages.get(result["error"], "Сервис поиска по ИНН не ответил. Попробуй позже.")}
@@ -757,6 +1103,13 @@ def lookup_counterparty(request: Request, inn: str = ""):
             "status": client.get("status", ""),
         },
     }
+
+
+@router.get("/api/cr/counterparties/lookup")
+def lookup_counterparty(request: Request, inn: str = ""):
+    if not _actor(request):
+        return {"error": "forbidden"}
+    return lookup_by_inn(inn)
 
 
 @router.post("/api/cr/counterparties")

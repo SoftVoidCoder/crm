@@ -2,7 +2,7 @@
     <header class="cr-header">
         <div>
             <h1 class="cr-title">Договоры</h1>
-            <p class="cr-subtitle">Реестр договоров: папки, автонумерация, карточка, стороны, согласования и файлы.</p>
+            <p class="cr-subtitle">Реестр договоров: папки, автонумерация, карточка, стороны, платежи, согласования и файлы.</p>
         </div>
         <div class="cr-header-actions">
             <button class="btn-secondary" type="button" onclick="crOpenDocTypes()">Типы документов</button>
@@ -26,18 +26,37 @@
         <section class="cr-registry surface-card">
             <div class="cr-toolbar">
                 <div class="cr-toolbar-group">
-                    <button class="btn-secondary" type="button" onclick="crOpenSelected()">Открыть</button>
+                    <button class="btn-secondary" type="button" onclick="crOpenSelected()">Просмотр</button>
+                    <button class="btn-secondary" type="button" onclick="crOpenInNewTab()">На новой вкладке</button>
                     <button class="btn-secondary" type="button" onclick="crCopySelected()">Копировать</button>
                     <button class="btn-secondary" type="button" id="crDeleteBtn" onclick="crDeleteSelected()">Удалить</button>
-                    <button class="btn-secondary" type="button" onclick="crExportExcel()">Excel</button>
+                    <button class="btn-secondary" type="button" onclick="crBulkStatus()">Статус</button>
+                    <button class="btn-secondary" type="button" id="crFilesBtn" onclick="crToggleFileSearch()">По файлам</button>
+                    <span class="cr-menu">
+                        <button class="btn-secondary" type="button" onclick="crToggleExportMenu(event)">Выгрузки ▾</button>
+                        <span class="cr-menu-list" id="crExportMenu" hidden>
+                            <button type="button" onclick="crExport('xlsx')">Excel (.xlsx)</button>
+                            <button type="button" onclick="crExport('csv')">CSV</button>
+                            <button type="button" onclick="crExport('print')">Печать реестра</button>
+                        </span>
+                    </span>
+                    <button class="btn-secondary" type="button" id="crMineBtn" onclick="crToggleMine()" title="Договоры, где я — согласующий и решение ещё не принято">Мои согл.</button>
                 </div>
-                <input id="crSearch" class="cr-search" type="search" placeholder="Поиск: номер, контрагент, ИНН, предмет…" oninput="crScheduleSearch()">
+                <div class="cr-toolbar-group cr-toolbar-search">
+                    <input id="crFilesSearch" class="cr-search" type="search" placeholder="Текст внутри файлов договоров…" hidden oninput="crSetFilesQuery(this.value)">
+                    <input id="crSearch" class="cr-search" type="search" placeholder="Поиск: номер, контрагент, ИНН, предмет…" oninput="crScheduleSearch()">
+                </div>
             </div>
             <div class="cr-filterbar">
                 <label><input type="radio" name="crPeriod" value="all" checked onchange="crSetPeriod(this.value)"> Все</label>
                 <label><input type="radio" name="crPeriod" value="year" onchange="crSetPeriod(this.value)"> За последний год</label>
                 <label><input type="radio" name="crPeriod" value="range" onchange="crSetPeriod(this.value)"> За период с</label>
                 <input id="crDateFrom" type="date" onchange="crSetPeriod('range')"> по <input id="crDateTo" type="date" onchange="crSetPeriod('range')">
+                <select id="crStatusFilter" class="cr-status-filter" onchange="crSetStatusFilter(this.value)">
+                    <option value="">Все статусы</option>
+                    <option value="draft">Черновик</option><option value="approval">На согласовании</option><option value="active">Действует</option>
+                    <option value="executed">Исполнен</option><option value="terminated">Расторгнут</option><option value="archive">Архив</option>
+                </select>
                 <span class="cr-legend">
                     <span><i class="cr-dot cr-dot--expiring"></i>истекающие</span>
                     <span><i class="cr-dot cr-dot--overdue"></i>просроченные</span>
@@ -50,15 +69,17 @@
                     <thead>
                         <tr>
                             <th>№</th><th>Номер</th><th>Порядк. номер</th><th>Доп. номер</th><th>Входящий номер</th>
-                            <th>Номер гос. регистрации</th><th>Отметка</th><th>Тип документа</th><th>Контрагенты</th>
+                            <th>Номер гос. регистрации</th><th>Отметка</th><th>Статус</th><th>Тип документа</th><th>Контрагенты</th>
                             <th>Дата создания</th><th>Дата заключения</th><th>Дата окончания</th>
                             <th class="cr-num">Сумма</th><th>НДС</th><th class="cr-num">% НДС</th><th class="cr-num">Сумма НДС</th><th class="cr-num">Сумма без НДС</th>
                         </tr>
+                        <tr id="crFilterRow" class="cr-filter-row"></tr>
                     </thead>
                     <tbody id="crTableBody"></tbody>
                 </table>
             </div>
             <div id="crFooter" class="cr-footer"></div>
+            <p class="cr-hint">Двойной щелчок по строке — открыть карточку. Строка «фильтр» под заголовками ищет по каждой колонке отдельно.</p>
         </section>
     </div>
 </div>

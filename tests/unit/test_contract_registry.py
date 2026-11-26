@@ -1,7 +1,7 @@
 import datetime
 import unittest
 
-from routers.contract_registry import _vat, contract_flags, format_contract_number
+from routers.contract_registry import _clean_data, _vat, access_level, contract_flags, format_contract_number
 
 
 class ContractNumberTests(unittest.TestCase):
@@ -31,6 +31,27 @@ class VatTests(unittest.TestCase):
     def test_vat_is_extracted_from_inclusive_amount(self):
         self.assertEqual(_vat(120000, 20), 20000.0)
         self.assertEqual(_vat(1000, 0), 0.0)
+
+
+class AccessLevelTests(unittest.TestCase):
+    employee = {"role": "Сотрудник", "email": "ivan@korda.ru"}
+
+    def test_open_contract_without_access_list(self):
+        self.assertEqual(access_level(self.employee, {"created_by": "x@korda.ru"}, []), "edit")
+
+    def test_access_list_restricts_others(self):
+        rows = [{"user": "olga@korda.ru", "level": "edit"}]
+        self.assertEqual(access_level(self.employee, {"created_by": "x@korda.ru"}, rows), "")
+        self.assertEqual(access_level({"role": "Директор", "email": "d@korda.ru"}, {}, rows), "edit")
+        self.assertEqual(access_level(self.employee, {"created_by": "IVAN@korda.ru"}, rows), "edit")
+        self.assertEqual(access_level(self.employee, {}, [{"user": "ivan@korda.ru", "level": "read"}]), "read")
+
+    def test_section_data_is_flattened_and_bounded(self):
+        data = _clean_data({"amount": 10.5, "note": {"nested": 1}, "": "x", "flag": True})
+        self.assertEqual(data["amount"], 10.5)
+        self.assertEqual(data["note"], "{'nested': 1}")
+        self.assertEqual(data["flag"], "True")
+        self.assertNotIn("", data)
 
 
 if __name__ == "__main__":
