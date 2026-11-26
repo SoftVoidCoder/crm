@@ -129,8 +129,11 @@ class MailboxFlowE2ETests(unittest.TestCase):
         self.assertEqual(row[1], self.user["email"].lower())
 
     def test_exchange_sync_fetches_messages_in_small_batches(self):
-        item_ids = [(f"message-{index}", "key") for index in range(21)]
+        item_ids = [(f"message-{index}", "key") for index in range(22)]
+        known = MagicMock()
+        known.execute.return_value.fetchall.return_value = [("message-21",)]
         with patch("routers.communications._exchange_ews_session"), \
+             patch("routers.communications.get_connection", return_value=known), \
              patch("routers.communications._exchange_ews_item_ids", return_value=item_ids), \
              patch("routers.communications._exchange_ews_request", return_value=ET.Element("root")) as request, \
              patch("routers.communications._parse_exchange_ews_messages", return_value=[{"uid": "one"}]), \
@@ -140,6 +143,7 @@ class MailboxFlowE2ETests(unittest.TestCase):
         self.assertIn('Id="message-0"', request.call_args_list[0].args[1])
         self.assertNotIn('Id="message-10"', request.call_args_list[0].args[1])
         self.assertIn('Id="message-20"', request.call_args_list[2].args[1])
+        self.assertNotIn('Id="message-21"', request.call_args_list[2].args[1])
         self.assertEqual(save.call_count, 3)
 
     def test_exchange_session_skips_dead_address(self):

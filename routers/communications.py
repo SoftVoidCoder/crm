@@ -927,8 +927,16 @@ def _parse_exchange_ews_messages(root: ET.Element, account_id: int) -> list[dict
 
 def _sync_exchange_ews_account(account: dict) -> int:
     saved = 0
+    account_id = int(account.get("id") or 0)
     with _exchange_ews_session() as session:
         item_ids = _exchange_ews_item_ids(account, session=session)
+        # Only fetch new mail: re-saving known messages costs a DB round trip each and resets CRM archive/delete.
+        conn = get_connection()
+        try:
+            known = {row[0] for row in conn.execute("SELECT uid FROM email_messages WHERE account_id=? AND folder='INBOX'", (account_id,)).fetchall()}
+        finally:
+            conn.close()
+        item_ids = [item for item in item_ids if item[0] not in known]
         if not item_ids:
             return 0
         for offset in range(0, len(item_ids), 10):
@@ -941,7 +949,7 @@ def _sync_exchange_ews_account(account: dict) -> int:
   <m:ItemShape><t:BaseShape>AllProperties</t:BaseShape><t:BodyType>Text</t:BodyType></m:ItemShape>
   <m:ItemIds>{ids_xml}</m:ItemIds>
 </m:GetItem>''', session=session)
-            rows = _parse_exchange_ews_messages(root, int(account.get("id") or 0))
+            rows = _parse_exchange_ews_messages(root, account_id)
             for row in rows:
                 _save_oauth_message(row)
             saved += len(rows)
