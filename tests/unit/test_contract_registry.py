@@ -1,7 +1,7 @@
 import datetime
 import unittest
 
-from routers.contract_registry import _clean_data, _vat, access_level, contract_email_html, contract_flags, format_contract_number
+from routers.contract_registry import _clean_data, _vat, access_level, contract_email_html, contract_flags, contract_reminders, format_contract_number
 
 
 class ContractNumberTests(unittest.TestCase):
@@ -78,6 +78,32 @@ class ContractEmailTests(unittest.TestCase):
         for text in ["ДПТ-0001/2026", "1 200 000,00 ₽", "ПАО СБЕРБАНК (Покупатель)", "Лист согласования · 1 из 2", "согласовано", "ждёт решения", "01.12.2026", "https://crm/app#cr=1"]:
             self.assertIn(text, page)
         self.assertNotIn("<script>", page)
+
+
+class ReminderTests(unittest.TestCase):
+    today = datetime.date(2026, 12, 10)
+    contract = {"id": 1, "number": "Д-1", "status": "active", "is_deleted": 0, "created_by": "a@k.ru", "responsible_email": "r@k.ru",
+                "end_date": "2026-12-20", "notify_enabled": 1, "notify_days": 10}
+
+    def kinds(self, contracts=None, approvals=(), payments=()):
+        return sorted(r["kind"] for r in contract_reminders(contracts or [self.contract], list(approvals), list(payments), self.today))
+
+    def test_contract_ending_on_notify_day_and_expired(self):
+        self.assertEqual(self.kinds(), ["contract_ending"])
+        expired = {**self.contract, "end_date": "2026-12-01", "notify_enabled": 0}
+        self.assertEqual(self.kinds([expired]), ["contract_expired"])
+        self.assertEqual(self.kinds([{**expired, "status": "executed"}]), [])
+
+    def test_approval_due_today_and_overdue(self):
+        a = {"id": 5, "contract_id": 1, "approver": "Юрист", "approver_email": "j@k.ru", "status": "pending"}
+        self.assertIn("appr_due_today", self.kinds(approvals=[{**a, "due_date": "2026-12-10"}]))
+        self.assertTrue({"appr_overdue", "appr_overdue_owner"} <= set(self.kinds(approvals=[{**a, "due_date": "2026-12-05"}])))
+        self.assertNotIn("appr_overdue", self.kinds(approvals=[{**a, "due_date": "2026-12-05", "status": "approved"}]))
+
+    def test_payment_overdue_only_without_fact(self):
+        p = {"id": 9, "contract_id": 1, "plan_date": "2026-12-01", "plan_amount": 500}
+        self.assertIn("payment_overdue", self.kinds(payments=[p]))
+        self.assertNotIn("payment_overdue", self.kinds(payments=[{**p, "fact_amount": 500}]))
 
 
 if __name__ == "__main__":

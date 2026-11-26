@@ -396,15 +396,28 @@ async def bitrix24_sync_runner():
         await asyncio.sleep(BITRIX24_SYNC_INTERVAL_SECONDS)
 
 
+async def contract_reminder_runner():
+    while True:
+        await asyncio.sleep(1800)  # every 30 min; each reminder is logged so it goes out once
+        try:
+            sent = await asyncio.to_thread(contract_registry.run_contract_reminders)
+            if sent:
+                logger.info("Contract reminders sent: %s", sent)
+        except Exception:
+            logger.exception("Contract reminder run failed")
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     periodic_task = asyncio.create_task(periodic_task_runner())
     integration_task = asyncio.create_task(integration_sync_runner())
+    reminder_task = asyncio.create_task(contract_reminder_runner())
     try:
         yield
     finally:
         periodic_task.cancel()
         integration_task.cancel()
+        reminder_task.cancel()
         try:
             await periodic_task
         except asyncio.CancelledError:

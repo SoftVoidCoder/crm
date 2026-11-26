@@ -302,6 +302,91 @@ def _notify(emails, title: str, message: str, contract_id: int, skip: str = "", 
         _MAILER.submit(_send_contract_mail, recipients, subject or f"{title} — Korda CRM", headline or title, message, note, tone, contract_id)
 
 
+CLOSED_STATUSES = {"executed", "terminated", "archive"}
+MSK = datetime.timezone(datetime.timedelta(hours=3))
+
+
+def contract_reminders(contracts: list[dict], approvals: list[dict], payments: list[dict], today: datetime.date) -> list[dict]:
+    """Pure: reminders due today. `sent_on` makes each one unique in cr_reminder_log (date for daily, an anchor date for one-offs)."""
+    by_id = {c["id"]: c for c in contracts if not _int(c.get("is_deleted")) and c.get("status") not in CLOSED_STATUSES}
+    owners = lambda c: [c.get("created_by"), c.get("responsible_email"), c.get("initiator_email")]
+    out = []
+    for a in approvals:
+        c = by_id.get(a["contract_id"])
+        due = _date(a.get("due_date"))
+        if not c or a.get("status") != "pending" or not due or not a.get("approver_email"):
+            continue
+        days = (today - datetime.date.fromisoformat(due)).days
+        number = c["number"]
+        if days == 0:
+            out.append(dict(kind="appr_due_today", ref_id=a["id"], sent_on=today.isoformat(), to=[a["approver_email"]], contract_id=c["id"], tone="warn",
+                            title="Срок согласования сегодня", headline="Сегодня последний день согласования",
+                            message=f"Договор № {number} ждёт вашего решения — срок согласования сегодня.", subject=f"Сегодня срок согласования: договор № {number}"))
+        elif days > 0:
+            out.append(dict(kind="appr_overdue", ref_id=a["id"], sent_on=today.isoformat(), to=[a["approver_email"]], contract_id=c["id"], tone="bad",
+                            title="Согласование просрочено", headline="Договор ждёт вашего решения",
+                            message=f"Договор № {number} ждёт вашего решения: срок согласования истёк {days} дн. назад ({_ru_date(due)}).",
+                            subject=f"Просрочено согласование: договор № {number}"))
+            out.append(dict(kind="appr_overdue_owner", ref_id=a["id"], sent_on=due, to=owners(c), contract_id=c["id"], tone="warn",
+                            title="Согласование просрочено", headline=f"{a.get('approver')}: срок согласования истёк",
+                            message=f"{a.get('approver')} не принял(а) решение по договору № {number} в срок ({_ru_date(due)}).",
+                            subject=f"Просрочено согласование ({a.get('approver')}): договор № {number}"))
+    for c in by_id.values():
+        end = _date(c.get("end_date"))
+        if not end or _int(c.get("indefinite")):
+            continue
+        end_date = datetime.date.fromisoformat(end)
+        notify_on = _date(c.get("notify_date"))
+        if not notify_on and _int(c.get("notify_days")) > 0:
+            notify_on = (end_date - datetime.timedelta(days=_int(c.get("notify_days")))).isoformat()
+        if _int(c.get("notify_enabled")) and notify_on == today.isoformat():
+            left = (end_date - today).days
+            out.append(dict(kind="contract_ending", ref_id=c["id"], sent_on=end, to=owners(c), contract_id=c["id"], tone="warn",
+                            title="Договор скоро закончится", headline=f"До окончания договора {left} дн.",
+                            message=f"Договор № {c['number']} заканчивается {_ru_date(end)}. Проверьте пролонгацию или подготовьте закрытие.",
+                            subject=f"Заканчивается {_ru_date(end)}: договор № {c['number']}"))
+        if end_date < today and c.get("status") == "active":
+            out.append(dict(kind="contract_expired", ref_id=c["id"], sent_on=end, to=owners(c), contract_id=c["id"], tone="bad",
+                            title="Срок договора истёк", headline="Срок договора истёк",
+                            message=f"Договор № {c['number']} закончился {_ru_date(end)}, но в CRM он всё ещё «Действует». Обновите статус или оформите пролонгацию.",
+                            subject=f"Истёк срок: договор № {c['number']}"))
+    for p in payments:
+        c = by_id.get(p["contract_id"])
+        plan = _date(p.get("plan_date"))
+        if not c or not plan or _real(p.get("plan_amount")) <= 0 or _real(p.get("fact_amount")) > 0 or _date(p.get("fact_date")):
+            continue
+        if datetime.date.fromisoformat(plan) < today:
+            out.append(dict(kind="payment_overdue", ref_id=p["id"], sent_on=plan, to=owners(c), contract_id=c["id"], tone="bad",
+                            title="Платёж просрочен", headline="Платёж по графику не поступил",
+                            message=f"По договору № {c['number']} ожидался платёж {_money(p.get('plan_amount'))} ₽ до {_ru_date(plan)} ({p.get('kind') or 'платёж'}), факт не отмечен.",
+                            subject=f"Просрочен платёж: договор № {c['number']}"))
+    return out
+
+
+def run_contract_reminders(now: datetime.datetime | None = None) -> int:
+    """Hourly job: send due reminders once; only during the working day in Moscow."""
+    now = now or datetime.datetime.now(MSK)
+    if not 9 <= now.hour < 20:
+        return 0
+    conn = get_connection(row_factory=True)
+    try:
+        c = conn.cursor()
+        contracts = _rows(c.execute("SELECT id, number, status, is_deleted, end_date, indefinite, notify_enabled, notify_days, notify_date, created_by, responsible_email, initiator_email FROM cr_contracts WHERE is_deleted=0"))
+        approvals = _rows(c.execute("SELECT id, contract_id, approver, approver_email, due_date, status FROM cr_approvals WHERE status='pending' AND COALESCE(due_date, '') <> ''"))
+        payments = [{"id": r["id"], "contract_id": r["contract_id"], **_json(r["data_json"], {})} for r in _rows(c.execute("SELECT id, contract_id, data_json FROM cr_items WHERE section='payments'"))]
+        sent = 0
+        for item in contract_reminders(contracts, approvals, payments, now.date()):
+            if c.execute("SELECT 1 FROM cr_reminder_log WHERE kind=? AND ref_id=? AND sent_on=?", (item["kind"], item["ref_id"], item["sent_on"])).fetchone():
+                continue
+            c.execute("INSERT INTO cr_reminder_log (kind, ref_id, sent_on, created_at) VALUES (?, ?, ?, ?)", (item["kind"], item["ref_id"], item["sent_on"], int(time.time())))
+            conn.commit()
+            _notify(item["to"], item["title"], item["message"], item["contract_id"], headline=item["headline"], tone=item["tone"], subject=item["subject"])
+            sent += 1
+    finally:
+        conn.close()
+    return sent
+
+
 def _contract_payload(contract: dict) -> dict:
     amount = _real(contract.get("amount"))
     vat_amount = _real(contract.get("vat_amount")) if _int(contract.get("vat_enabled")) else 0.0
