@@ -1951,7 +1951,11 @@ async function openAdminPanelLogic() {
     const tbody = document.getElementById('adminUsersList'); if(!tbody) return;
     const opts = ACCOUNT_ROLE_OPTIONS.map(r => `<option value="${r}">${r}</option>`).join('');
     tbody.innerHTML = users.length ? users.map((u, i) => `<tr>
-        <td><strong>${profileUiEscape(u.name || 'Без имени')}</strong></td>
+        <td class="admin-person-cell"><div class="admin-person-fields">
+            <input id="name_${i}" class="auth-input" value="${profileUiEscape(u.name || '')}" placeholder="Фамилия Имя Отчество">
+            <input id="dept_${i}" class="auth-input" value="${profileUiEscape(u.department || '')}" placeholder="Отдел">
+            <input id="pos_${i}" class="auth-input" value="${profileUiEscape(u.position || '')}" placeholder="Должность">
+        </div></td>
         <td>${profileUiEscape(u.email || '')}</td>
         <td><select id="role_${i}" class="auth-input admin-role-select"><option value="" selected>Выберите роль</option>${opts}</select></td>
         <td><label class="admin-head-check"><input type="checkbox" id="head_${i}"><span>Руководитель</span></label></td>
@@ -1972,9 +1976,15 @@ async function approveUser(e, i) {
     const role = document.getElementById(`role_${i}`)?.value || '';
     if (!role) return customAlert('Сначала выберите роль сотрудника.');
     const isHead = document.getElementById(`head_${i}`).checked ? 1 : 0;
-    const res = await apiCall('/users/approve', 'POST', { email: e, role, is_head: isHead });
+    const name = document.getElementById(`name_${i}`)?.value.trim() || '';
+    if (name.split(/\s+/).filter(Boolean).length < 2) return customAlert('Укажите ФИО полностью: фамилию и имя (например, «Иванов Иван»). Оно попадает в листы согласования договоров.');
+    const res = await apiCall('/users/approve', 'POST', {
+        email: e, role, is_head: isHead, name,
+        department: document.getElementById(`dept_${i}`)?.value.trim() || '',
+        position: document.getElementById(`pos_${i}`)?.value.trim() || '',
+    });
     if (res && res.error) {
-        return customAlert(res.error);
+        return customAlert(res.message || res.error);
     }
     await openAdminPanelLogic();
     await loadAllUsers();
@@ -1994,11 +2004,13 @@ function renderAdminTeamList() {
     tbody.innerHTML = rows.length ? rows.map(user => {
         const isCurrentAccount = user.email === currentUser?.email;
         const headLabel = Number(user.is_head || 0) === 1 ? '<span class="status-badge status-badge--info">Руководитель</span>' : '';
-        const actions = isCurrentAccount ? '<span class="admin-protected-label">Ваш аккаунт</span>' : `
+        const editProfile = `<button class="btn-secondary btn-compact" onclick="editUserProfile('${profileUiEscape(user.email)}')">Изменить данные</button>`;
+        const actions = isCurrentAccount ? `${editProfile}<span class="admin-protected-label">Ваш аккаунт</span>` : `
+            ${editProfile}
             <button class="btn-secondary btn-compact" onclick="changeUserRole('${user.email}', '${profileUiEscape(user.role || '')}')">Сменить роль</button>
             <button class="btn-secondary btn-compact" onclick="toggleHeadStatus('${user.email}', ${Number(user.is_head || 0) === 1 ? 0 : 1})">${Number(user.is_head || 0) === 1 ? 'Снять руководство' : 'Назначить руководителем'}</button>`;
         return `<tr>
-            <td><div class="admin-person"><span class="admin-person__avatar">${profileUiEscape(String(user.name || user.email || '?').trim().slice(0, 1).toUpperCase())}</span><span><strong>${profileUiEscape(user.name || 'Без имени')}</strong><small>${profileUiEscape(user.email || '')}</small></span></div></td>
+            <td><div class="admin-person"><span class="admin-person__avatar">${profileUiEscape(String(user.name || user.email || '?').trim().slice(0, 1).toUpperCase())}</span><span><strong>${profileUiEscape(user.name || 'Без имени')}</strong><small>${profileUiEscape([user.position, user.department].filter(Boolean).join(', ') || 'должность и отдел не указаны')}</small><small>${profileUiEscape(user.email || '')}</small></span></div></td>
             <td><div class="admin-role-cell"><strong>${profileUiEscape(user.role || 'Роль не назначена')}</strong>${headLabel}</div></td>
             <td><span class="status-badge status-badge--success">Активен</span></td>
             <td><div class="admin-row-actions">${actions}</div></td>
@@ -2023,6 +2035,7 @@ function openInviteEmployeeModal() {
     document.getElementById('inviteEmployeeEmail').value = '';
     document.getElementById('inviteEmployeePassword').value = generateEmployeePassword();
     document.getElementById('inviteEmployeeHead').checked = false;
+    ['inviteEmployeeDepartment', 'inviteEmployeePosition'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     const error = document.getElementById('inviteEmployeeError');
     if (error) { error.textContent = ''; error.classList.add('krd-is-hidden'); }
     modal.style.display = 'flex';
@@ -2044,7 +2057,13 @@ async function submitInviteEmployee(event) {
         role: document.getElementById('inviteEmployeeRole')?.value || '',
         password: document.getElementById('inviteEmployeePassword')?.value || '',
         is_head: document.getElementById('inviteEmployeeHead')?.checked ? 1 : 0,
+        department: document.getElementById('inviteEmployeeDepartment')?.value.trim() || '',
+        position: document.getElementById('inviteEmployeePosition')?.value.trim() || '',
     };
+    if (payload.name && payload.name.split(/\s+/).filter(Boolean).length < 2) {
+        if (error) { error.textContent = 'Укажите ФИО полностью: фамилию и имя.'; error.classList.remove('krd-is-hidden'); }
+        return;
+    }
     if (!payload.name || !payload.email || !payload.role || !payload.password) {
         if (error) { error.textContent = 'Заполните все обязательные поля.'; error.classList.remove('krd-is-hidden'); }
         return;
@@ -2061,6 +2080,35 @@ async function submitInviteEmployee(event) {
     await openAdminPanelLogic();
     showToast('Сотрудники', 'Доступ создан. Передайте сотруднику временный пароль.');
 }
+
+async function editUserProfile(email) {
+    const user = (allUsersDB || []).find(item => item.email === email);
+    if (!user || typeof crModal !== 'function') return;
+    const esc = profileUiEscape;
+    const modal = crModal('Данные сотрудника', `
+        <div class="cr-form-grid cr-form-grid--2">
+            <label class="cr-span-2">ФИО (фамилия и имя обязательно)<input class="cr-input" id="upName" value="${esc(user.name || '')}" placeholder="Иванов Иван Иванович"></label>
+            <label>Отдел<input class="cr-input" id="upDept" value="${esc(user.department || '')}" placeholder="Юридический отдел"></label>
+            <label>Должность<input class="cr-input" id="upPos" value="${esc(user.position || '')}" placeholder="Юрист"></label>
+        </div>
+        <p class="cr-hint">ФИО, отдел и должность подставляются в листы согласования, ответственных и задачи договоров. ${esc(user.email)}</p>`,
+        `<button class="btn-secondary" type="button" data-act="cancel">Отмена</button><button class="btn-primary" type="button" data-act="ok">Сохранить</button>`);
+    modal.querySelector('[data-act="cancel"]').onclick = () => modal.closeModal();
+    modal.querySelector('[data-act="ok"]').onclick = async () => {
+        const res = await apiCall('/users/profile', 'PUT', {
+            email,
+            name: modal.querySelector('#upName').value.trim(),
+            department: modal.querySelector('#upDept').value.trim(),
+            position: modal.querySelector('#upPos').value.trim(),
+        });
+        if (!res || res.error) return customAlert(res?.message || 'Не удалось сохранить данные сотрудника.');
+        modal.closeModal();
+        await loadAllUsers();
+        renderAdminTeamList();
+        showToast('Сотрудники', 'Данные сохранены');
+    };
+}
+window.editUserProfile = editUserProfile;
 
 // Enterprise RLS panel overrides
 function profileUiEscape(value) {

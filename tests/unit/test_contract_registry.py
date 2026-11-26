@@ -46,6 +46,19 @@ class AccessLevelTests(unittest.TestCase):
         self.assertEqual(access_level(self.employee, {"created_by": "IVAN@korda.ru"}, rows), "edit")
         self.assertEqual(access_level(self.employee, {}, [{"user": "ivan@korda.ru", "level": "read"}]), "read")
 
+    def test_approver_reads_and_responsible_edits_restricted_contract(self):
+        rows = [{"user": "olga@korda.ru", "level": "edit"}]
+        self.assertEqual(access_level(self.employee, {}, rows, {"ivan@korda.ru"}), "read")
+        self.assertEqual(access_level(self.employee, {"responsible_email": "ivan@korda.ru"}, rows), "edit")
+        self.assertEqual(access_level(self.employee, {"initiator_email": "IVAN@korda.ru"}, rows), "edit")
+
+    def test_full_name_requires_surname(self):
+        from routers.users import full_name_error
+        self.assertTrue(full_name_error("Иван"))
+        self.assertTrue(full_name_error("  "))
+        self.assertEqual(full_name_error("Иванов Иван"), "")
+        self.assertEqual(full_name_error("Иванов Иван Иванович"), "")
+
     def test_section_data_is_flattened_and_bounded(self):
         data = _clean_data({"amount": 10.5, "note": {"nested": 1}, "": "x", "flag": True})
         self.assertEqual(data["amount"], 10.5)

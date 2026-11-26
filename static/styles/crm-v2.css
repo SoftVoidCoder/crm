@@ -6698,3 +6698,6 @@ html body .app-layout > .main-wrapper > .topbar .topbar-logout-button:hover {
     #myProspectingView .outreach-client-workspace__toolbar { align-items: stretch; flex-direction: column; }
     #myProspectingView .outreach-client-workspace__toolbar .btn-secondary { width: 100%; }
 }
+.admin-table td.admin-person-cell { height: auto !important; max-height: none !important; overflow: visible !important; white-space: normal !important; }
+.admin-person-fields { display: grid; gap: 6px; min-width: 240px; }
+.admin-person-fields .auth-input { height: 34px !important; min-height: 0 !important; padding: 4px 10px !important; font-size: 13px !important; }

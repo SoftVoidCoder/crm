@@ -1,3 +1,4 @@
+import re
 import os
 import time
 import json
@@ -59,8 +60,7 @@ from schemas import (
     UserScopeData,
     SessionRevokeData,
     TwoFactorCodeData,
-    FieldAccessRuleData,
-)
+    FieldAccessRuleData, UserProfileData)
 from app_logging import get_logger
 from settings import BACKUP_RETENTION_COUNT
 from utils import (
@@ -182,7 +182,7 @@ def _load_user_snapshot(email: str):
         """
         SELECT
             email, name, role, status, signature, deputy, abs_start, abs_end, abs_type, abs_reason,
-            is_head, hourly_rate, allowed_legal_entities, allowed_business_units, two_factor_enabled
+            is_head, hourly_rate, allowed_legal_entities, allowed_business_units, two_factor_enabled, department, position
         FROM users
         WHERE email=?
         """,
@@ -314,6 +314,14 @@ def _verify_totp(secret: str, otp_code: str, drift_steps: int = 1) -> bool:
     return False
 
 
+def full_name_error(name: str) -> str:
+    """Approval sheets and contracts need a real surname: at least "Фамилия Имя"."""
+    words = [w for w in re.split(r"\s+", (name or "").strip()) if w]
+    if len(words) < 2 or any(len(w.strip(".")) < 1 for w in words) or not all(re.search(r"[A-Za-zА-Яа-яЁё]", w) for w in words):
+        return "Укажите ФИО полностью: фамилию и имя (например, «Иванов Иван»)."
+    return ""
+
+
 @router.post("/api/register")
 def register(data: AuthData, bg_tasks: BackgroundTasks, request: Request):
     ip_address, user_agent = _request_meta(request)
@@ -327,6 +335,8 @@ def register(data: AuthData, bg_tasks: BackgroundTasks, request: Request):
 
     if not email or not password or not name:
         return {"error": "Заполните имя, email и пароль"}
+    if full_name_error(name):
+        return {"error": full_name_error(name)}
     if not is_valid_email(email):
         return {"error": "Введите корректный email"}
     password_error = validate_password_strength(password)
@@ -518,7 +528,7 @@ def pending(request: Request):
     actor = _director_from_session(request)
     if not actor:
         return {"error": "forbidden"}
-    conn = get_connection(row_factory=True); c = conn.cursor(); c.execute("SELECT email, name, status FROM users WHERE status='pending'"); rows = [dict(r) for r in c.fetchall()]; conn.close(); return rows
+    conn = get_connection(row_factory=True); c = conn.cursor(); c.execute("SELECT email, name, status, COALESCE(department, '') AS department, COALESCE(position, '') AS position FROM users WHERE status='pending'"); rows = [dict(r) for r in c.fetchall()]; conn.close(); return rows
 
 @router.get("/api/users/all")
 def all_users(request: Request):
@@ -526,7 +536,7 @@ def all_users(request: Request):
     if not actor or actor.get("status") != "approved":
         return {"error": "forbidden"}
     conn = get_connection(row_factory=True); c = conn.cursor()
-    c.execute("SELECT email, name, role, status, signature, deputy, abs_start, abs_end, abs_type, abs_reason, is_head, hourly_rate, allowed_legal_entities, allowed_business_units, two_factor_enabled, CASE WHEN password IS NOT NULL AND password != '' THEN 1 ELSE 0 END AS has_password FROM users")
+    c.execute("SELECT email, name, role, status, signature, deputy, abs_start, abs_end, abs_type, abs_reason, is_head, hourly_rate, allowed_legal_entities, allowed_business_units, two_factor_enabled, COALESCE(department, '') AS department, COALESCE(position, '') AS position, CASE WHEN password IS NOT NULL AND password != '' THEN 1 ELSE 0 END AS has_password FROM users")
     rows = [dict(r) for r in c.fetchall()]
     conn.close()
     for row in rows:
@@ -550,9 +560,15 @@ def approve(data: RoleData, request: Request):
     if not before:
         return {"error": "user_not_found"}
     role = _coerce_account_role(data.role, allow_director=True)
+    name = (data.name or before.get("name") or "").strip()
+    if full_name_error(name):
+        return {"error": "validation_error", "message": full_name_error(name)}
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE users SET role=?, status='approved', is_head=? WHERE email=?", (role, data.is_head, email))
+    c.execute(
+        "UPDATE users SET role=?, status='approved', is_head=?, name=?, department=?, position=? WHERE email=?",
+        (role, data.is_head, name[:200], (data.department or "").strip()[:200], (data.position or "").strip()[:200], email),
+    )
     if int(getattr(c, "rowcount", 0) or 0) <= 0:
         conn.close()
         return {"error": "user_not_found"}
@@ -578,6 +594,8 @@ def invite_user(data: UserInviteData, request: Request):
     password = data.password or ""
     if not name or not email or not role:
         return {"error": "validation_error", "message": "Заполните имя, почту и роль сотрудника."}
+    if full_name_error(name):
+        return {"error": "validation_error", "message": full_name_error(name)}
     if role not in ALLOWED_USER_ROLES:
         return {"error": "validation_error", "message": "Выберите допустимую роль сотрудника."}
     if not is_valid_email(email):
@@ -593,8 +611,8 @@ def invite_user(data: UserInviteData, request: Request):
         conn.close()
         return {"error": "already_exists", "message": "Сотрудник с такой почтой уже есть в системе."}
     c.execute(
-        "INSERT INTO users (email, password, name, role, status, is_head) VALUES (?, ?, ?, ?, 'approved', ?)",
-        (email, hash_password(password), name, role, int(bool(data.is_head))),
+        "INSERT INTO users (email, password, name, role, status, is_head, department, position) VALUES (?, ?, ?, ?, 'approved', ?, ?, ?)",
+        (email, hash_password(password), name, role, int(bool(data.is_head)), (data.department or "").strip()[:200], (data.position or "").strip()[:200]),
     )
     conn.commit()
     conn.close()
@@ -639,6 +657,40 @@ def make_head(data: RoleData, request: Request):
     audit_log("user_head_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="user", entity_id=email, details={"is_head": data.is_head}, ip_address=ip_address, user_agent=user_agent)
     create_notification("Изменены права", f"Твой статус руководителя отдела был {'включён' if data.is_head else 'отключён'}.", user_email=email, category="user", entity_type="user", entity_id=email)
     return {"status": "success"}
+
+@router.put("/api/users/profile")
+def update_user_profile(data: UserProfileData, request: Request):
+    actor = _director_from_session(request)
+    if not actor:
+        return {"error": "forbidden"}
+    email = normalize_email(data.email)
+    before = _load_user_snapshot(email)
+    if not before:
+        return {"error": "user_not_found"}
+    name = (data.name or "").strip()
+    if full_name_error(name):
+        return {"error": "validation_error", "message": full_name_error(name)}
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE users SET name=?, department=?, position=? WHERE email=?",
+            (name[:200], (data.department or "").strip()[:200], (data.position or "").strip()[:200], email),
+        )
+        # Keep approval sheets in sync with the person's current name and position.
+        conn.execute(
+            "UPDATE cr_approvals SET approver=?, department=?, position=? WHERE LOWER(approver_email)=? AND status='pending'",
+            (name[:200], (data.department or "").strip()[:200], (data.position or "").strip()[:200], email),
+        )
+        conn.execute("UPDATE cr_contracts SET responsible=? WHERE LOWER(responsible_email)=?", (name[:200], email))
+        conn.execute("UPDATE cr_contracts SET initiator=? WHERE LOWER(initiator_email)=?", (name[:200], email))
+        conn.commit()
+    finally:
+        conn.close()
+    after = _load_user_snapshot(email)
+    record_field_changes("user", email, before, after, actor.get("email", ""), actor.get("name", ""))
+    audit_log("user_profile_updated", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="user", entity_id=email, details={"name": name})
+    return {"status": "success"}
+
 
 @router.put("/api/users/role")
 def update_role(data: RoleData, request: Request):

@@ -279,3 +279,4 @@
 .cr-nav-label { min-width: 0; overflow-wrap: anywhere; }
 .cr-nav-count { text-align: right; font-variant-numeric: tabular-nums; color: var(--secondary); font-size: 12px; }
 .cr-card-nav button.active .cr-nav-count { color: var(--primary); }
+.crv-decide { display: inline-flex; align-items: center; gap: 6px; margin-right: auto; font-weight: 600; color: #0f766e; flex-wrap: wrap; }

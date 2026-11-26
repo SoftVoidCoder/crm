@@ -8,7 +8,7 @@ import time
 
 from fastapi import APIRouter, Body, File, Request, UploadFile
 
-from database import get_connection, audit_log
+from database import get_connection, audit_log, create_notification
 from permissions import DIRECTOR_ROLE, require_approved_user, has_permission
 from routers.projects import _lookup_company_by_inn
 from services.document_content_index_service import _extract_docx_text, _extract_pdf_text, _read_text_file
@@ -139,16 +139,20 @@ def contract_flags(contract: dict, approvals: list[dict], today: datetime.date |
     return flags
 
 
-def access_level(actor: dict, contract: dict, access_rows: list[dict]) -> str:
-    """'edit', 'read' or '' — a contract with an access list is visible only to the people on it."""
+def access_level(actor: dict, contract: dict, access_rows: list[dict], approver_emails=()) -> str:
+    """'edit', 'read' or '' — a contract with an access list is visible only to the people on it.
+    The author, responsible and initiator always edit; approvers always at least read (they must see what they approve)."""
     if actor.get("role") == DIRECTOR_ROLE:
         return "edit"
     email = _text(actor.get("email")).lower()
-    if not access_rows or (email and _text(contract.get("created_by")).lower() == email):
+    owners = {_text(contract.get(key)).lower() for key in ("created_by", "responsible_email", "initiator_email")} - {""}
+    if not access_rows or (email and email in owners):
         return "edit"
     for row in access_rows:
         if _text(row.get("user")).lower() == email:
             return "edit" if row.get("level") == "edit" else "read"
+    if email and email in {_text(a).lower() for a in approver_emails}:
+        return "read"
     return ""
 
 
@@ -163,6 +167,38 @@ def _access_rows(c, contract_ids: list[int]) -> dict[int, list[dict]]:
     for row in _rows(c):
         result.setdefault(row["contract_id"], []).append(_json(row["data_json"], {}))
     return result
+
+
+def _approver_emails(c, contract_ids: list[int]) -> dict[int, set]:
+    if not contract_ids:
+        return {}
+    c.execute(
+        f"SELECT contract_id, approver_email FROM cr_approvals WHERE COALESCE(approver_email, '') <> '' AND contract_id IN ({','.join('?' * len(contract_ids))})",
+        contract_ids,
+    )
+    result: dict[int, set] = {}
+    for row in _rows(c):
+        result.setdefault(row["contract_id"], set()).add(_text(row["approver_email"]).lower())
+    return result
+
+
+def _user(c, email: str) -> dict | None:
+    email = _text(email, 200).lower()
+    if not email:
+        return None
+    row = c.execute(
+        "SELECT email, name, COALESCE(department, '') AS department, COALESCE(position, '') AS position FROM users WHERE LOWER(email)=? AND status='approved'",
+        (email,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def _notify(emails, title: str, message: str, contract_id: int, skip: str = ""):
+    for email in {_text(e).lower() for e in emails} - {"", _text(skip).lower()}:
+        try:
+            create_notification(title, message, user_email=email, category="contract", entity_type="cr_contract", entity_id=str(contract_id))
+        except Exception:
+            pass  # a failed bell notification must not break the contract action
 
 
 def _contract_payload(contract: dict) -> dict:
@@ -193,7 +229,7 @@ def _check_access(c, actor: dict, contract_id: int, need: str = "edit") -> str:
     contract = _load_contract(c, contract_id)
     if not contract:
         return "not_found"
-    level = access_level(actor, contract, _access_rows(c, [contract_id]).get(contract_id, []))
+    level = access_level(actor, contract, _access_rows(c, [contract_id]).get(contract_id, []), _approver_emails(c, [contract_id]).get(contract_id, ()))
     if not level or (need == "edit" and level != "edit"):
         return "forbidden"
     return ""
@@ -234,14 +270,15 @@ def registry_meta(request: Request):
         c = conn.cursor()
         c.execute("SELECT id, name, sort_order FROM cr_folders ORDER BY sort_order, name")
         folders = _rows(c)
-        c.execute("SELECT id, folder_id, is_deleted, created_by FROM cr_contracts")
+        c.execute("SELECT id, folder_id, is_deleted, created_by, responsible_email, initiator_email FROM cr_contracts")
         contracts = _rows(c)
         access = _access_rows(c, [row["id"] for row in contracts])
+        approvers = _approver_emails(c, [row["id"] for row in contracts])
     finally:
         conn.close()
     counts, total, deleted = {}, 0, 0
     for row in contracts:
-        if not access_level(actor, row, access.get(row["id"], [])):
+        if not access_level(actor, row, access.get(row["id"], []), approvers.get(row["id"], ())):
             continue
         if row["is_deleted"]:
             deleted += 1
@@ -504,7 +541,8 @@ def list_contracts(
         )
         contracts = [_contract_payload(row) for row in _rows(c)]
         access = _access_rows(c, [row["id"] for row in contracts])
-        contracts = [row for row in contracts if access_level(actor, row, access.get(row["id"], []))]
+        approvers = _approver_emails(c, [row["id"] for row in contracts])
+        contracts = [row for row in contracts if access_level(actor, row, access.get(row["id"], []), approvers.get(row["id"], ()))]
         ids = [row["id"] for row in contracts] or [0]
         marks = ",".join("?" * len(ids))
         c.execute(
@@ -518,7 +556,7 @@ def list_contracts(
         parties = {}
         for row in _rows(c):
             parties.setdefault(row["contract_id"], []).append(row)
-        c.execute(f"SELECT contract_id, status, due_date, approver FROM cr_approvals WHERE contract_id IN ({marks})", ids)
+        c.execute(f"SELECT contract_id, status, due_date, approver, approver_email FROM cr_approvals WHERE contract_id IN ({marks})", ids)
         approvals = {}
         for row in _rows(c):
             approvals.setdefault(row["contract_id"], []).append(row)
@@ -531,7 +569,7 @@ def list_contracts(
         contract_approvals = approvals.get(contract["id"], [])
         contract["parties"] = parties.get(contract["id"], [])
         contract["flags"] = contract_flags(contract, contract_approvals)
-        if mine_approvals and not any(a["status"] == "pending" and _text(a["approver"]).lower() in me for a in contract_approvals):
+        if mine_approvals and not any(a["status"] == "pending" and (_text(a["approver_email"]).lower() in me or (not a["approver_email"] and _text(a["approver"]).lower() in me)) for a in contract_approvals):
             continue
         if needle:
             haystack = " ".join(
@@ -573,10 +611,10 @@ def create_contract(request: Request, payload: dict = Body(...)):
             return {"error": "number_required", "message": "Выбери тип документа или укажи номер."}
         c.execute(
             """
-            INSERT INTO cr_contracts (doc_type_id, folder_id, number, seq_no, created_date, currency, kind, vat_rate, status, responsible, created_by, updated_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 'RUB', 'other', 20, 'draft', ?, ?, ?, ?, ?)
+            INSERT INTO cr_contracts (doc_type_id, folder_id, number, seq_no, created_date, currency, kind, vat_rate, status, responsible, responsible_email, created_by, updated_by, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'RUB', 'other', 20, 'draft', ?, ?, ?, ?, ?, ?)
             """,
-            (type_id, _int(payload.get("folder_id")), number, seq_no, datetime.date.today().isoformat(), _text(actor.get("name"), 200), actor.get("email", ""), actor.get("email", ""), now, now),
+            (type_id, _int(payload.get("folder_id")), number, seq_no, datetime.date.today().isoformat(), _text(actor.get("name"), 200), _text(actor.get("email")).lower(), actor.get("email", ""), actor.get("email", ""), now, now),
         )
         contract_id = c.lastrowid
         if doc_type and _int(doc_type.get("counterparty_id")):
@@ -602,7 +640,7 @@ def get_contract(contract_id: int, request: Request):
         contract = _load_contract(c, contract_id)
         if not contract:
             return {"error": "not_found"}
-        level = access_level(actor, contract, _access_rows(c, [contract_id]).get(contract_id, []))
+        level = access_level(actor, contract, _access_rows(c, [contract_id]).get(contract_id, []), _approver_emails(c, [contract_id]).get(contract_id, ()))
         if not level:
             return {"error": "forbidden", "message": "У тебя нет доступа к этому договору."}
         c.execute(
@@ -656,6 +694,15 @@ def update_contract(contract_id: int, request: Request, payload: dict = Body(...
     conn = get_connection(row_factory=True)
     try:
         c = conn.cursor()
+        for role in ("responsible", "initiator"):
+            key = f"{role}_email"
+            if key in payload:
+                email = _text(payload.get(key), 200).lower()
+                person = _user(c, email)
+                if email and not person:
+                    return {"error": "user_not_found", "message": "Выбери сотрудника из списка."}
+                values[key] = email
+                values[role] = person["name"] if person else ""
         current = _load_contract(c, contract_id)
         merged = {**current, **values}
         if _int(merged.get("vat_enabled")) and not _int(merged.get("vat_manual")):
@@ -758,6 +805,8 @@ def add_item(contract_id: int, request: Request, payload: dict = Body(...)):
         conn.commit()
     finally:
         conn.close()
+    if section == "tasks" and data.get("assignee"):
+        _notify([data["assignee"]], "Задача по договору", f"Вам поставлена задача: {_text(data.get('title'), 200) or 'без названия'}.", contract_id, skip=actor.get("email", ""))
     return {"status": "success", "id": item_id}
 
 
@@ -850,11 +899,16 @@ def delete_party(party_id: int, request: Request):
 
 # ---------- approvals ----------
 
-def _insert_approval(c, contract_id: int, row: dict, actor: dict):
+def _insert_approval(c, contract_id: int, row: dict, actor: dict) -> dict | None:
+    """Approvers are real users: name, department and position come from their profile in «Доступы»."""
+    person = _user(c, row.get("approver_email"))
+    if not person:
+        return None
     c.execute(
-        "INSERT INTO cr_approvals (contract_id, approver, department, position, status, due_date, comment, created_by, created_at) VALUES (?, ?, ?, ?, 'pending', ?, '', ?, ?)",
-        (contract_id, _text(row.get("approver"), 200), _text(row.get("department"), 200), _text(row.get("position"), 200), _date(row.get("due_date")), actor.get("email", ""), int(time.time())),
+        "INSERT INTO cr_approvals (contract_id, approver, approver_email, department, position, status, due_date, comment, created_by, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, '', ?, ?)",
+        (contract_id, person["name"], person["email"].lower(), person["department"], person["position"], _date(row.get("due_date")), actor.get("email", ""), int(time.time())),
     )
+    return person
 
 
 @router.post("/api/cr/contracts/{contract_id}/approvals")
@@ -862,36 +916,60 @@ def add_approval(contract_id: int, request: Request, payload: dict = Body(...)):
     actor, error = _edit_guard(request, contract_id=contract_id)
     if error:
         return error
-    if not _text(payload.get("approver")):
-        return {"error": "approver_required", "message": "Укажи согласующего."}
-    conn = get_connection()
+    conn = get_connection(row_factory=True)
     try:
         c = conn.cursor()
-        _insert_approval(c, contract_id, payload, actor)
+        person = _insert_approval(c, contract_id, payload, actor)
+        if not person:
+            return {"error": "approver_required", "message": "Выбери согласующего из списка сотрудников."}
         approval_id = c.lastrowid
+        number = _load_contract(c, contract_id)["number"]
         conn.commit()
     finally:
         conn.close()
+    due = _date(payload.get("due_date"))
+    due_text = datetime.date.fromisoformat(due).strftime("%d.%m.%Y") if due else ""
+    _notify([person["email"]], "Договор на согласование", f"Вас добавили согласующим договора № {number}{f' (срок {due_text})' if due_text else ''}.", contract_id, skip=actor.get("email", ""))
     return {"status": "success", "id": approval_id}
 
 
 @router.put("/api/cr/approvals/{approval_id}")
 def decide_approval(approval_id: int, request: Request, payload: dict = Body(...)):
-    actor, error = _edit_guard(request, "cr_approvals", approval_id)
-    if error:
-        return error
+    actor = require_approved_user(request)
+    if not actor:
+        return {"error": "forbidden"}
     status = _text(payload.get("status"), 40)
     if status not in APPROVAL_STATUSES:
         return {"error": "invalid_status"}
-    conn = get_connection()
+    conn = get_connection(row_factory=True)
     try:
-        conn.execute(
+        c = conn.cursor()
+        approval = c.execute("SELECT * FROM cr_approvals WHERE id=?", (approval_id,)).fetchone()
+        if not approval:
+            return {"error": "not_found"}
+        approval = dict(approval)
+        is_director = actor.get("role") == DIRECTOR_ROLE
+        if not is_director and _text(approval.get("approver_email")).lower() != _text(actor.get("email")).lower():
+            return {"error": "forbidden", "message": "Решение принимает сам согласующий или директор."}
+        c.execute(
             "UPDATE cr_approvals SET status=?, comment=?, decided_at=? WHERE id=?",
             (status, _text(payload.get("comment"), 2000), 0 if status == "pending" else int(time.time()), approval_id),
         )
+        contract = _load_contract(c, approval["contract_id"])
+        pending = c.execute("SELECT COUNT(*) AS n FROM cr_approvals WHERE contract_id=? AND status IN ('pending', 'rejected')", (approval["contract_id"],)).fetchone()["n"]
         conn.commit()
     finally:
         conn.close()
+    if status != "pending":
+        who = approval.get("approver") or actor.get("name", "")
+        if is_director and _text(approval.get("approver_email")).lower() != _text(actor.get("email")).lower():
+            who = f"{actor.get('name', 'Директор')} (за {approval.get('approver')})"
+        label = {"approved": "согласовано", "approved_with_notes": "согласовано с замечаниями", "rejected": "отклонено"}[status]
+        comment = _text(payload.get("comment"), 300)
+        recipients = [contract.get("created_by"), contract.get("responsible_email"), contract.get("initiator_email")]
+        _notify(recipients, "Решение по договору", f"Договор № {contract['number']}: {who} — {label}{f' («{comment}»)' if comment else ''}.", contract["id"], skip=actor.get("email", ""))
+        if status != "rejected" and not pending:
+            _notify(recipients, "Договор согласован", f"Договор № {contract['number']} согласован всеми участниками.", contract["id"])
     audit_log("cr_approval_decided", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="cr_approval", entity_id=str(approval_id), details={"status": status})
     return {"status": "success"}
 
@@ -935,7 +1013,7 @@ def create_approval_template(request: Request, payload: dict = Body(...)):
     conn = get_connection(row_factory=True)
     try:
         c = conn.cursor()
-        source = _rows(c.execute("SELECT approver, department, position FROM cr_approvals WHERE contract_id=? ORDER BY id", (_int(payload.get("contract_id")),)))
+        source = _rows(c.execute("SELECT approver, approver_email, department, position FROM cr_approvals WHERE contract_id=? AND COALESCE(approver_email, '') <> '' ORDER BY id", (_int(payload.get("contract_id")),)))
         if not source:
             return {"error": "empty", "message": "Лист согласования пуст — сохранять нечего."}
         c.execute(
@@ -973,13 +1051,13 @@ def apply_approval_template(contract_id: int, request: Request, payload: dict = 
         row = c.execute("SELECT rows_json FROM cr_approval_templates WHERE id=?", (_int(payload.get("template_id")),)).fetchone()
         if not row:
             return {"error": "not_found", "message": "Шаблон не найден."}
-        rows = _json(row["rows_json"], [])
-        for item in rows:
-            _insert_approval(c, contract_id, {**item, "due_date": payload.get("due_date")}, actor)
+        added = [person for item in _json(row["rows_json"], []) if (person := _insert_approval(c, contract_id, {**item, "due_date": payload.get("due_date")}, actor))]
+        number = _load_contract(c, contract_id)["number"]
         conn.commit()
     finally:
         conn.close()
-    return {"status": "success", "count": len(rows)}
+    _notify([p["email"] for p in added], "Договор на согласование", f"Вас добавили согласующим договора № {number}.", contract_id, skip=actor.get("email", ""))
+    return {"status": "success", "count": len(added)}
 
 
 # ---------- files ----------

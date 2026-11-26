@@ -47,7 +47,7 @@ const CR_ITEM_SECTIONS = {
     stages: { title: 'Этапы и виды работ', totals: ['amount'], cols: [
         ['name', 'Этап', 'text'], ['work_type', 'Вид работ', 'text'], ['plan_start', 'Начало (план)', 'date'],
         ['plan_end', 'Окончание (план)', 'date'], ['fact_end', 'Окончание (факт)', 'date'], ['amount', 'Стоимость', 'money'],
-        ['responsible', 'Ответственный', 'user'], ['status', 'Статус', 'select', ['Не начат', 'В работе', 'Выполнен', 'Приостановлен']]] },
+        ['responsible', 'Ответственный', 'useremail'], ['status', 'Статус', 'select', ['Не начат', 'В работе', 'Выполнен', 'Приостановлен']]] },
     court: { title: 'Судебные дела', totals: ['claim_amount'], cols: [
         ['case_no', '№ дела', 'text'], ['court', 'Суд', 'text'], ['our_role', 'Наша роль', 'select', ['Истец', 'Ответчик', 'Третье лицо']],
         ['subject', 'Предмет спора', 'text'], ['claim_amount', 'Сумма иска', 'money'], ['filed', 'Дата подачи', 'date'],
@@ -65,7 +65,7 @@ const CR_ITEM_SECTIONS = {
         ['contractor', 'Субподрядчик', 'text'], ['contract_no', '№ договора', 'text'], ['date', 'Дата', 'date'], ['amount', 'Сумма', 'money'],
         ['end_date', 'Срок', 'date'], ['status', 'Статус', 'select', ['Действует', 'Исполнен', 'Расторгнут']]] },
     tasks: { title: 'Задачи', cols: [
-        ['title', 'Задача', 'text'], ['assignee', 'Исполнитель', 'user'], ['due', 'Срок', 'date'],
+        ['title', 'Задача', 'text'], ['assignee', 'Исполнитель', 'useremail'], ['due', 'Срок', 'date'],
         ['status', 'Статус', 'select', ['Новая', 'В работе', 'Выполнена', 'Отменена']], ['result', 'Результат', 'text']] },
     costs: { title: 'Затраты', totals: ['amount'], cols: [
         ['article', 'Статья затрат', 'text'], ['date', 'Дата', 'date'], ['amount', 'Сумма', 'money'], ['counterparty', 'Получатель', 'text'], ['note', 'Примечание', 'text']] },
@@ -76,7 +76,7 @@ const CR_ITEM_SECTIONS = {
         ['user', 'Пользователь', 'useremail'], ['level', 'Доступ', 'select', [['read', 'Только просмотр'], ['edit', 'Просмотр и изменение']]]] },
     movements: { title: 'Движения', cols: [
         ['date', 'Дата', 'date'], ['item', 'Что передано', 'select', ['Оригинал договора', 'Копия договора', 'Доп. соглашение', 'Акт', 'Другое']],
-        ['from', 'Откуда / от кого', 'text'], ['to', 'Куда / кому', 'text'], ['handed_by', 'Передал', 'user'], ['received_by', 'Принял', 'text'], ['note', 'Примечание', 'text']] },
+        ['from', 'Откуда / от кого', 'text'], ['to', 'Куда / кому', 'text'], ['handed_by', 'Передал', 'useremail'], ['received_by', 'Принял', 'text'], ['note', 'Примечание', 'text']] },
     poa: { title: 'Доверенности', cols: [
         ['number', 'Номер', 'text'], ['issue_date', 'Дата выдачи', 'date'], ['valid_to', 'Действует до', 'date'], ['attorney', 'Доверенное лицо', 'text'], ['powers', 'Полномочия', 'text']] },
     passes: { title: 'Пропуска', cols: [
@@ -512,6 +512,27 @@ async function crLoadUsers() {
     return crState.users;
 }
 
+function crUserLabel(u) {
+    const extra = [u.position, u.department].filter(Boolean).join(', ');
+    return `${u.name || u.email}${extra ? ` — ${extra}` : ''}`;
+}
+
+function crUserOptions(selectedEmail, emptyLabel = '— не выбран —') {
+    const selected = String(selectedEmail || '').toLowerCase();
+    return [['', emptyLabel], ...crState.users
+        .slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ru'))
+        .map(u => [String(u.email).toLowerCase(), crUserLabel(u)])]
+        .map(([v, t]) => `<option value="${crEsc(v)}" ${v === selected ? 'selected' : ''}>${crEsc(t)}</option>`).join('');
+}
+
+function crIsMe(email) {
+    return String(email || '').toLowerCase() === String(currentUser?.email || '').toLowerCase();
+}
+
+function crIsDirector() {
+    return String(currentUser?.role || '') === 'Директор';
+}
+
 function crFormatNumber(type, seq) {
     const digits = Math.max(0, Math.min(12, Number(type.digits || 0)));
     const core = digits ? String(seq).padStart(digits, '0') : String(seq);
@@ -815,8 +836,8 @@ function crMainSectionHtml(c) {
             ${crField('Условия пролонгации', 'prolongation_terms', c.prolongation_terms, 'text', 'placeholder="например: автоматически на 1 год"')}
         </div>
         <div class="cr-form-grid">
-            ${crField('Ответственный исполнитель', 'responsible', c.responsible, 'text', 'list="crUsersList"')}
-            ${crField('Инициатор', 'initiator', c.initiator, 'text', 'list="crUsersList"')}
+            <label>Ответственный исполнитель<select class="cr-input" data-field="responsible_email">${crUserOptions(c.responsible_email, c.responsible && !c.responsible_email ? `— ${c.responsible} (не сотрудник, выбери) —` : '— не выбран —')}</select></label>
+            <label>Инициатор<select class="cr-input" data-field="initiator_email">${crUserOptions(c.initiator_email, c.initiator && !c.initiator_email ? `— ${c.initiator} (не сотрудник, выбери) —` : '— не выбран —')}</select></label>
             ${crSelect('Тип договора', 'doc_type_id', c.doc_type_id || 0, typeOptions)}
             ${crSelect('Папка', 'folder_id', c.folder_id || 0, folderOptions)}
             ${crSelect('Вид договора', 'kind', c.kind || 'other', [['other', 'Другой'], ['expense', 'Расходный'], ['income', 'Доходный']])}
@@ -903,7 +924,7 @@ async function crSaveCard() {
     const c = crState.card;
     if (!String(c.number || '').trim()) return customAlert('Номер договора не может быть пустым.');
     const fields = ['number', 'seq_no', 'extra_number', 'incoming_number', 'gov_reg_number', 'flagged', 'created_date', 'concluded_date', 'end_date',
-        'amount', 'currency', 'vat_enabled', 'vat_rate', 'vat_manual', 'vat_amount', 'kind', 'responsible', 'initiator', 'tender', 'category',
+        'amount', 'currency', 'vat_enabled', 'vat_rate', 'vat_manual', 'vat_amount', 'kind', 'responsible_email', 'initiator_email', 'tender', 'category',
         'notify_enabled', 'notify_days', 'notify_date', 'internal_only', 'payment_deferral', 'framework',
         'prolongation', 'prolongation_terms', 'indefinite', 'on_counterparty_signing', 'sent_for_signing_date', 'signed_date', 'signed',
         'signing_method', 'on_counterparty_review', 'sent_to_counterparty_date', 'original_status', 'doc_type_id', 'folder_id', 'status',
@@ -1273,10 +1294,9 @@ function crApprovalsSectionHtml(c) {
     return `
         <div class="cr-section-title">Согласования</div>
         <div class="cr-form-grid cr-form-grid--party">
-            <label>Согласующий<input class="cr-input" id="crApprover" list="crUsersList" placeholder="ФИО"></label>
-            <label>Отдел<input class="cr-input" id="crApproverDept" placeholder="Юридический отдел"></label>
-            <label>Должность<input class="cr-input" id="crApproverPos" placeholder="Юрист"></label>
+            <label class="cr-span-2">Согласующий (сотрудник)<select class="cr-input" id="crApprover">${crUserOptions('', '— выбери сотрудника —')}</select></label>
             <label>Согласовать до<input class="cr-input" id="crApproverDue" type="date"></label>
+            <span class="cr-muted">Отдел и должность берутся из «Доступов».</span>
         </div>
         <div class="cr-toolbar-group">
             <button class="btn-primary" type="button" onclick="crAddApproval()">Добавить в лист согласования</button>
@@ -1291,29 +1311,30 @@ function crApprovalsSectionHtml(c) {
                     <td>${i + 1}</td>
                     <td>${a.decided_at ? new Date(a.decided_at * 1000).toLocaleDateString('ru-RU') : ''}</td>
                     <td>${time(a.decided_at)}</td>
-                    <td>${crEsc(a.approver)}</td><td>${crEsc(a.department)}</td><td>${crEsc(a.position)}</td>
+                    <td>${crEsc(a.approver)}${crIsMe(a.approver_email) ? ' <span class="cr-badge">вы</span>' : ''}${!a.approver_email ? ' <span class="cr-muted" title="Добавлен до привязки к сотрудникам">(не сотрудник)</span>' : ''}</td><td>${crEsc(a.department)}</td><td>${crEsc(a.position)}</td>
                     <td>${crDate(a.due_date)}</td>
                     <td><span class="cr-status cr-status--${a.status}">${CR_APPROVAL_LABELS[a.status] || a.status}</span></td>
                     <td class="cr-wrap">${crEsc(a.comment)}</td>
                     <td class="cr-actions">
-                        ${a.status === 'pending' ? `
-                            <button type="button" onclick="crDecide(${a.id}, 'approved')">Согласовать</button>
-                            <button type="button" onclick="crDecide(${a.id}, 'approved_with_notes')">С замечаниями</button>
-                            <button type="button" onclick="crDecide(${a.id}, 'rejected')">Отклонить</button>` : `
-                            <button type="button" onclick="crDecide(${a.id}, 'pending')">Вернуть в процесс</button>`}
-                        <button type="button" class="cr-link-danger" onclick="crDeleteApproval(${a.id})">Удалить</button>
+                        ${crIsMe(a.approver_email) || crIsDirector() ? (a.status === 'pending' ? `
+                            <button type="button" class="cr-keep" onclick="crDecide(${a.id}, 'approved')">Согласовать</button>
+                            <button type="button" class="cr-keep" onclick="crDecide(${a.id}, 'approved_with_notes')">С замечаниями</button>
+                            <button type="button" class="cr-keep" onclick="crDecide(${a.id}, 'rejected')">Отклонить</button>` : `
+                            <button type="button" class="cr-keep" onclick="crDecide(${a.id}, 'pending')">Вернуть в процесс</button>`) : `<span class="cr-muted">${a.status === 'pending' ? 'ждёт решения' : ''}</span>`}
+                        ${crState.card.access_level === 'edit' ? `<button type="button" class="cr-link-danger" onclick="crDeleteApproval(${a.id})">Удалить</button>` : ''}
                     </td>
                 </tr>`).join('') : '<tr><td colspan="10" class="cr-empty">Лист согласования пуст. Добавь согласующих или примени шаблон.</td></tr>'}</tbody></table>
         </div>`;
 }
 
 async function crAddApproval() {
-    const approver = document.getElementById('crApprover').value.trim();
-    if (!approver) return customAlert('Укажи согласующего.');
+    const approverEmail = document.getElementById('crApprover').value;
+    if (!approverEmail) return customAlert('Выбери согласующего из списка сотрудников.');
+    if (crState.card.approvals.some(a => a.status === 'pending' && String(a.approver_email || '').toLowerCase() === approverEmail)) {
+        return customAlert('Этот сотрудник уже в листе согласования и ещё не принял решение.');
+    }
     const res = await apiCall(`/cr/contracts/${crState.card.id}/approvals`, 'POST', {
-        approver,
-        department: document.getElementById('crApproverDept').value.trim(),
-        position: document.getElementById('crApproverPos').value.trim(),
+        approver_email: approverEmail,
         due_date: document.getElementById('crApproverDue').value,
     });
     if (crFail(res)) return customAlert(crErrorText(res, 'Не удалось добавить согласующего.'));
@@ -1577,8 +1598,13 @@ async function crOpenView(contractId) {
     const [c] = await Promise.all([apiCall(`/cr/contracts/${contractId}`), crLoadParams(), crLoadUsers()]);
     if (crFail(c)) return customAlert(crErrorText(c, 'Не удалось открыть договор.'));
     const canEdit = c.access_level === 'edit';
+    const myPending = c.approvals.find(a => a.status === 'pending' && crIsMe(a.approver_email));
+    const decide = myPending ? `<span class="crv-decide">Ваше решение:
+         <button class="btn-primary" type="button" data-decide="approved">Согласовать</button>
+         <button class="btn-secondary" type="button" data-decide="approved_with_notes">С замечаниями</button>
+         <button class="btn-secondary" type="button" data-decide="rejected">Отклонить</button></span>` : '';
     const modal = crModal(`Договор № ${c.number}`, crViewHtml(c),
-        `<button class="btn-secondary" type="button" data-act="print">Печать</button>
+        `${decide}<button class="btn-secondary" type="button" data-act="print">Печать</button>
          <button class="btn-secondary" type="button" data-act="close">Закрыть</button>
          ${canEdit ? '<button class="btn-primary" type="button" data-act="edit">Изменить</button>' : '<span class="cr-muted">Только просмотр</span>'}`,
         { wide: true });
@@ -1586,6 +1612,20 @@ async function crOpenView(contractId) {
     modal.querySelector('[data-act="close"]').onclick = () => modal.closeModal();
     modal.querySelector('[data-act="print"]').onclick = () => crPrintView(c);
     modal.querySelector('[data-act="edit"]')?.addEventListener('click', () => { modal.closeModal(); crOpenCard(c.id); });
+    modal.querySelectorAll('[data-decide]').forEach(btn => btn.addEventListener('click', async () => {
+        const status = btn.dataset.decide;
+        let comment = '';
+        if (status !== 'approved') {
+            comment = await crPromptName(status === 'rejected' ? 'Причина отклонения' : 'Замечания');
+            if (comment === null) return;
+        }
+        const res = await apiCall(`/cr/approvals/${myPending.id}`, 'PUT', { status, comment });
+        if (crFail(res)) return customAlert(crErrorText(res, 'Не удалось сохранить решение.'));
+        modal.closeModal();
+        showToast('Согласование', 'Решение сохранено');
+        renderContractRegistry();
+        crOpenView(c.id);
+    }));
 }
 
 function crPrintView(c) {
