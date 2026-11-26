@@ -99,6 +99,7 @@ const VIEW_NAV_MAP = {
     deals: 'navDeals',
     client360: 'navClient360',
     contract360: 'navContract360',
+    counterparties: 'navCounterparties',
     nomenclature: 'navNomenclature',
     contacts: 'navContacts',
     kpi: 'navKpi',
@@ -117,6 +118,7 @@ const ACTIVE_VIEW_IDS = [
     'claimsView',
     'emailsView',
     'contract360View',
+    'counterpartiesView',
 ];
 
 const ACTIVE_VIEW_RENDERERS = {
@@ -127,8 +129,9 @@ const ACTIVE_VIEW_RENDERERS = {
         safeRenderView('bitrixImport', window.renderBitrixImport);
     },
     contract360: () => {
-        safeRenderView('contract360', window.renderContract360);
+        safeRenderView('contract360', window.renderContractRegistry);
     },
+    counterparties: () => safeRenderView('counterparties', window.renderCounterparties),
     claims: () => {
         if (window.currentLegalTab === 'courts') safeRenderView('claims', window.renderCourts);
         else safeRenderView('claims', window.renderClaims);
@@ -307,6 +310,7 @@ function bindPrimaryNavigationClicks() {
         ['navClients', 'clients'],
         ['navBitrixImport', 'bitrixImport'],
         ['navContract360', 'contract360'],
+        ['navCounterparties', 'counterparties'],
         ['navClaims', 'claims'],
         ['navDocuments', 'documents'],
         ['navEmails', 'emails'],

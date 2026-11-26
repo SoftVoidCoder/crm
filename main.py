@@ -23,7 +23,7 @@ from settings import APP_ENV, BITRIX24_SYNC_INTERVAL_SECONDS, COOKIE_SECURE, usi
 from utils import manager, verify_document_qr_token  # Подключаем наш менеджер WebSockets
 
 # Импортируем наши роутеры из папки routers
-from routers import users, projects, docs, communications, accounting, erp_deep, erp_ops_plus, workbench, integration_1c, assistant, bitrix24
+from routers import users, projects, docs, communications, accounting, erp_deep, erp_ops_plus, workbench, integration_1c, assistant, bitrix24, contract_registry
 from services.bitrix24_service import sync_bitrix24_to_outreach
 
 PROJECT_JSON_OBJECT_FIELDS = {
@@ -183,7 +183,7 @@ def _can_access_upload_path(actor: dict, relative_path: str) -> bool:
     raw = str(relative_path or "").replace("\\", "/").strip().lstrip("/")
     if raw.startswith("email_attachments/"):
         return has_permission(actor, "emails", "read")
-    if raw.startswith(("document_packages/", "signatures/")):
+    if raw.startswith(("document_packages/", "signatures/", "contract_registry/")):
         return has_permission(actor, "documents", "read")
     return True
 
@@ -774,3 +774,4 @@ app.include_router(workbench.router)
 app.include_router(integration_1c.router)
 app.include_router(bitrix24.router)
 app.include_router(assistant.router)
+app.include_router(contract_registry.router)

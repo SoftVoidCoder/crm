@@ -1,0 +1,32 @@
+<div id="counterpartiesView" class="view-page cr-page" style="display:none;">
+    <header class="cr-header">
+        <div>
+            <h1 class="cr-title">Контрагенты</h1>
+            <p class="cr-subtitle">Справочник организаций. Новую организацию можно найти по ИНН — реквизиты подставятся автоматически.</p>
+        </div>
+        <div class="cr-header-actions">
+            <button class="btn-primary" type="button" onclick="crOpenCounterparty(0)">+ Новый контрагент</button>
+        </div>
+    </header>
+
+    <section class="surface-card cr-inn-search">
+        <label for="crInnQuery"><strong>Найти по ИНН</strong></label>
+        <input id="crInnQuery" type="text" inputmode="numeric" maxlength="12" placeholder="10 или 12 цифр" onkeydown="if(event.key==='Enter')crLookupInn()">
+        <button class="btn-primary" type="button" onclick="crLookupInn()">Найти</button>
+        <span id="crInnStatus" class="cr-muted"></span>
+    </section>
+
+    <section class="surface-card cr-registry">
+        <div class="cr-toolbar">
+            <input id="crCounterpartySearch" class="cr-search" type="search" placeholder="Поиск по названию, ИНН, ОГРН…" oninput="crRenderCounterparties()">
+        </div>
+        <div class="cr-table-wrap">
+            <table class="cr-table">
+                <thead>
+                    <tr><th>Наименование</th><th>ИНН</th><th>КПП</th><th>ОГРН</th><th>Юридический адрес</th><th>Руководитель</th><th>Статус</th><th class="cr-num">Договоров</th></tr>
+                </thead>
+                <tbody id="crCounterpartyBody"></tbody>
+            </table>
+        </div>
+    </section>
+</div>

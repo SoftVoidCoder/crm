@@ -1,139 +1,64 @@
-<div id="contract360View" class="view-page contract360-simple" style="display:none;">
-    <header class="view-header contract360-page-header">
-        <div class="view-heading">
-            <span class="view-eyebrow">Договоры компании</span>
-            <h1 class="view-title">Договоры 360</h1>
-            <p class="view-subtitle">Контролируйте контрагента, сумму, срок, статус и документы договора в одной карточке.</p>
+<div id="contract360View" class="view-page cr-page" style="display:none;">
+    <header class="cr-header">
+        <div>
+            <h1 class="cr-title">Договоры</h1>
+            <p class="cr-subtitle">Реестр договоров: папки, автонумерация, карточка, стороны, согласования и файлы.</p>
         </div>
-        <button class="btn-primary" type="button" onclick="navigateTo('dashboard')">Создать из проекта</button>
+        <div class="cr-header-actions">
+            <button class="btn-secondary" type="button" onclick="crOpenDocTypes()">Типы документов</button>
+            <button class="btn-primary" type="button" onclick="crOpenCreate()">+ Добавить договор</button>
+        </div>
     </header>
 
-    <section class="contract360-route" aria-label="Как работать с договорами">
-        <div><span>1</span><strong>Найдите договор</strong><small>По номеру, клиенту или ответственному.</small></div>
-        <div><span>2</span><strong>Откройте карточку</strong><small>Проверьте сумму, сроки, статус и файл.</small></div>
-        <div><span>3</span><strong>Обновляйте по факту</strong><small>Редактируйте карточку и фиксируйте изменения.</small></div>
-    </section>
+    <div class="cr-layout">
+        <aside class="cr-folders surface-card">
+            <div class="cr-folders-head">
+                <strong>Папки</strong>
+                <span class="cr-folders-tools">
+                    <button type="button" title="Новая папка" onclick="crAddFolder()">+</button>
+                    <button type="button" title="Переименовать папку" onclick="crRenameFolder()">✎</button>
+                    <button type="button" title="Удалить папку" onclick="crDeleteFolder()">✕</button>
+                </span>
+            </div>
+            <ul id="crFolderList" class="cr-folder-list"></ul>
+        </aside>
 
-    <div id="contract360EmptyState" class="surface-card contract360-empty">
-        <h2>Договоров пока нет</h2>
-        <p>Договор создаётся из проекта. Откройте нужный проект и синхронизируйте его с договорным реестром.</p>
-        <button class="btn-primary" type="button" onclick="navigateTo('dashboard')">Перейти к проектам</button>
-    </div>
-
-    <div id="contract360Content" class="contract360-content" style="display:none;">
-        <section class="surface-card contract360-workspace">
-            <nav class="contract360-tablist" aria-label="Разделы договоров">
-                <button id="contract360TabRegistry" class="krd-tab active" onclick="switchContract360Tab('registry')">Все договоры</button>
-                <button id="contract360TabOverview" class="krd-tab" onclick="switchContract360Tab('overview')">Карточка</button>
-                <button id="contract360TabFiles" class="krd-tab" onclick="switchContract360Tab('files')">Документы</button>
-                <button id="contract360TabPayments" class="krd-tab" onclick="switchContract360Tab('payments')">Оплаты</button>
-                <button id="contract360TabApprovals" class="krd-tab" onclick="switchContract360Tab('approvals')">Согласования</button>
-            </nav>
-
-            <div id="contract360PanelRegistry" class="contract360-panel contract360-panel--active">
-                <div class="contract360-panel-heading">
-                    <div>
-                        <h2>Все договоры</h2>
-                        <p>Откройте строку, чтобы посмотреть полную карточку договора.</p>
-                    </div>
+        <section class="cr-registry surface-card">
+            <div class="cr-toolbar">
+                <div class="cr-toolbar-group">
+                    <button class="btn-secondary" type="button" onclick="crOpenSelected()">Открыть</button>
+                    <button class="btn-secondary" type="button" onclick="crCopySelected()">Копировать</button>
+                    <button class="btn-secondary" type="button" id="crDeleteBtn" onclick="crDeleteSelected()">Удалить</button>
+                    <button class="btn-secondary" type="button" onclick="crExportExcel()">Excel</button>
                 </div>
-                <div id="contract360RegistryCounters" class="contract360-registry-counters"></div>
-                <div class="contract360-searchbar">
-                    <label>
-                        <span>Поиск</span>
-                        <input id="contractRegistrySearch" class="auth-input" type="search" placeholder="Номер договора, клиент или ответственный" oninput="applyContractRegistryFilters()">
-                    </label>
-                    <label>
-                        <span>Статус</span>
-                        <select id="contractRegistryStatus" class="auth-input" onchange="applyContractRegistryFilters()">
-                            <option value="">Все статусы</option>
-                            <option value="draft">Черновик</option>
-                            <option value="pending">На согласовании</option>
-                            <option value="approved">Согласован</option>
-                            <option value="active">Действует</option>
-                            <option value="paused">Приостановлен</option>
-                            <option value="completed">Исполнен</option>
-                            <option value="closed">Закрыт</option>
-                            <option value="terminated">Расторгнут</option>
-                        </select>
-                    </label>
-                    <button class="btn-secondary" type="button" onclick="resetContractRegistryFilters()">Сбросить</button>
-                </div>
-                <div id="contract360Registry" class="contract360-registry-list"></div>
+                <input id="crSearch" class="cr-search" type="search" placeholder="Поиск: номер, контрагент, ИНН, предмет…" oninput="crScheduleSearch()">
             </div>
-
-            <div id="contract360CardHeader" class="contract360-card-header" style="display:none;">
-                <button class="contract360-back" type="button" onclick="showContract360Registry()">← Все договоры</button>
-                <div class="contract360-card-title">
-                    <div class="client360-title-row">
-                        <h2 id="contract360Number"></h2>
-                        <span id="contract360Status" class="email-mailbox-chip"></span>
-                    </div>
-                    <p id="contract360HeroMeta"></p>
-                </div>
+            <div class="cr-filterbar">
+                <label><input type="radio" name="crPeriod" value="all" checked onchange="crSetPeriod(this.value)"> Все</label>
+                <label><input type="radio" name="crPeriod" value="year" onchange="crSetPeriod(this.value)"> За последний год</label>
+                <label><input type="radio" name="crPeriod" value="range" onchange="crSetPeriod(this.value)"> За период с</label>
+                <input id="crDateFrom" type="date" onchange="crSetPeriod('range')"> по <input id="crDateTo" type="date" onchange="crSetPeriod('range')">
+                <span class="cr-legend">
+                    <span><i class="cr-dot cr-dot--expiring"></i>истекающие</span>
+                    <span><i class="cr-dot cr-dot--overdue"></i>просроченные</span>
+                    <span><i class="cr-dot cr-dot--appr-overdue"></i>просроченные согласования</span>
+                    <span><i class="cr-dot cr-dot--appr-open"></i>открытые согласования</span>
+                </span>
             </div>
-
-            <div id="contract360Metrics" class="metrics-grid" style="display:none;"></div>
-
-            <div id="contract360PanelOverview" class="contract360-panel" hidden>
-                <div class="contract360-panel-heading">
-                    <div>
-                        <h2>Карточка договора</h2>
-                        <p>Основные сведения, которыми сотрудники пользуются каждый день.</p>
-                    </div>
-                    <div class="view-actions">
-                        <button id="contract360EditButton" class="btn-secondary" type="button" onclick="editContract360Card()">Редактировать</button>
-                        <button id="contract360CancelButton" class="btn-secondary contract360-action-hidden" type="button" onclick="cancelContract360Edit()">Отмена</button>
-                        <button id="contract360SaveButton" class="btn-primary contract360-action-hidden" type="button" onclick="saveContractMasterCard()">Сохранить договор</button>
-                    </div>
-                </div>
-
-                <div class="contract360-form-grid contract360-form-grid--primary">
-                    <label><span class="field-label">Номер договора</span><input id="contractCardNumber" class="auth-input contract360-editable" type="text"></label>
-                    <label><span class="field-label">Статус</span><select id="contractCardStatus" class="auth-input contract360-editable"><option value="draft">Черновик</option><option value="pending">На согласовании</option><option value="active">Действует</option><option value="paused">Приостановлен</option><option value="completed">Исполнен</option><option value="closed">Закрыт</option><option value="terminated">Расторгнут</option></select></label>
-                    <label class="contract360-field-full"><span class="field-label">Предмет договора</span><input id="contractCardTitle" class="auth-input contract360-editable" type="text"></label>
-                    <label><span class="field-label">Контрагент</span><select id="contractCardClient" class="auth-input contract360-editable"></select></label>
-                    <label><span class="field-label">Ответственный</span><select id="contractCardManager" class="auth-input contract360-editable"></select></label>
-                    <label><span class="field-label">Сумма</span><input id="contractCardAmount" class="auth-input contract360-editable" type="number" min="0"></label>
-                    <label><span class="field-label">Валюта</span><select id="contractCardCurrency" class="auth-input contract360-editable"><option value="RUB">Рубль</option><option value="EUR">Евро</option><option value="USD">Доллар</option></select></label>
-                    <label><span class="field-label">Дата начала</span><input id="contractCardStartDate" class="auth-input contract360-editable" type="text" placeholder="дд.мм.гггг"></label>
-                    <label><span class="field-label">Действует до</span><input id="contractCardEndDate" class="auth-input contract360-editable" type="text" placeholder="дд.мм.гггг"></label>
-                    <label><span class="field-label">Тип договора</span><select id="contractCardType" class="auth-input contract360-editable"><option value="standard">Стандартный</option><option value="framework">Рамочный</option><option value="service">Сервисный</option><option value="supply">Поставка</option><option value="construction">Подряд</option></select></label>
-                    <label><span class="field-label">НДС</span><select id="contractCardVatMode" class="auth-input contract360-editable"><option value="with_vat">С НДС</option><option value="without_vat">Без НДС</option><option value="mixed">Смешанный режим</option></select></label>
-                    <label><span class="field-label">Уровень риска</span><select id="contractCardRiskLevel" class="auth-input contract360-editable"><option value="low">Низкий</option><option value="normal">Обычный</option><option value="attention">Требует внимания</option><option value="critical">Критичный</option></select></label>
-                    <label class="contract360-field-full"><span class="field-label">Комментарий</span><textarea id="contractCardComment" class="auth-input contract360-editable" rows="3" placeholder="Важные условия, ограничения или договорённости"></textarea></label>
-                </div>
-
-                <details class="contract360-extra">
-                    <summary>Дополнительные сведения</summary>
-                    <div class="contract360-form-grid">
-                        <label><span class="field-label">Папка</span><input id="contractCardFolder" class="auth-input contract360-editable" type="text"></label>
-                        <label><span class="field-label">Категория</span><input id="contractCardCategory" class="auth-input contract360-editable" type="text"></label>
-                        <label><span class="field-label">Объект</span><input id="contractCardObjectName" class="auth-input contract360-editable" type="text"></label>
-                        <label><span class="field-label">Ответственный на объекте</span><input id="contractCardObjectResponsible" class="auth-input contract360-editable" type="text"></label>
-                        <label class="contract360-field-full"><span class="field-label">Адрес объекта</span><input id="contractCardObjectAddress" class="auth-input contract360-editable" type="text"></label>
-                        <label><span class="field-label">Город</span><input id="contractCardObjectCity" class="auth-input contract360-editable" type="text"></label>
-                        <label><span class="field-label">Регион</span><input id="contractCardObjectRegion" class="auth-input contract360-editable" type="text"></label>
-                    </div>
-                </details>
+            <div class="cr-table-wrap">
+                <table class="cr-table">
+                    <thead>
+                        <tr>
+                            <th>№</th><th>Номер</th><th>Порядк. номер</th><th>Доп. номер</th><th>Входящий номер</th>
+                            <th>Номер гос. регистрации</th><th>Отметка</th><th>Тип документа</th><th>Контрагенты</th>
+                            <th>Дата создания</th><th>Дата заключения</th><th>Дата окончания</th>
+                            <th class="cr-num">Сумма</th><th>НДС</th><th class="cr-num">% НДС</th><th class="cr-num">Сумма НДС</th><th class="cr-num">Сумма без НДС</th>
+                        </tr>
+                    </thead>
+                    <tbody id="crTableBody"></tbody>
+                </table>
             </div>
-
-            <div id="contract360PanelFiles" class="contract360-panel" hidden>
-                <div class="contract360-panel-heading"><div><h2>Документы договора</h2><p>Договор, приложения, дополнительные соглашения и подписанные версии.</p></div><button class="btn-secondary" type="button" onclick="openContractDocuments(currentContract360Id)">Открыть документы</button></div>
-                <div id="contract360Documents" class="client360-list"></div>
-            </div>
-
-            <div id="contract360PanelPayments" class="contract360-panel" hidden>
-                <div class="contract360-panel-heading"><div><h2>Оплаты</h2><p>Поступления, выплаты и открытые обязательства по договору.</p></div><button class="btn-secondary" type="button" onclick="openContractFinance(currentContract360Id)">Открыть финансы</button></div>
-                <div id="contract360PaymentsSummary" class="contract360-mini-metrics"></div>
-                <div id="contract360Finance" class="client360-list"></div>
-                <div id="contract360PenaltyFeed" class="client360-list"></div>
-            </div>
-
-            <div id="contract360PanelApprovals" class="contract360-panel" hidden>
-                <div class="contract360-panel-heading"><div><h2>Согласования</h2><p>Кто должен проверить договор и на каком этапе находится решение.</p></div><button class="btn-secondary" type="button" onclick="openContractApprovals(currentContract360Id)">Открыть согласования</button></div>
-                <div id="contract360Approvals" class="client360-list"></div>
-            </div>
+            <div id="crFooter" class="cr-footer"></div>
         </section>
     </div>
 </div>
