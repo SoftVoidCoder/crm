@@ -39,7 +39,7 @@
 .cr-table th { position: sticky; top: 0; z-index: 1; background: var(--surface-muted); text-align: left; font-weight: 600; color: var(--secondary); padding: 7px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .cr-table td { padding: 6px 8px !important; border-bottom: 1px solid var(--border) !important; vertical-align: top; font-size: 12.5px !important; }
 .cr-table td { white-space: nowrap; }
-.cr-table td.cr-wrap { white-space: normal; min-width: 180px; max-width: 320px; }
+.cr-table td.cr-wrap { white-space: normal; min-width: 180px !important; max-width: 320px; }
 .cr-table tbody tr { cursor: default; }
 .cr-table tbody tr:hover td { background: #f3f9f8 !important; }
 .cr-num { text-align: right !important; white-space: nowrap; }
@@ -280,3 +280,22 @@
 .cr-nav-count { text-align: right; font-variant-numeric: tabular-nums; color: var(--secondary); font-size: 12px; }
 .cr-card-nav button.active .cr-nav-count { color: var(--primary); }
 .crv-decide { display: inline-flex; align-items: center; gap: 6px; margin-right: auto; font-weight: 600; color: #0f766e; flex-wrap: wrap; }
+
+/* v8: «Документы компании» registry (same layout as contracts) */
+.dc-type { display: inline-block; min-width: 44px; text-align: center; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+.dc-type--in { background: #e6f1fb; color: #0c447c; }
+.dc-type--out { background: #faeeda; color: #633806; }
+.dc-type--int { background: #eeedfe; color: #3c3489; }
+.cr-table .dc-row--nofile td { background: #f6f7f9 !important; }
+.dc-dot--nofile { background: #e9ecef; }
+.cr-page .cr-table td.dc-subject { min-width: 280px !important; max-width: 560px; }
+.cr-table a { text-decoration: none; }
+
+/* v9: line icons instead of emoji */
+.cr-icon { width: 17px; height: 17px; display: block; flex: none; }
+.cr-folder-icon { display: inline-flex; color: var(--secondary); }
+.cr-folder-list li.active .cr-folder-icon { color: var(--primary); }
+.dc-file { display: inline-flex; align-items: center; gap: 4px; color: var(--primary); font-size: 13px; }
+.dc-file .cr-icon { width: 15px; height: 15px; }
+.cr-folders-tools button { display: inline-flex; align-items: center; justify-content: center; }
+.cr-folders-tools .cr-icon { width: 15px; height: 15px; }

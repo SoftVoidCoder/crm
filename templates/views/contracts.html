@@ -26,9 +26,9 @@
             <div class="cr-folders-head">
                 <strong>Папки</strong>
                 <span class="cr-folders-tools">
-                    <button type="button" title="Новая папка" onclick="crAddFolder()">+</button>
-                    <button type="button" title="Переименовать папку" onclick="crRenameFolder()">✎</button>
-                    <button type="button" title="Удалить папку" onclick="crDeleteFolder()">✕</button>
+                    <button type="button" title="Новая папка" aria-label="Новая папка" onclick="crAddFolder()"><svg class="cr-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                    <button type="button" title="Переименовать папку" aria-label="Переименовать папку" onclick="crRenameFolder()"><svg class="cr-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/></svg></button>
+                    <button type="button" title="Удалить папку" aria-label="Удалить папку" onclick="crDeleteFolder()"><svg class="cr-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg></button>
                 </span>
             </div>
             <ul id="crFolderList" class="cr-folder-list"></ul>

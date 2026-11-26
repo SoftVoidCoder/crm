@@ -93,6 +93,19 @@ const CR_SECTIONS = [
 ];
 const CR_HIDDEN_KEY = 'korda_cr_hidden_sections';
 
+// Line icons in the same style as the sidebar (stroke, currentColor) — no emoji.
+const CR_ICON_PATHS = {
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    trash: '<path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/>',
+    inbox: '<path d="M4 13h4l2 3h4l2-3h4"/><path d="M4 13l2-8h12l2 8v6H4z"/><path d="M12 3v7M9 7l3 3 3-3"/>',
+    outbox: '<path d="M4 13h4l2 3h4l2-3h4"/><path d="M4 13l2-8h3M15 5h3l2 8v6H4z"/><path d="M12 11V3M9 6l3-3 3 3"/>',
+    building: '<path d="M4 21V5l8-3 8 3v16"/><path d="M9 21v-5h6v5"/><path d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01"/>',
+    pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
+    archive: '<path d="M3 4h18v4H3z"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/>',
+    clip: '<path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/>',
+};
+const crIcon = name => `<svg class="cr-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${CR_ICON_PATHS[name] || ''}</svg>`;
+
 const crEsc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const crMoney = value => Number(value || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const crDate = value => {
@@ -180,7 +193,7 @@ function crRenderFolders() {
     ];
     list.innerHTML = items.map(item => `
         <li class="${String(crState.folder) === item.key ? 'active' : ''}" onclick="crSelectFolder('${item.key}')">
-            <span class="cr-folder-icon">${item.key === 'deleted' ? '🗑' : '📁'}</span>
+            <span class="cr-folder-icon">${crIcon(item.key === 'deleted' ? 'trash' : 'folder')}</span>
             <span class="cr-folder-name">${crEsc(item.name)}</span>
             <span class="cr-folder-count">${item.count}</span>
         </li>`).join('');
