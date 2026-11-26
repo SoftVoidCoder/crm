@@ -177,3 +177,42 @@
 .cr-params-table td:last-child { width: 26px; }
 .cr-toolbar-search { min-width: min(100%, 300px); }
 .cr-toolbar-search .cr-search { min-width: 0; width: 100%; }
+
+/* v4: full-screen registry. The shell caps .view-page at 1480px; the registry uses the whole window. */
+.main-content .view-page.cr-page { width: 100% !important; max-width: none !important; }
+.main-content:has(.cr-page[style*="block"]) { padding: 16px 20px 16px !important; }
+.cr-page { display: flex; flex-direction: column; height: calc(100vh - var(--topbar-height, 68px) - 32px); min-height: 560px; }
+.cr-page .cr-header { margin-bottom: 12px; align-items: center; }
+.cr-page .cr-layout { flex: 1; min-height: 0; grid-template-columns: clamp(220px, 15vw, 300px) minmax(0, 1fr); align-items: stretch; }
+.cr-page .cr-folders { overflow: auto; }
+.cr-page .cr-registry { display: flex; flex-direction: column; min-height: 0; }
+.cr-page .cr-table-wrap { flex: 1; min-height: 160px; max-height: none; }
+.cr-page .cr-hint { margin-top: 6px; }
+
+/* Compact controls: the shell styles every input as a 48px field. */
+.cr-page .cr-col-filter, .cr-page .cr-filterbar input[type="date"], .cr-page .cr-status-filter {
+    height: 30px !important; min-height: 0 !important; padding: 3px 8px !important; font-size: 13px !important; line-height: 1.2 !important; border-radius: 5px !important; box-shadow: none !important;
+}
+.cr-page .cr-col-filter { height: 26px !important; padding: 2px 6px !important; font-size: 12px !important; }
+.cr-page .cr-search { height: 36px !important; min-height: 0 !important; padding: 6px 10px !important; font-size: 14px !important; }
+.cr-page .cr-toolbar .btn-secondary, .cr-page .cr-toolbar .btn-primary { min-height: 0 !important; height: 34px !important; padding: 0 12px !important; font-size: 13.5px !important; }
+.cr-page .cr-toolbar { margin-bottom: 8px; }
+.cr-page .cr-filterbar { margin-bottom: 8px; }
+
+/* Table: readable size, columns sized to content so more fit on a laptop. */
+.cr-page .cr-table { width: max-content; min-width: 100%; font-size: 13.5px; }
+.cr-page .cr-table th { font-size: 11.5px !important; padding: 7px 8px !important; }
+.cr-page .cr-table td { font-size: 13.5px !important; padding: 7px 8px !important; }
+.cr-page .cr-filter-row th { top: 30px !important; }
+.cr-page .cr-empty { text-align: left; padding-left: 16px !important; }
+.cr-page .cr-folder-list li { font-size: 14.5px; padding: 8px 10px; }
+.cr-page .cr-footer { font-size: 13.5px; }
+
+/* Wide monitors: a bit larger everything. */
+@media (min-width: 1700px) {
+    .cr-page .cr-table td { font-size: 14px !important; }
+    .cr-page .cr-table th { font-size: 12px !important; }
+    .cr-modal--full { width: min(1800px, 100%); }
+}
+.cr-page > .cr-registry { flex: 1; min-height: 0; }
+.cr-page .cr-inn-search input { height: 36px !important; min-height: 0 !important; }
