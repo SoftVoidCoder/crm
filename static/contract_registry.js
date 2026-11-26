@@ -305,7 +305,7 @@ function crRenderTable() {
         body.innerHTML = `<tr><td colspan="${CR_COLUMNS.length}" class="cr-empty">${crState.contracts.length ? 'Ничего не найдено по фильтрам.' : 'Договоров нет. Нажми «+ Добавить договор», чтобы создать первый.'}</td></tr>`;
     } else {
         body.innerHTML = rows.map((contract, index) => `
-            <tr class="${crRowClass(contract)} ${contract.id === crState.selectedId ? 'cr-row--selected' : ''}" onclick="crSelectRow(${contract.id})" ondblclick="crOpenCard(${contract.id})">
+            <tr class="${crRowClass(contract)} ${contract.id === crState.selectedId ? 'cr-row--selected' : ''}" onclick="crSelectRow(${contract.id})" ondblclick="crOpenView(${contract.id})">
                 <td>${index + 1}</td>
                 <td><strong>${crEsc(contract.number)}</strong></td>
                 <td>${contract.seq_no || ''}</td>
@@ -353,6 +353,11 @@ function crTargetIds() {
 }
 
 function crOpenSelected() {
+    if (!crState.selectedId) return customAlert('Выбери договор в таблице.');
+    crOpenView(crState.selectedId);
+}
+
+function crEditSelected() {
     if (!crState.selectedId) return customAlert('Выбери договор в таблице.');
     crOpenCard(crState.selectedId);
 }
@@ -697,6 +702,7 @@ async function crOpenCard(contractId) {
          <button class="btn-secondary" type="button" data-act="profit">Рентабельность</button>
          <button class="btn-secondary" type="button" data-act="charts">Диаграммы</button>
          <button class="btn-secondary" type="button" data-act="print">Карточка договора</button>
+         <button class="btn-secondary" type="button" data-act="view">Просмотр</button>
          <button class="btn-secondary" type="button" data-act="close">Закрыть</button>
          ${readOnly ? '' : '<button class="btn-primary" type="button" data-act="save">Сохранить</button>'}`,
         { full: true, onClose: () => {
@@ -709,6 +715,7 @@ async function crOpenCard(contractId) {
     modal.querySelector('[data-act="close"]').onclick = () => modal.requestClose();
     modal.querySelector('[data-act="save"]')?.addEventListener('click', () => crSaveCard());
     modal.querySelector('[data-act="print"]').onclick = () => crPrintCard();
+    modal.querySelector('[data-act="view"]').onclick = () => crViewFromCard();
     modal.querySelector('[data-act="tabs"]').onclick = () => crOpenTabSettings();
     modal.querySelector('[data-act="param"]').onclick = () => crOpenParamDialog();
     modal.querySelector('[data-act="profit"]').onclick = () => crSwitchSection('profit');
@@ -1458,6 +1465,148 @@ function crPrintApprovals() {
         <td>${CR_APPROVAL_LABELS[a.status] || ''}</td><td>${a.decided_at ? new Date(a.decided_at * 1000).toLocaleString('ru-RU') : ''}</td><td>${crEsc(a.comment)}</td><td></td></tr>`).join('')}</table>`);
 }
 
+// ---------- contract view (read-only summary) ----------
+
+function crDaysLeft(c) {
+    if (Number(c.indefinite)) return { text: 'бессрочный', cls: 'ok' };
+    if (!c.end_date) return null;
+    const days = Math.round((new Date(`${c.end_date}T00:00:00`) - new Date(`${crToday()}T00:00:00`)) / 86400000);
+    if (['executed', 'terminated', 'archive'].includes(c.status)) return { text: `до ${crDate(c.end_date)}`, cls: 'muted' };
+    if (days < 0) return { text: `просрочен на ${-days} дн.`, cls: 'bad' };
+    if (days <= Math.max(Number(c.notify_days || 0), 30)) return { text: `осталось ${days} дн.`, cls: 'warn' };
+    return { text: `осталось ${days} дн.`, cls: 'ok' };
+}
+
+function crViewHtml(c) {
+    const facts = (rows) => {
+        const filled = rows.filter(([, v]) => v !== '' && v !== null && v !== undefined && v !== false);
+        return filled.length ? `<dl class="crv-facts">${filled.map(([k, v]) => `<div><dt>${k}</dt><dd>${v === true ? 'да' : crEsc(v)}</dd></div>`).join('')}</dl>` : '';
+    };
+    const block = (title, body) => body ? `<section class="crv-block"><h3>${title}</h3>${body}</section>` : '';
+    const kinds = { other: 'Другой', expense: 'Расходный', income: 'Доходный' };
+    const days = crDaysLeft(c);
+    const vat = Number(c.vat_enabled) ? Number(c.vat_amount || 0) : 0;
+    const flags = [
+        Number(c.framework) && 'Рамочный', Number(c.indefinite) && 'Бессрочный', Number(c.prolongation) && `Пролонгация${c.prolongation_terms ? `: ${c.prolongation_terms}` : ''}`,
+        Number(c.payment_deferral) && 'Отсрочка платежа', Number(c.internal_only) && 'Для служебного пользования', Number(c.flagged) && 'Отмечен в реестре',
+    ].filter(Boolean);
+
+    const parties = c.parties.length ? `<div class="crv-parties">${c.parties.map(p => `
+        <div class="crv-party"><span class="crv-role">${crEsc(p.role || 'Сторона')}</span><strong>${crEsc(p.short_name || p.name)}</strong>
+        <small>${[p.inn && `ИНН ${crEsc(p.inn)}`, p.kpp && `КПП ${crEsc(p.kpp)}`].filter(Boolean).join(' · ')}</small>
+        ${p.legal_address ? `<small>${crEsc(p.legal_address)}</small>` : ''}</div>`).join('')}</div>` : '';
+
+    const signing = facts([
+        ['На подписании у контрагента', Number(c.on_counterparty_signing) ? true : ''], ['Передан на подпись', crDate(c.sent_for_signing_date)],
+        ['Подписан', Number(c.signed) ? (crDate(c.signed_date) || true) : ''], ['Способ подписания', c.signing_method],
+        ['На рассмотрении у контрагента', Number(c.on_counterparty_review) ? true : ''], ['Отправлен контрагенту', crDate(c.sent_to_counterparty_date)],
+        ['Статус оригинала', c.original_status],
+    ]);
+
+    const texts = CR_MAIN_TABS.filter(([key]) => String(c[key] || '').trim()).map(([key, label]) =>
+        `<div class="crv-text"><h4>${label}</h4><p>${crEsc(c[key]).replace(/\n/g, '<br>')}</p></div>`).join('');
+
+    const custom = c.custom || {};
+    const params = facts(crState.params.map(p => [crEsc(p.name), p.field_type === 'date' ? crDate(custom[String(p.id)]) : (custom[String(p.id)] || '')]));
+
+    const approved = c.approvals.filter(a => a.status === 'approved' || a.status === 'approved_with_notes').length;
+    const approvals = c.approvals.length ? `
+        <div class="crv-progress"><span style="width:${Math.round(approved / c.approvals.length * 100)}%"></span></div>
+        <p class="crv-sub">Согласовано ${approved} из ${c.approvals.length}</p>
+        <table class="crv-table"><tr><th>Согласующий</th><th>Должность</th><th>Состояние</th><th>Дата решения</th><th>Комментарий</th></tr>
+        ${c.approvals.map(a => `<tr><td>${crEsc(a.approver)}</td><td>${crEsc([a.position, a.department].filter(Boolean).join(', '))}</td>
+        <td><span class="cr-status cr-status--${a.status}">${CR_APPROVAL_LABELS[a.status] || a.status}</span></td>
+        <td>${a.decided_at ? new Date(a.decided_at * 1000).toLocaleString('ru-RU') : (a.due_date ? `срок ${crDate(a.due_date)}` : '')}</td><td>${crEsc(a.comment)}</td></tr>`).join('')}</table>` : '';
+
+    const money = crProfitData(c);
+    const payments = c.items.payments || [];
+    const finance = (payments.length || money.expenses || money.supplements) ? `
+        <div class="crv-kpis">
+            <div><span>Оплачено (факт)</span><strong>${crMoney(money.payIn)}</strong></div>
+            <div><span>Ожидается (план)</span><strong>${crMoney(money.planIn)}</strong></div>
+            <div><span>Расходы</span><strong>${crMoney(money.expenses)}</strong></div>
+            <div><span>${c.kind === 'expense' ? 'Итого расходов' : 'Прибыль'}</span><strong class="${money.profit < 0 ? 'cr-neg' : 'cr-pos'}">${crMoney(money.profit)}</strong></div>
+        </div>` : '';
+
+    const itemTables = Object.entries(CR_ITEM_SECTIONS).filter(([key]) => key !== 'access' && (c.items[key] || []).length).map(([key, schema]) =>
+        block(`${schema.title} <span class="crv-count">${c.items[key].length}</span>`, `<table class="crv-table"><tr>${schema.cols.map(col => `<th>${col[1]}</th>`).join('')}</tr>
+            ${c.items[key].map(r => `<tr>${schema.cols.map(col => `<td class="${col[2] === 'money' ? 'cr-num' : ''}">${crItemCell(col, r[col[0]])}</td>`).join('')}</tr>`).join('')}</table>`)).join('');
+
+    const files = c.files.length ? `<ul class="crv-files">${c.files.map(f => `<li><a href="${crEsc(f.file_url)}" target="_blank" rel="noopener">${crEsc(f.filename)}</a><small>${crEsc(f.uploaded_by)} · ${new Date(f.created_at * 1000).toLocaleDateString('ru-RU')}</small></li>`).join('')}</ul>` : '';
+    const access = (c.items.access || []).length ? `<p class="crv-sub">Доступ ограничен: ${(c.items.access || []).map(r => crItemCell(CR_ITEM_SECTIONS.access.cols[0], r.user) + (r.level === 'edit' ? ' (изменение)' : ' (просмотр)')).join(', ')}</p>` : '';
+
+    return `
+        <div class="crv">
+            <header class="crv-hero">
+                <div>
+                    <div class="crv-eyebrow">${crEsc(c.doc_type_name || 'Договор')}${c.folder_name ? ` · папка «${crEsc(c.folder_name)}»` : ''}</div>
+                    <h2>Договор № ${crEsc(c.number)}</h2>
+                    <div class="crv-tags">
+                        <span class="cr-pill cr-pill--${crEsc(c.status)}">${CR_STATUSES[c.status] || ''}</span>
+                        <span class="crv-tag">${kinds[c.kind] || 'Другой'}</span>
+                        ${days ? `<span class="crv-tag crv-tag--${days.cls}">${days.text}</span>` : ''}
+                        ${flags.map(f => `<span class="crv-tag">${crEsc(f)}</span>`).join('')}
+                    </div>
+                </div>
+                <div class="crv-sum">
+                    <strong>${crMoney(c.amount)} ${crEsc(c.currency === 'RUB' ? '₽' : c.currency)}</strong>
+                    <small>${Number(c.vat_enabled) ? `в т.ч. НДС ${Number(c.vat_rate)}%: ${crMoney(vat)} · без НДС ${crMoney(c.amount_without_vat)}` : 'без НДС'}</small>
+                </div>
+            </header>
+            ${access}
+            ${block('Стороны договора', parties)}
+            ${block('Реквизиты', facts([
+                ['Дата создания', crDate(c.created_date)], ['Дата заключения', crDate(c.concluded_date)],
+                ['Дата окончания', Number(c.indefinite) ? 'бессрочный' : crDate(c.end_date)], ['Входящий номер', c.incoming_number],
+                ['Дополнительный номер', c.extra_number], ['Номер гос. регистрации', c.gov_reg_number], ['Порядковый номер', c.seq_no || ''],
+                ['Ответственный', c.responsible], ['Инициатор', c.initiator], ['Тендер', c.tender], ['Категория', c.category],
+                ['Уведомление об окончании', Number(c.notify_enabled) ? `за ${c.notify_days || 0} дн.${c.notify_date ? `, ${crDate(c.notify_date)}` : ''}` : ''],
+            ]))}
+            ${block('Подписание', signing)}
+            ${texts ? block('Условия и описание', `<div class="crv-texts">${texts}</div>`) : ''}
+            ${block('Пользовательские параметры', params)}
+            ${block('Согласование', approvals)}
+            ${block('Финансы', finance)}
+            ${itemTables}
+            ${block('Файлы', files)}
+            <p class="crv-sub">ID ${c.id}${c.updated_at ? ` · изменён ${new Date(c.updated_at * 1000).toLocaleString('ru-RU')}` : ''}${c.updated_by ? ` · ${crEsc(c.updated_by)}` : ''}</p>
+        </div>`;
+}
+
+async function crOpenView(contractId) {
+    const [c] = await Promise.all([apiCall(`/cr/contracts/${contractId}`), crLoadParams(), crLoadUsers()]);
+    if (crFail(c)) return customAlert(crErrorText(c, 'Не удалось открыть договор.'));
+    const canEdit = c.access_level === 'edit';
+    const modal = crModal(`Договор № ${c.number}`, crViewHtml(c),
+        `<button class="btn-secondary" type="button" data-act="print">Печать</button>
+         <button class="btn-secondary" type="button" data-act="close">Закрыть</button>
+         ${canEdit ? '<button class="btn-primary" type="button" data-act="edit">Изменить</button>' : '<span class="cr-muted">Только просмотр</span>'}`,
+        { wide: true });
+    modal.querySelector('.cr-modal').classList.add('cr-modal--view');
+    modal.querySelector('[data-act="close"]').onclick = () => modal.closeModal();
+    modal.querySelector('[data-act="print"]').onclick = () => crPrintView(c);
+    modal.querySelector('[data-act="edit"]')?.addEventListener('click', () => { modal.closeModal(); crOpenCard(c.id); });
+}
+
+function crPrintView(c) {
+    const win = window.open('', '_blank');
+    if (!win) return customAlert('Браузер заблокировал окно печати. Разреши всплывающие окна для сайта.');
+    win.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Договор ${crEsc(c.number)}</title>
+        <link rel="stylesheet" href="/static/styles/contract_registry.css?v=6"><style>body{margin:24px;font:13px/1.45 Arial,sans-serif;color:#18212b;background:#fff}</style></head>
+        <body>${crViewHtml(c)}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
+    win.document.close();
+}
+
+async function crViewFromCard() {
+    if (crState.cardDirty) {
+        await crSaveCard();
+        if (crState.cardDirty) return;
+    }
+    const id = crState.card.id;
+    crState.cardModal.requestClose();
+    crOpenView(id);
+}
+
 // ---------- counterparties ----------
 
 function crSwitchPageTab(tab) {
@@ -1590,7 +1739,7 @@ if (/^#cr=\d+$/.test(location.hash || '')) {
 
 Object.assign(window, {
     renderContractRegistry, renderCounterparties, crSelectFolder, crSetPeriod, crScheduleSearch, crSelectRow, crToggleCheck,
-    crOpenSelected, crOpenInNewTab, crCopySelected, crDeleteSelected, crBulkStatus, crExport, crToggleExportMenu, crAddFolder,
+    crOpenSelected, crEditSelected, crOpenView, crViewFromCard, crOpenInNewTab, crCopySelected, crDeleteSelected, crBulkStatus, crExport, crToggleExportMenu, crAddFolder,
     crRenameFolder, crDeleteFolder, crOpenDocTypes, crOpenCreate, crOpenCard, crSwitchSection, crSwitchMainTab, crAddParty,
     crUpdateParty, crDeleteParty, crExportParties, crPrintEnvelope, crAddApproval, crDecide, crDeleteApproval,
     crOpenApprovalTemplates, crExportApprovals, crUploadFiles, crDeleteFile, crPrintApprovals, crRenderCounterparties,

@@ -227,3 +227,48 @@
 .cr-page .cr-inn-inline input { width: 190px; height: 36px !important; min-height: 0 !important; padding: 6px 10px !important; font-size: 14px !important; border: 1px solid var(--border-strong); border-radius: 6px; }
 .cr-inn-status { margin: -6px 0 8px; min-height: 0; }
 .cr-inn-status:empty { display: none; }
+
+/* v6: read-only contract view (also used for printing, so literal colours as fallbacks) */
+.cr-modal--view { width: min(1100px, 100%); }
+.crv { color: #18212b; font-size: 14px; }
+.crv-hero { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; padding: 18px 20px; border-radius: 12px; background: linear-gradient(135deg, #e7f4f2, #f7fbfa); border: 1px solid #cfe7e3; margin-bottom: 16px; flex-wrap: wrap; }
+.crv-hero h2 { margin: 4px 0 10px; font-size: 26px; letter-spacing: -.01em; }
+.crv-eyebrow { color: #4b6b67; font-size: 13px; font-weight: 600; }
+.crv-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.crv-tag { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #fff; border: 1px solid #d6e2e0; font-size: 12px; font-weight: 600; color: #4b5a66; }
+.crv-tag--ok { color: #198754; border-color: #bfe3cf; }
+.crv-tag--warn { color: #9a5b00; background: #fff6d6; border-color: #f1d98a; }
+.crv-tag--bad { color: #c2413b; background: #fde3e1; border-color: #f3b7b2; }
+.crv-tag--muted { color: #687582; }
+.crv-sum { text-align: right; }
+.crv-sum strong { display: block; font-size: 28px; color: #0f766e; white-space: nowrap; }
+.crv-sum small { color: #4b5a66; font-size: 12.5px; }
+.crv-block { border: 1px solid #dfe4e8; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; background: #fff; break-inside: avoid; }
+.crv-block h3 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #0f766e; }
+.crv-count { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; background: #e7f4f2; color: #0f766e; font-size: 11px; text-align: center; }
+.crv-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 18px; margin: 0; }
+.crv-facts div { min-width: 0; }
+.crv-facts dt { font-size: 11.5px; color: #687582; margin-bottom: 2px; }
+.crv-facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.crv-parties { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.crv-party { display: flex; flex-direction: column; gap: 3px; padding: 12px; border-radius: 8px; background: #f7f8fa; border: 1px solid #e6eaee; }
+.crv-party small { color: #687582; font-size: 12px; }
+.crv-role { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #d97706; }
+.crv-texts { display: grid; gap: 12px; }
+.crv-text h4 { margin: 0 0 4px; font-size: 12px; color: #687582; }
+.crv-text p { margin: 0; line-height: 1.5; }
+.crv-progress { height: 8px; border-radius: 999px; background: #e9eef1; overflow: hidden; }
+.crv-progress span { display: block; height: 100%; background: #0f766e; border-radius: 999px; }
+.crv-sub { color: #687582; font-size: 12.5px; margin: 6px 0 10px; }
+.crv-table { width: 100% !important; min-width: 0 !important; border-collapse: collapse; font-size: 13px; }
+.crv-table th { text-align: left; font-size: 11.5px; color: #687582; font-weight: 600; padding: 6px 8px !important; border-bottom: 1px solid #dfe4e8 !important; background: #f7f8fa !important; }
+.crv-table td { padding: 6px 8px !important; border-bottom: 1px solid #eef1f3 !important; background: #fff !important; font-size: 13px !important; color: #18212b !important; }
+.crv-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.crv-kpis div { border: 1px solid #e6eaee; border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.crv-kpis span { font-size: 12px; color: #687582; }
+.crv-kpis strong { font-size: 18px; }
+.crv-files { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.crv-files li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 6px; background: #f7f8fa; }
+.crv-files small { color: #687582; }
+@media (max-width: 760px) { .crv-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .crv-sum { text-align: left; } }
+@media print { .crv-block { border-color: #ccc; } .crv-hero { background: #f3f7f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
