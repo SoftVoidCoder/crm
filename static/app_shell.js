@@ -131,17 +131,23 @@ async function register() {
     const name = document.getElementById('regName').value.trim();
     const email = document.getElementById('regEmail').value.trim();
     const pass = document.getElementById('regPassword').value;
+    const department = (document.getElementById('regDepartment')?.value || '').trim();
+    const position = (document.getElementById('regPosition')?.value || '').trim();
     const errDiv = document.getElementById('regError');
     const btn = document.querySelector('#registerFormCard button');
     if (!name || !email || !pass) {
-        errDiv.innerText = "Заполните все поля!";
+        errDiv.innerText = "Заполните ФИО, корпоративную почту и пароль от неё.";
+        return;
+    }
+    if (name.split(/\s+/).filter(Boolean).length < 2) {
+        errDiv.innerText = "Укажите ФИО полностью: фамилию и имя.";
         return;
     }
     if (btn) {
-        btn.innerText = "Отправка...";
+        btn.innerText = "Проверяем почту...";
         btn.disabled = true;
     }
-    const res = await apiCall('/register', 'POST', { email, password: pass, name });
+    const res = await apiCall('/register', 'POST', { email, password: pass, name, department, position });
     if (!res || res.error) {
         errDiv.innerText = (res && res.error) ? res.error : "Ошибка сервера";
         if (btn) {
@@ -151,7 +157,7 @@ async function register() {
         return;
     }
     currentUser = null;
-    customAlert("Заявка успешно отправлена!\nОжидайте одобрения Директором.").then(() => {
+    customAlert("Заявка отправлена!\nПочта проверена и подключена. Когда руководитель одобрит доступ, придёт письмо — входите корпоративной почтой и её паролем.").then(() => {
         window.location.href = '/static/login.html';
     });
 }

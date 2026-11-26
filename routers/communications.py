@@ -1,4 +1,4 @@
-import json, time, email, datetime, asyncio, os, secrets, imaplib, html, mimetypes, base64, socket
+import json, time, email, datetime, asyncio, os, secrets, imaplib, html, mimetypes, base64, socket, threading
 import xml.etree.ElementTree as ET
 from email.utils import parseaddr
 import smtplib
@@ -1188,6 +1188,84 @@ def _send_exchange_ews(account: dict, email_message: EmailMessage, recipient: st
         return False, error[:500]
     except Exception as exc:
         return False, str(exc)[:500] or "ews_send_failed"
+
+
+KORDA_MAIL_DOMAIN = "korda.spb.ru"
+
+
+def _korda_mailbox_account(address: str, password: str) -> dict:
+    return {
+        "address": address, "login": address, "password": password,
+        "smtp_login": address, "smtp_password": password,
+        "imap_host": EXCHANGE_EWS_HOST, "smtp_host": EXCHANGE_EWS_HOST,
+    }
+
+
+def verify_korda_mailbox(address: str, password: str) -> str:
+    """'' when the corporate mailbox accepts the password, 'auth' when it rejects it, 'unavailable' otherwise."""
+    try:
+        _exchange_ews_item_ids(_korda_mailbox_account(address, password), limit=1)
+        return ""
+    except Exception as exc:
+        text = str(exc).lower()
+        if "authentication failed" in text or "401" in text or "неверный логин" in text:
+            return "auth"
+        logger.warning("Korda mailbox check failed for %s: %s", address, exc)
+        return "unavailable"
+
+
+def bind_korda_mailbox(owner: dict, password: str, *, sync: bool = False) -> int:
+    """Create (or refresh the password of) the owner's own Korda Mail mailbox in «Почта»."""
+    address = _safe_text(owner.get("email")).lower()
+    conn = get_connection(row_factory=True)
+    try:
+        existing = conn.execute(
+            """
+            SELECT a.id FROM email_accounts a JOIN email_account_owners eo ON eo.account_id=a.id
+            WHERE LOWER(a.address)=? AND LOWER(COALESCE(eo.owner_email, ''))=? ORDER BY a.id LIMIT 1
+            """,
+            (address, address),
+        ).fetchone()
+        if existing:
+            secret = encrypt_secret(password)
+            conn.execute("UPDATE email_accounts SET password=?, smtp_password=?, last_error='', sync_fail_count=0, next_retry_at=0, updated_at=? WHERE id=?",
+                         (secret, secret, int(time.time()), existing["id"]))
+            conn.commit()
+            account_id = int(existing["id"])
+        else:
+            account_id = 0
+    finally:
+        conn.close()
+    if not account_id:
+        data = EmailAccountData(label=address.split("@")[0], address=address, login=address, password=password,
+                                imap_host=EXCHANGE_EWS_HOST, smtp_host=EXCHANGE_EWS_HOST, smtp_login=address,
+                                smtp_password=password, is_default=1, is_active=1)
+        result = create_email_account_record_service(
+            data, actor=owner, get_connection=get_connection, normalize_payload_fn=_normalize_email_account_payload,
+            encrypt_secret_fn=encrypt_secret, audit_log_fn=audit_log, load_account_fn=_load_email_account,
+            sync_account_fn=lambda account, force: None, is_locked_error_fn=_is_locked_error,
+        )
+        account_id = int(result.get("id") or 0)
+    if sync and account_id:
+        account = _load_email_account(account_id)
+        if account:
+            threading.Thread(target=sync_email_account, args=(account,), kwargs={"force": True}, daemon=True).start()
+    return account_id
+
+
+def delete_owned_mailboxes(owner_email: str):
+    owner_email = _safe_text(owner_email).lower()
+    conn = get_connection()
+    try:
+        ids = [row[0] for row in conn.execute("SELECT account_id FROM email_account_owners WHERE LOWER(COALESCE(owner_email, ''))=?", (owner_email,)).fetchall()]
+        for account_id in ids:
+            conn.execute("DELETE FROM email_attachments WHERE message_id IN (SELECT id FROM email_messages WHERE account_id=?)", (account_id,))
+            conn.execute("DELETE FROM email_messages WHERE account_id=?", (account_id,))
+            conn.execute("DELETE FROM email_account_owners WHERE account_id=?", (account_id,))
+            conn.execute("DELETE FROM email_accounts WHERE id=?", (account_id,))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _test_email_account_connection(account: dict):

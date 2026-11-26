@@ -10,6 +10,7 @@ import shutil
 import struct
 import subprocess
 from urllib.parse import urlparse, unquote, parse_qs
+from settings import PUBLIC_BASE_URL
 from fastapi import APIRouter, BackgroundTasks, Request, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse, FileResponse
 from database import (
@@ -60,7 +61,7 @@ from schemas import (
     UserScopeData,
     SessionRevokeData,
     TwoFactorCodeData,
-    FieldAccessRuleData, UserProfileData)
+    FieldAccessRuleData, UserProfileData, RejectData)
 from app_logging import get_logger
 from settings import BACKUP_RETENTION_COUNT
 from utils import (
@@ -334,25 +335,76 @@ def register(data: AuthData, bg_tasks: BackgroundTasks, request: Request):
     record_auth_attempt("register_ip", ip_address, 0)
 
     if not email or not password or not name:
-        return {"error": "Заполните имя, email и пароль"}
+        return {"error": "Заполните ФИО, корпоративную почту и пароль от неё"}
     if full_name_error(name):
         return {"error": full_name_error(name)}
     if not is_valid_email(email):
         return {"error": "Введите корректный email"}
-    password_error = validate_password_strength(password)
-    if password_error:
-        return {"error": password_error}
+    # Self-registration is only for company mailboxes: the password is checked on the Korda mail server,
+    # so nobody can sign up with someone else's address. Other people are added by the director.
+    from routers.communications import KORDA_MAIL_DOMAIN, bind_korda_mailbox, verify_korda_mailbox
+    if not email.endswith(f"@{KORDA_MAIL_DOMAIN}"):
+        return {"error": f"Регистрация только по корпоративной почте @{KORDA_MAIL_DOMAIN}"}
 
     conn = get_connection(); c = conn.cursor()
     c.execute("SELECT * FROM users WHERE email=?", (email,))
-    if c.fetchone():
-        conn.close()
+    exists = c.fetchone()
+    conn.close()
+    if exists:
         audit_log("register_duplicate", actor_email=email, actor_name=name, entity_type="user", entity_id=email, ip_address=ip_address, user_agent=user_agent)
-        return {"error": "Email занят"}
-    c.execute("INSERT INTO users (email, password, name, role, status) VALUES (?, ?, ?, ?, ?)", (email, hash_password(password), name, None, 'pending'))
+        return {"error": "С этой почтой уже есть заявка или учётная запись"}
+    check = verify_korda_mailbox(email, password)
+    if check == "auth":
+        return {"error": "Почтовый сервер Korda не принял пароль. Введите пароль от своей корпоративной почты."}
+    if check:
+        return {"error": "Почтовый сервер Korda сейчас не отвечает. Попробуйте через пару минут."}
+
+    conn = get_connection(); c = conn.cursor()
+    c.execute(
+        "INSERT INTO users (email, password, name, role, status, department, position) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (email, hash_password(password), name[:200], None, 'pending', (data.department or "").strip()[:200], (data.position or "").strip()[:200]),
+    )
     conn.commit(); conn.close()
+    bind_korda_mailbox({"email": email, "name": name}, password)
     audit_log("register_submitted", actor_email=email, actor_name=name, entity_type="user", entity_id=email, ip_address=ip_address, user_agent=user_agent)
-    bg_tasks.add_task(send_email_task, DEPT_EMAILS["Директор"], 'Новая заявка', f'Пользователь {name} ждет одобрения.')
+    details = ", ".join(filter(None, [(data.position or "").strip(), (data.department or "").strip()]))
+    message = f"{name}{f' ({details})' if details else ''}, {email} — ждёт решения в «Доступах»."
+    for director in _director_emails():
+        create_notification("Новая заявка на доступ", message, user_email=director, category="user", entity_type="user", entity_id=email)
+        bg_tasks.add_task(send_email_task, director, "Новая заявка на доступ — Korda CRM", f"{message}\n\nОткрыть CRM: {PUBLIC_BASE_URL}/app")
+    return {"status": "success"}
+
+
+def _director_emails() -> list[str]:
+    conn = get_connection(row_factory=True)
+    try:
+        rows = conn.execute("SELECT email FROM users WHERE role=? AND status='approved'", (DIRECTOR_ROLE,)).fetchall()
+    finally:
+        conn.close()
+    return [row["email"] for row in rows]
+
+
+@router.post("/api/users/reject")
+def reject_user(data: RejectData, bg_tasks: BackgroundTasks, request: Request):
+    actor = _director_from_session(request)
+    if not actor:
+        return {"error": "forbidden"}
+    email = normalize_email(data.email)
+    before = _load_user_snapshot(email)
+    if not before or before.get("status") != "pending":
+        return {"error": "not_pending", "message": "Заявка не найдена или уже рассмотрена."}
+    from routers.communications import delete_owned_mailboxes
+    conn = get_connection()
+    try:
+        conn.execute("DELETE FROM users WHERE email=? AND status='pending'", (email,))
+        conn.commit()
+    finally:
+        conn.close()
+    delete_owned_mailboxes(email)
+    reason = (data.reason or "").strip()[:500]
+    audit_log("user_rejected", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="user", entity_id=email, details={"reason": reason})
+    bg_tasks.add_task(send_email_task, email, "Заявка на доступ отклонена — Korda CRM",
+                      f"Ваша заявка на доступ в Korda CRM отклонена.{f' Причина: {reason}' if reason else ''}\n\nЕсли это ошибка, обратитесь к руководителю.")
     return {"status": "success"}
 
 @router.post("/api/login")
@@ -371,6 +423,13 @@ def login(data: AuthData, request: Request):
     c.execute("SELECT * FROM users WHERE LOWER(email)=? OR LOWER(COALESCE(username, ''))=?", (identifier_email, identifier_login))
     user = c.fetchone()
     conn.close()
+    if user and data.password and not verify_password(data.password, user["password"]) and user.get("status") == "approved":
+        # Company accounts log in with their mailbox password: if it changed on the mail server, accept and remember it.
+        from routers.communications import KORDA_MAIL_DOMAIN, bind_korda_mailbox, verify_korda_mailbox
+        if str(user.get("email", "")).lower().endswith(f"@{KORDA_MAIL_DOMAIN}") and verify_korda_mailbox(user["email"], data.password) == "":
+            conn = get_connection(); conn.execute("UPDATE users SET password=? WHERE email=?", (hash_password(data.password), user["email"])); conn.commit(); conn.close()
+            bind_korda_mailbox({"email": user["email"], "name": user.get("name", "")}, data.password)
+            user = dict(user); user["password"] = hash_password(data.password)
     if not user or not verify_password(data.password, user["password"]):
         audit_log("login_failed", actor_email=identifier_email, entity_type="user", entity_id=identifier_raw, ip_address=ip_address, user_agent=user_agent)
         return {"error": "Ошибка входа"}
@@ -579,6 +638,8 @@ def approve(data: RoleData, request: Request):
     ip_address, user_agent = _request_meta(request)
     audit_log("user_approved", actor_email=actor.get("email", ""), actor_name=actor.get("name", ""), entity_type="user", entity_id=email, details={"role": role, "is_head": data.is_head}, ip_address=ip_address, user_agent=user_agent)
     create_notification("Доступ одобрен", f"Твоя заявка в Korda CRM одобрена. Роль: {role}.", user_email=email, category="user", entity_type="user", entity_id=email)
+    send_email_task(email, "Доступ в Korda CRM одобрен",
+                    f"Здравствуйте, {name}!\n\nВаша заявка одобрена. Роль: {role}.\nВход: {PUBLIC_BASE_URL}/app — корпоративная почта и пароль от неё.")
     return {"status": "success"}
 
 

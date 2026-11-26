@@ -1959,7 +1959,7 @@ async function openAdminPanelLogic() {
         <td>${profileUiEscape(u.email || '')}</td>
         <td><select id="role_${i}" class="auth-input admin-role-select"><option value="" selected>Выберите роль</option>${opts}</select></td>
         <td><label class="admin-head-check"><input type="checkbox" id="head_${i}"><span>Руководитель</span></label></td>
-        <td><button class="btn-primary" onclick="approveUser('${u.email}', ${i})">Принять</button></td>
+        <td><div class="admin-row-actions"><button class="btn-primary" onclick="approveUser('${u.email}', ${i})">Принять</button><button class="btn-secondary" onclick="rejectUser('${u.email}')">Отклонить</button></div></td>
     </tr>`).join('') : `<tr><td colspan="5"><div class="admin-empty-state"><strong>Новых заявок нет</strong><span>Когда сотрудник запросит доступ, он появится здесь.</span></div></td></tr>`;
 
     const approvedUsers = (allUsersDB || []).filter(user => user.status === 'approved');
@@ -1992,6 +1992,16 @@ async function approveUser(e, i) {
     renderProfile();
     showToast('Сотрудники', 'Доступ подтверждён');
 }
+
+async function rejectUser(email) {
+    const reason = typeof crPromptName === 'function' ? await crPromptName(`Отклонить заявку ${email}? Причина (придёт сотруднику на почту, можно оставить пустой)`) : '';
+    if (reason === null) return;
+    const res = await apiCall('/users/reject', 'POST', { email, reason });
+    if (!res || res.error) return customAlert(res?.message || 'Не удалось отклонить заявку.');
+    await openAdminPanelLogic();
+    showToast('Сотрудники', 'Заявка отклонена');
+}
+window.rejectUser = rejectUser;
 
 function renderAdminTeamList() {
     const tbody = document.getElementById('adminTeamList');

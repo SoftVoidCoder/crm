@@ -13,11 +13,11 @@
             <div id="loginError" style="color: var(--danger); font-size: 13px; margin-bottom: 10px; text-align: center;"></div>
             <label class="form-field" style="display:block; margin-bottom:10px;">
           <span class="form-label">Логин или эл. почта</span>
-                <input type="text" id="loginEmail" placeholder="Admin или user@пример.рф" class="auth-input" autocomplete="username">
+                <input type="text" id="loginEmail" placeholder="Корпоративная почта (или логин Admin)" class="auth-input" autocomplete="username">
             </label>
             <label class="form-field" style="display:block; margin-bottom:10px;">
                 <span class="form-label">Пароль</span>
-                <input type="password" id="loginPassword" placeholder="Введите пароль" class="auth-input" autocomplete="current-password">
+                <input type="password" id="loginPassword" placeholder="Пароль (от корпоративной почты)" class="auth-input" autocomplete="current-password">
             </label>
             <label class="form-field" style="display:none; margin-bottom:10px;" id="loginOtpWrap">
           <span class="form-label">Код двухфакторной защиты</span>
@@ -49,7 +49,7 @@
     <div id="toastContainer" class="toast-container"></div>
     
     <script src="app_api.js?v=8"></script>
-    <script src="app_shell.js?v=31a"></script>
+    <script src="app_shell.js?v=33"></script>
     <script src="core.js?v=29a"></script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 
-class AuthData(BaseModel): email: str; password: str = ""; name: str = ""; otp_code: str = ""
+class AuthData(BaseModel): email: str; password: str = ""; name: str = ""; otp_code: str = ""; department: str = ""; position: str = ""
+class RejectData(BaseModel): email: str; reason: str = ""
 class RoleData(BaseModel): email: str; role: str; is_head: int = 0; name: str = ""; department: str = ""; position: str = ""
 class UserProfileData(BaseModel): email: str; name: str; department: str = ""; position: str = ""
 class UserInviteData(BaseModel): email: str; name: str; role: str; password: str; is_head: int = 0; department: str = ""; position: str = ""
