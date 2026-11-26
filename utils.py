@@ -1,4 +1,5 @@
 import base64
+import functools
 import hashlib
 import hmac
 import re
@@ -115,6 +116,8 @@ def verify_document_qr_token(document_id: int, token: str) -> bool:
     return hmac.compare_digest(expected, candidate)
 
 
+# PBKDF2 costs ~2s on the VPS CPU; the result depends only on salt, so reuse it.
+@functools.lru_cache(maxsize=512)
 def _derive_secret_key(salt: bytes, iterations: int = 200000) -> bytes:
     return hashlib.pbkdf2_hmac("sha256", APP_SECRET.encode("utf-8"), salt, iterations, dklen=32)
 
