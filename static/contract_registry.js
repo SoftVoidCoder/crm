@@ -739,7 +739,7 @@ function crRenderCard() {
     const hidden = crHiddenSections();
     modal.querySelector('#crCardNav').innerHTML = CR_SECTIONS.filter(([key]) => key === 'main' || !hidden.has(key)).map(([key, label]) => {
         const count = crSectionCount(contract, key);
-        return `<button type="button" class="${crState.cardSection === key ? 'active' : ''}" onclick="crSwitchSection('${key}')">${label}${count !== null ? ` <span>${count}</span>` : ''}</button>`;
+        return `<button type="button" class="${crState.cardSection === key ? 'active' : ''}" onclick="crSwitchSection('${key}')"><span class="cr-nav-label">${label}</span><span class="cr-nav-count">${count !== null ? count : ''}</span></button>`;
     }).join('');
     const updated = contract.updated_at ? new Date(contract.updated_at * 1000).toLocaleString('ru-RU') : '';
     modal.querySelector('#crCardMeta').textContent = `ID ${contract.id}${updated ? ` · изменён ${updated}` : ''}${contract.updated_by ? ` · ${contract.updated_by}` : ''}`;

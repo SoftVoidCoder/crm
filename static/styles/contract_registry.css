@@ -272,3 +272,10 @@
 .crv-files small { color: #687582; }
 @media (max-width: 760px) { .crv-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .crv-sum { text-align: left; } }
 @media print { .crv-block { border-color: #ccc; } .crv-hero { background: #f3f7f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+
+/* v7: card menu — label and counter in fixed columns so every row lines up */
+.cr-card { grid-template-columns: 230px minmax(0, 1fr); }
+.cr-card-nav button { display: grid !important; grid-template-columns: minmax(0, 1fr) 26px; align-items: center; gap: 8px; text-align: left; line-height: 1.25; }
+.cr-nav-label { min-width: 0; overflow-wrap: anywhere; }
+.cr-nav-count { text-align: right; font-variant-numeric: tabular-nums; color: var(--secondary); font-size: 12px; }
+.cr-card-nav button.active .cr-nav-count { color: var(--primary); }
